@@ -234,13 +234,13 @@
       "Cl(Short(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND Bollinger(20;Dev=2)(AbUp) AND VWAP()(Ab) AND Stoch(14-3-3;Lmin=80;Smax=20)(K>=80) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND Momentum(10)(MOM>0) AND MACD(12,26,9)(Macd>Sig)) OnFlip(Close))" +
       SLTP + "Note(LmaxTrend)",
     sma_below:
-      "SMA(3;Vol)(Bl) SL[@SL] TP[@TP] Note(SMA-Vol-below)",
+      "SMA(100;Vol)(Bl) SL[@SL] TP[@TP] Note(SMA-Vol-below)",
     sma_above:
-      "SMA(3;Vol)(Ab) SL[@SL] TP[@TP] Note(SMA-Vol-above)",
+      "SMA(100;Vol)(Ab) SL[@SL] TP[@TP] Note(SMA-Vol-above)",
     sma_corridor_trend:
-      "SMA(3;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
+      "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
     sma_corridor_anti:
-      "SMA(3;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)"
+      "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)"
   };
 
   const BUILTIN_META = [
@@ -1628,7 +1628,7 @@
     return Number.isFinite(n) ? n : null;
   }
 
-  /** SMA(3;Vol)(Ab|Bl) и SMA(3;Spread=1ATR)(Trend|Anti) → параметры объёмной/коридорной модели. */
+  /** SMA(100;Vol)(Ab|Bl) и SMA(100;Spread=1ATR)(Trend|Anti) → параметры объёмной/коридорной модели. */
   function parseSmaModelFromLine(line) {
     const raw = String(line || "");
     const atomRe = /SMA\s*\(\s*([^)]*)\s*\)\s*\(\s*([^)]+)\s*\)/gi;

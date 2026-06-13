@@ -140,7 +140,7 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .logic-line-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.35rem .65rem;margin-bottom:.25rem;}
 .logic-line-head label{font-size:.82rem;color:var(--muted);margin:0;font-weight:600;}
 .logic-line-actions{display:flex;flex-wrap:wrap;gap:.35rem;}
-.logic-line-copy-btn,.logic-line-delete-btn,.logic-lines-add-btn{padding:.28rem .55rem;font-size:.78rem;min-height:auto;}
+.logic-line-copy-btn,.logic-line-delete-btn,.logic-line-export-btn,.logic-line-import-btn,.logic-lines-add-btn,.logic-lines-io-btn{padding:.28rem .55rem;font-size:.78rem;min-height:auto;}
 .logic-line-delete-btn{color:#991b1b;border-color:#fecaca;}
 .logic-lines-toolbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:.35rem 0 .55rem;}
 .prefix-pick-row{display:flex;gap:.5rem;align-items:stretch;}
@@ -782,10 +782,14 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 
 <p class="extra-section">Каталог логик</p>
-<p class="note">Список «Логика» = этот каталог. Строка как у L1…L5: Op/Cl, либо объёмная SMA — <code>SMA(3;Vol)(Ab)</code> / <code>SMA(3;Vol)(Bl)</code>, либо коридор — <code>SMA(3;Spread=@SmaCorridor)(Trend)</code> / <code>(Anti)</code>, плюс SL/TP.</p>
+<p class="note">Список «Логика» = этот каталог. Строка как у L1…L5: Op/Cl, либо объёмная SMA — <code>SMA(100;Vol)(Ab)</code> / <code>SMA(100;Vol)(Bl)</code>, либо коридор — <code>SMA(100;Spread=@SmaCorridor)(Trend)</code> / <code>(Anti)</code>, плюс SL/TP.</p>
 <div class="logic-lines-toolbar">
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-import" title="Загрузить каталог логик из JSON-файла">Импорт всех</button>
 </div>
+<input type="file" id="logic-catalog-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
+<input type="file" id="logic-line-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
 <div class="logic-grid" id="logic-lines"></div>
 <button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
 <p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
@@ -919,7 +923,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-live-collapse-labels";
+  const CALC_PAGE_VERSION = "2026-06-13-logic-import-export";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1394,6 +1398,7 @@ body.calc-running .help-ftr{opacity:.75;}
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
     logicLineKeys: ["L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
     anchorStartTime: null,
@@ -3383,6 +3388,9 @@ body.calc-running .help-ftr{opacity:.75;}
       if (line && /SmaSpread|SmaCorridor/i.test(line) && E.DEFAULT_LOGIC_LINES[k]) {
         state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
       }
+      if (line && /\bSMA\s*\(\s*3\s*[;)]/i.test(line) && E.DEFAULT_LOGIC_LINES[k]) {
+        state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
+      }
     }
   }
 
@@ -3488,6 +3496,133 @@ body.calc-running .help-ftr{opacity:.75;}
     updatePositionSlHint();
     if (state.packs.length) tryRefreshEquityCharts();
     $("calc-status").textContent = `Логика «${name}» удалена из каталога.`;
+  }
+
+  const LOGIC_CATALOG_FORMAT = "multilogic-finresp-logic-catalog-v1";
+
+  /** Скачать JSON-файл из объекта. */
+  function downloadJsonFile(filename, obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  /** Payload каталога логик для экспорта (одна или все). */
+  function buildLogicCatalogPayload(keys) {
+    readLogicEditor();
+    ensureLogicLineKeys();
+    const list = (keys || state.logicLineKeys).filter(Boolean);
+    const logicLines = {};
+    const logicLabels = {};
+    for (const key of list) {
+      logicLines[key] = state.customLines[key] ?? E.DEFAULT_LOGIC_LINES[key] ?? "";
+      if (state.logicLabels?.[key]) logicLabels[key] = state.logicLabels[key];
+    }
+    return {
+      format: LOGIC_CATALOG_FORMAT,
+      exportedAt: new Date().toISOString(),
+      logicLineKeys: list.slice(),
+      logicLines,
+      logicLabels
+    };
+  }
+
+  /** Разбор текста/JSON файла логики. */
+  function parseLogicImportFileText(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try { return JSON.parse(trimmed); }
+      catch (err) { throw new Error(`JSON: ${err.message}`); }
+    }
+    return { _plain: trimmed };
+  }
+
+  /** Из payload файла — строка логики для ключа. */
+  function logicLineTextFromImportData(data, targetKey) {
+    if (!data) return null;
+    if (typeof data === "string") return data;
+    if (data._plain) return data._plain;
+    if (data.logicLines && typeof data.logicLines === "object") {
+      const keys = Array.isArray(data.logicLineKeys) && data.logicLineKeys.length
+        ? data.logicLineKeys
+        : Object.keys(data.logicLines);
+      if (targetKey && data.logicLines[targetKey] != null) return String(data.logicLines[targetKey]);
+      const first = keys.find((k) => data.logicLines[k] != null);
+      if (first != null) return String(data.logicLines[first]);
+    }
+    if (data.line != null) return String(data.line);
+    return null;
+  }
+
+  /** Экспорт одной логики в JSON (тот же формат, что каталог). */
+  function exportLogicLine(key) {
+    if (!key) return;
+    const payload = buildLogicCatalogPayload([key]);
+    downloadJsonFile(`multilogic_logic_${key}.json`, payload);
+    $("calc-status").textContent = `Логика «${logicDisplayName(key)}» экспортирована в файл.`;
+  }
+
+  /** Экспорт всего каталога логик. */
+  function exportLogicCatalog() {
+    const payload = buildLogicCatalogPayload();
+    downloadJsonFile(`multilogic_logic_catalog_${formatDay(todayDate())}.json`, payload);
+    $("calc-status").textContent = `Экспортировано ${payload.logicLineKeys.length} логик в файл.`;
+  }
+
+  /** Импорт каталога логик из JSON (замена текущего списка). */
+  function importLogicCatalogFromData(data) {
+    if (!data || typeof data !== "object") throw new Error("Пустой или неверный файл.");
+    if (data._plain) throw new Error("Для импорта каталога нужен JSON (format=multilogic-finresp-logic-catalog-v1).");
+    let keys = Array.isArray(data.logicLineKeys) ? data.logicLineKeys.slice() : Object.keys(data.logicLines || {});
+    keys = keys.map((k) => String(k || "").trim()).filter(Boolean);
+    if (!keys.length) throw new Error("В файле нет логик.");
+    const lines = data.logicLines && typeof data.logicLines === "object" ? data.logicLines : {};
+    const labels = data.logicLabels && typeof data.logicLabels === "object" ? data.logicLabels : {};
+    if (!window.confirm(`Загрузить ${keys.length} логик из файла?\n\nТекущий каталог будет заменён.`)) {
+      return;
+    }
+    readLogicEditor();
+    state.logicLineKeys = keys;
+    for (const key of keys) {
+      state.customLines[key] = String(lines[key] ?? "");
+      if (labels[key]) state.logicLabels[key] = String(labels[key]);
+      else delete state.logicLabels[key];
+      state.hiddenLogicKeys = (state.hiddenLogicKeys || []).filter((h) => h !== key);
+    }
+    ensureDefaultLogicLines();
+    fillLogicEditor();
+    fillLogicSelect();
+    saveConfig();
+    invalidateFormChange();
+    updatePositionSlHint();
+    if (state.packs.length) tryRefreshEquityCharts();
+    $("calc-status").textContent = `Загружено ${keys.length} логик из файла. Нажмите «Применить» или «Рассчитать».`;
+  }
+
+  /** Импорт одной строки логики в выбранный ключ каталога. */
+  function importLogicLineFromData(data, targetKey) {
+    if (!targetKey) return;
+    const line = logicLineTextFromImportData(data, targetKey);
+    if (line == null || !String(line).trim()) throw new Error("В файле нет строки логики.");
+    readLogicEditor();
+    state.customLines[targetKey] = String(line).trim();
+    fillLogicEditor();
+    saveConfig();
+    invalidateFormChange();
+    $("calc-status").textContent = `Логика «${logicDisplayName(targetKey)}» загружена из файла.`;
+  }
+
+  /** Чтение файла логики и импорт (одна или весь каталог). */
+  async function importLogicFromFile(file, targetKey) {
+    if (!file) return;
+    const text = await file.text();
+    const data = parseLogicImportFileText(text);
+    if (targetKey) importLogicLineFromData(data, targetKey);
+    else importLogicCatalogFromData(data);
   }
 
   /** Функция: id выбранных логик в порядке приоритета (верх списка = первая). */
@@ -3653,6 +3788,20 @@ body.calc-running .help-ftr{opacity:.75;}
       copyBtn.title = "Копировать строку в новую логику";
       copyBtn.textContent = "Копировать в новую";
       actions.appendChild(copyBtn);
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "calc-btn calc-btn-secondary logic-line-export-btn";
+      exportBtn.dataset.exportLogic = key;
+      exportBtn.title = "Сохранить эту логику в JSON-файл";
+      exportBtn.textContent = "Экспорт";
+      actions.appendChild(exportBtn);
+      const importBtn = document.createElement("button");
+      importBtn.type = "button";
+      importBtn.className = "calc-btn calc-btn-secondary logic-line-import-btn";
+      importBtn.dataset.importLogic = key;
+      importBtn.title = "Загрузить строку логики из JSON или текстового файла";
+      importBtn.textContent = "Импорт";
+      actions.appendChild(importBtn);
       const canDelete = state.logicLineKeys.length > 1;
       const delBtn = document.createElement("button");
       delBtn.type = "button";
@@ -5157,7 +5306,47 @@ ${totalBlock}
     invalidateFormChange();
   });
   $("logic-line-add")?.addEventListener("click", () => { promptAddLogicLine(); });
+  $("logic-catalog-export")?.addEventListener("click", () => { exportLogicCatalog(); });
+  $("logic-catalog-import")?.addEventListener("click", () => {
+    state.pendingLogicImportKey = null;
+    $("logic-catalog-file-input")?.click();
+  });
+  $("logic-catalog-file-input")?.addEventListener("change", async (ev) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = "";
+    if (!file) return;
+    try {
+      await importLogicFromFile(file, null);
+    } catch (err) {
+      $("calc-status").textContent = `Ошибка импорта каталога: ${err.message}`;
+      noteTechError(`logic-catalog-import: ${err.message}`);
+    }
+  });
+  $("logic-line-file-input")?.addEventListener("change", async (ev) => {
+    const file = ev.target.files?.[0];
+    const key = state.pendingLogicImportKey;
+    ev.target.value = "";
+    state.pendingLogicImportKey = null;
+    if (!file || !key) return;
+    try {
+      await importLogicFromFile(file, key);
+    } catch (err) {
+      $("calc-status").textContent = `Ошибка импорта логики: ${err.message}`;
+      noteTechError(`logic-line-import: ${err.message}`);
+    }
+  });
   $("logic-lines")?.addEventListener("click", (ev) => {
+    const exportBtn = ev.target?.closest?.("[data-export-logic]");
+    if (exportBtn) {
+      exportLogicLine(exportBtn.getAttribute("data-export-logic"));
+      return;
+    }
+    const importBtn = ev.target?.closest?.("[data-import-logic]");
+    if (importBtn) {
+      state.pendingLogicImportKey = importBtn.getAttribute("data-import-logic");
+      $("logic-line-file-input")?.click();
+      return;
+    }
     const copyBtn = ev.target?.closest?.("[data-copy-logic]");
     if (copyBtn) {
       copyLogicLine(copyBtn.getAttribute("data-copy-logic"));
