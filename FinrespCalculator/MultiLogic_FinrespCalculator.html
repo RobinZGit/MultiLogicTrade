@@ -813,7 +813,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-live-finresult-charts";
+  const CALC_PAGE_VERSION = "2026-06-13-sell-all-close";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -2601,9 +2601,7 @@ body.calc-running .help-ftr{opacity:.75;}
       const ts = new Date(state.live.positionsUpdatedAt).toLocaleTimeString("ru-RU", {
         hour: "2-digit", minute: "2-digit", second: "2-digit"
       });
-      const sessHint = state.live.sessionPositionBaseline
-        ? " · с начала сессии торговли"
-        : " · все открытые на счёте";
+      const sessHint = " · все открытые на счёте";
       if (metaEl) metaEl.textContent = `Обновлено ${ts}${sessHint}`;
     }
     const rows = state.live.openPositions || [];
@@ -2697,7 +2695,7 @@ body.calc-running .help-ftr{opacity:.75;}
         if (!state.tbank.selectedAccountId) throw new Error("Счёт T-Bank не выбран.");
       }
       const direction = closeDirectionForPosition(row);
-      const lots = Math.max(1, Math.floor(+row.lots || 0));
+      const lots = positionClosingLots(row);
       if (lots <= 0) throw new Error("Нет лотов для закрытия.");
       const instrumentId = row.instrumentId;
       if (!instrumentId) throw new Error("Нет идентификатора инструмента.");
@@ -2710,14 +2708,21 @@ body.calc-running .help-ftr{opacity:.75;}
       }
       const sideLabel = direction === "ORDER_DIRECTION_BUY" ? "покупка" : "продажа";
       if (metaEl) metaEl.textContent = `Закрытие ${row.ticker}: ${sideLabel}, ${lots} лот по рынку…`;
-      await postLiveOrder(instrumentId, direction, lots, sec, { orderType: "market", market: row.market });
+      if (sandbox) {
+        await closeSandboxPositionAtMarket(row);
+      } else {
+        await postLiveOrder(instrumentId, direction, lots, sec, { orderType: "market", market: row.market });
+      }
       const okText = sandbox
         ? `Фейк-позиция закрыта по рынку: ${row.ticker}, ${sideLabel}, ${lots} лот.`
         : `Закрыто по рынку: ${row.ticker}, ${sideLabel}, ${lots} лот.`;
       noteLiveTech("live-pos-close", okText, `uid=${instrumentId}`);
       state.live.lastError = "";
-      if (sandbox) await updateSandboxPortfolioDisplay();
-      else {
+      if (sandbox) {
+        await updateSandboxPortfolioDisplay();
+        renderLiveOrdersPanel();
+        renderLivePositionsPanel();
+      } else {
         await refreshLiveOpenPositions();
         await refreshLiveOrders();
         await refreshLivePortfolioStats();
@@ -2840,7 +2845,7 @@ body.calc-running .help-ftr{opacity:.75;}
         tbankRequest("OperationsService/GetPortfolio", { accountId, currency: "RUB" }),
         tbankRequest("OperationsService/GetPositions", { accountId })
       ]);
-      const rows = await buildTbankPositionRows(portData, posData, { sessionOnly: true });
+      const rows = await buildTbankPositionRows(portData, posData, { sessionOnly: false });
       state.live.openPositions = rows;
       state.live.positionsUpdatedAt = Date.now();
     } catch (err) {
@@ -2993,6 +2998,18 @@ body.calc-running .help-ftr{opacity:.75;}
     const p = Math.abs(+pieces || 0);
     if (p <= 0) return 0;
     return Math.max(1, Math.round(p / lot));
+  }
+
+  /** Лоты для закрытия позиции на брокере (без округления вверх). */
+  function positionClosingLots(row, piecesOverride) {
+    if (!row) return 0;
+    const isFuture = row.isFuture || row.market === "futures";
+    const pieces = Math.abs(+piecesOverride ?? row.pieces ?? 0);
+    if (pieces <= 0) return 0;
+    if (isFuture) return Math.abs(Math.round(pieces));
+    const lot = Math.max(1, +row.lot || 1);
+    const lots = Math.floor(pieces / lot);
+    return lots > 0 ? lots : 1;
   }
 
   function liveOrderTypeUi() {
@@ -3261,6 +3278,67 @@ body.calc-running .help-ftr{opacity:.75;}
     for (const [k, v] of Object.entries(snap.open || {})) sb.open.set(k, { ...v });
     sb.closed.length = 0;
     sb.closed.push(...(snap.closed || []));
+  }
+
+  /** Процедура (async): закрыть фейк-позицию целиком по точному числу штук (без переворота в шорт). */
+  async function closeSandboxPositionAtMarket(pos, opts) {
+    const options = opts || {};
+    if (!pos) return false;
+    const sb = ensureSandboxState();
+    ensureSandboxCash(sb);
+    const ticker = String(pos.ticker || pos.sec || "").toUpperCase();
+    const market = pos.market || (pos.isFuture ? "futures" : "shares");
+    const key = sandboxPosKey(market, ticker);
+    const openPos = sb.open.get(key);
+    if (!openPos || openPos.pieces <= 0) return false;
+
+    let price = await resolveOrderPrice(openPos.instrumentId, openPos.sec || ticker, market);
+    if (!Number.isFinite(price) || price <= 0) price = openPos.curPrice ?? openPos.avgPrice;
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error(`Нет цены для закрытия ${ticker}.`);
+    }
+
+    const revertSnap = snapshotSandboxState(sb);
+    const pieces = openPos.pieces;
+    const isShort = openPos.side === "short";
+    const direction = isShort ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL";
+    const notional = pieces * price;
+    const fee = sandboxCommissionFee(notional);
+    const lots = openPos.isFuture ? pieces : positionClosingLots(openPos, pieces);
+
+    try {
+      if (isShort) {
+        sb.cash -= notional + fee;
+        sb.cashDelta -= notional + fee;
+      } else {
+        sb.cash += notional - fee;
+        sb.cashDelta += notional - fee;
+      }
+      sb.commissionTotal += fee;
+      pushSandboxClosed(openPos, pieces, price);
+      sb.open.delete(key);
+    } catch (err) {
+      restoreSandboxSnapshot(sb, revertSnap);
+      throw err;
+    }
+
+    if (!options.skipRecord) {
+      recordSandboxOrder({
+        ticker,
+        direction,
+        lots,
+        orderType: "market",
+        price,
+        notional,
+        fee,
+        instrumentId: openPos.instrumentId,
+        market,
+        sec: openPos.sec || ticker,
+        revertSnap
+      });
+      recordLiveOrderMarker(openPos.sec || ticker, direction, "market", { lots, price });
+    }
+    return true;
   }
 
   /** Процедура: добавить запись в журнал фейк-заявок (до 200 шт.). */
@@ -4954,21 +5032,24 @@ ${totalBlock}
       if (isLiveSandbox()) {
         const sb = ensureSandboxState();
         let sent = 0;
+        const failed = [];
         for (const pos of [...sb.open.values()]) {
-          const direction = closeDirectionForPosition(pos);
-          const lots = Math.max(1, Math.floor(+pos.lots || 0));
-          if (lots <= 0) continue;
-          await postLiveOrder(pos.instrumentId, direction, lots, pos.sec || pos.ticker, {
-            orderType: "market",
-            market: pos.market
-          });
-          sent += 1;
+          try {
+            if (await closeSandboxPositionAtMarket(pos)) sent += 1;
+          } catch (err) {
+            failed.push(`${pos.ticker}: ${err.message}`);
+          }
         }
-        state.live.lastError = sent ? "" : "фейк-позиций нет";
-        const status = $("live-trading-status");
-        if (status) status.textContent = sent ? `закрыто фейк-позиций: ${sent}` : "фейк-позиций нет";
+        await updateSandboxPortfolioDisplay();
         renderLiveOrdersPanel();
         renderLivePositionsPanel();
+        refreshLiveChartsUi();
+        state.live.lastError = failed.length ? failed.join("; ") : (sent ? "" : "фейк-позиций нет");
+        const status = $("live-trading-status");
+        if (status) {
+          if (sent) status.textContent = failed.length ? `закрыто: ${sent} · ${state.live.lastError}` : `закрыто фейк-позиций: ${sent}`;
+          else status.textContent = failed.length ? state.live.lastError : "фейк-позиций нет";
+        }
         return;
       }
       if (!(await ensureTbankTokenUnlocked())) return;
@@ -5000,9 +5081,8 @@ ${totalBlock}
             lots = Math.abs(Math.round(pieces));
             direction = pieces > 0 ? "ORDER_DIRECTION_SELL" : "ORDER_DIRECTION_BUY";
           } else {
-            if (pieces <= 0) continue;
-            lots = piecesToLots(pieces, lot);
-            direction = "ORDER_DIRECTION_SELL";
+            lots = positionClosingLots({ lot, isFuture: false }, Math.abs(pieces));
+            direction = pieces > 0 ? "ORDER_DIRECTION_SELL" : "ORDER_DIRECTION_BUY";
           }
           if (lots <= 0) continue;
           const ticker = meta?.ticker || instrumentId;
@@ -5047,6 +5127,11 @@ ${totalBlock}
         else status.textContent = issueText || "открытых позиций нет";
       }
       await refreshLiveOrders();
+      await refreshLivePortfolioStats();
+      await refreshLiveOpenPositions();
+      await new Promise((r) => setTimeout(r, 1200));
+      await refreshLiveOpenPositions();
+      await refreshLivePortfolioStats();
     } catch (err) {
       state.live.lastError = err.message;
       setTbankStatus(`Ошибка продажи по рынку: ${err.message}`, true);
