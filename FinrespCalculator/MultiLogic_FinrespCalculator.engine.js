@@ -16,6 +16,7 @@
   "use strict";
 
   const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1 };
+  /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
     useTp: false,
@@ -33,6 +34,9 @@
   };
   const DEFAULT_COMMISSION = { type: "Percent", value: 0.04 };
 
+  // === Комиссия и объём сделки ===
+
+  /** Нормализация настроек комиссии (None/Percent/OneLotFix). */
   function normalizeCommission(cfg) {
     const c = cfg || DEFAULT_COMMISSION;
     const type = c.type === "OneLotFix" || c.type === "Percent" ? c.type : "None";
@@ -41,6 +45,7 @@
     return { type, value };
   }
 
+  /** Комиссия одной сделки по объёму, цене и типу. */
   function tradeCommission(volume, price, commissionCfg) {
     const cfg = normalizeCommission(commissionCfg);
     const vol = Math.abs(Number(volume) || 0);
@@ -78,6 +83,7 @@
     RUAL: ["RU"]
   };
 
+  /** Разбор строки/времени/ключа: `parseTickerPrefixes`. */
   function parseTickerPrefixes(raw) {
     const result = [];
     const seen = new Set();
@@ -92,6 +98,7 @@
     return result;
   }
 
+  /** Подпрограмма `tryExtractMoexFortsSeriesBase`. */
   function tryExtractMoexFortsSeriesBase(ticker) {
     if (ticker.length < 3) return "";
     const len = ticker.length;
@@ -106,6 +113,7 @@
     return basePart;
   }
 
+  /** Подпрограмма `extractFuturesLetterRoot`. */
   function extractFuturesLetterRoot(ticker) {
     const t = String(ticker || "").trim();
     if (!t) return "";
@@ -126,6 +134,7 @@
     return end > 0 ? t.substring(0, end) : "";
   }
 
+  /** Подпрограмма `expandPrefixWithMoexAliases`. */
   function expandPrefixWithMoexAliases(userPrefix) {
     const p = String(userPrefix || "").trim();
     if (!p) return [];
@@ -135,6 +144,7 @@
     return out;
   }
 
+  /** Подпрограмма `rootMatchesExpandedPrefix`. */
   function rootMatchesExpandedPrefix(root, expandedPrefix) {
     if (!root || !expandedPrefix) return false;
     const r = root;
@@ -145,21 +155,25 @@
     return false;
   }
 
+  /** Подпрограмма `stockTickerMatches`. */
   function stockTickerMatches(secid, prefixes) {
     const name = String(secid || "").trim().toUpperCase();
     return prefixes.some((p) => name === String(p).trim().toUpperCase());
   }
 
+  /** Подпрограмма `normMoexDate`. */
   function normMoexDate(value) {
     if (!value) return "";
     return String(value).slice(0, 10);
   }
 
+  /** Проверка булева условия: `isPerpetualFuture`. */
   function isPerpetualFuture(secid) {
     const s = String(secid || "").trim().toUpperCase();
     return /RUBF$/.test(s) || s === "IMOEXF";
   }
 
+  /** Подпрограмма `futuresMatchesCalcPeriod`. */
   function futuresMatchesCalcPeriod(sec, from, till) {
     const last = normMoexDate(sec.LASTTRADEDATE);
     const first = normMoexDate(sec.FIRSTTRADEDATE);
@@ -172,6 +186,7 @@
     return true;
   }
 
+  /** Подпрограмма `futuresTickerMatches`. */
   function futuresTickerMatches(secid, prefixes) {
     const normalized = String(secid || "").trim();
     const root = extractFuturesLetterRoot(normalized);
@@ -253,6 +268,7 @@
   const ORDER_BOOK_TREND_TOKEN = "@OBT";
   const DEFAULT_OB_IMBALANCE = 0.12;
 
+  /** Подпрограмма `substituteParams`. */
   function substituteParams(line, params) {
     const p = { ...DEFAULT_PARAMS, ...params };
     return String(line || "")
@@ -263,6 +279,7 @@
       .replace(/@SmaCorridor/g, String(p.smaCorridorAtr ?? DEFAULT_PARAMS.smaCorridorAtr));
   }
 
+  /** Логика FINRESP: `logicUsesObTrend`. */
   function logicUsesObTrend(line) {
     return /\B@OBT\b/i.test(String(line || ""));
   }
@@ -275,6 +292,7 @@
     return "trend";
   }
 
+  /** Подпрограмма `sumOrderBookLevels`. */
   function sumOrderBookLevels(ob, depth) {
     const d = Math.max(1, Math.min(+(depth || 0) || 5, 20));
     let bidVol = 0;
@@ -284,6 +302,7 @@
     return { bidVol, askVol, total: bidVol + askVol };
   }
 
+  /** Подпрограмма `evaluateOrderBookTrend`. */
   function evaluateOrderBookTrend(ob, tradeSide, mode, minImb) {
     const thr = Number.isFinite(minImb) ? minImb : DEFAULT_OB_IMBALANCE;
     const { bidVol, askVol, total } = sumOrderBookLevels(ob, 5);
@@ -325,6 +344,7 @@
     };
   }
 
+  /** Подпрограмма `stripDecor`. */
   function stripDecor(line) {
     return String(line || "")
       .replace(/Strict\([^)]*\)\s*/gi, "")
@@ -337,6 +357,7 @@
       .trim();
   }
 
+  /** Разбор строки/времени/ключа: `parseSlTp`. */
   function parseSlTp(line) {
     const slM = line.match(/SL\[([^\]]+)\]/i);
     const tpM = line.match(/TP\[([^\]]+)\]/i);
@@ -349,10 +370,12 @@
     return { slAtr: parseAtrMult(slM?.[1]), tpAtr: parseAtrMult(tpM?.[1]) };
   }
 
+  /** Подпрограмма `extractBlock`. */
   function extractBlock(line, tag) {
     return extractBlocks(line, tag)[0] || null;
   }
 
+  /** Подпрограмма `extractBlocks`. */
   function extractBlocks(line, tag) {
     const blocks = [];
     const scanRe = new RegExp(tag + "\\((Long|Short)\\(", "ig");
@@ -375,6 +398,7 @@
     return blocks;
   }
 
+  /** Подпрограмма `splitTopLevelAnd`. */
   function splitTopLevelAnd(expr) {
     const parts = [];
     let depth = 0;
@@ -396,6 +420,7 @@
     return parts;
   }
 
+  /** Разбор строки/времени/ключа: `parseAtom`. */
   function parseAtom(atomStr) {
     const s = atomStr.trim();
     const idx = s.indexOf(")(");
@@ -407,6 +432,7 @@
     return { kind: m[1].toLowerCase(), params: m[2], signal: sigPart.replace(/^\(|\)$/g, "").trim() };
   }
 
+  /** Разбор строки/времени/ключа: `parseParamsMap`. */
   function parseParamsMap(raw) {
     const map = {};
     for (const part of String(raw || "").split(";")) {
@@ -428,12 +454,14 @@
     return map;
   }
 
+  /** Подпрограмма `defaultIndicatorSelection`. */
   function defaultIndicatorSelection() {
     const out = {};
     for (const key of INDICATOR_KEYS) out[key] = true;
     return out;
   }
 
+  /** Нормализация входных данных: `normalizeIndicatorSelection`. */
   function normalizeIndicatorSelection(selection) {
     if (selection == null) return defaultIndicatorSelection();
     const out = {};
@@ -458,11 +486,13 @@
     return defaultIndicatorSelection();
   }
 
+  /** Включение режима/флага: `enabledIndicatorSet`. */
   function enabledIndicatorSet(selection) {
     const normalized = normalizeIndicatorSelection(selection);
     return new Set(INDICATOR_KEYS.filter((key) => normalized[key]));
   }
 
+  /** Подпрограмма `filterAtomsByIndicators`. */
   function filterAtomsByIndicators(atoms, indicatorSelection) {
     const enabled = enabledIndicatorSet(indicatorSelection);
     return (atoms || []).filter((atom) => {
@@ -471,10 +501,12 @@
     });
   }
 
+  /** Проверка булева условия: `isIndicatorEnabled`. */
   function isIndicatorEnabled(indicatorSelection, key) {
     return !!normalizeIndicatorSelection(indicatorSelection)[indicatorKey(key)];
   }
 
+  /** Подпрограмма `indicatorKey`. */
   function indicatorKey(kind) {
     const k = String(kind || "").toLowerCase();
     if (k === "bolinger" || k === "boll" || k === "bb" || k === "polenger") return "bollinger";
@@ -483,6 +515,7 @@
     return k;
   }
 
+  /** Разбор строки Op/Cl в AST/spec для симуляции одной логики. */
   function parseLogicLine(line, params, indicatorSelection) {
     const raw = substituteParams(line, params || DEFAULT_PARAMS);
     const { slAtr, tpAtr } = parseSlTp(raw);
@@ -513,6 +546,7 @@
     };
   }
 
+  /** Подпрограмма `smaSeries`. */
   function smaSeries(closes, len) {
     const out = new Array(closes.length).fill(null);
     let sum = 0;
@@ -524,6 +558,7 @@
     return out;
   }
 
+  /** Подпрограмма `emaSeries`. */
   function emaSeries(values, len) {
     const out = new Array(values.length).fill(null);
     const k = 2 / (len + 1);
@@ -542,6 +577,7 @@
     return out;
   }
 
+  /** Подпрограмма `atrSeries`. */
   function atrSeries(candles, len) {
     const out = new Array(candles.length).fill(null);
     const trs = [];
@@ -558,6 +594,7 @@
     return out;
   }
 
+  /** Подпрограмма `stochSeries`. */
   function stochSeries(candles, kLen, kSmooth, dSmooth) {
     const kRaw = new Array(candles.length).fill(null);
     for (let i = 0; i < candles.length; i++) {
@@ -585,6 +622,7 @@
     return { k, d };
   }
 
+  /** Подпрограмма `linRegSeries`. */
   function linRegSeries(closes, len, devMult) {
     const up = new Array(closes.length).fill(null);
     const center = new Array(closes.length).fill(null);
@@ -614,6 +652,7 @@
     return { up, center, down };
   }
 
+  /** Подпрограмма `bollingerSeries`. */
   function bollingerSeries(closes, len, devMult) {
     const up = new Array(closes.length).fill(null);
     const center = new Array(closes.length).fill(null);
@@ -632,6 +671,7 @@
     return { up, center, down };
   }
 
+  /** Подпрограмма `momentumSeries`. */
   function momentumSeries(closes, len) {
     const out = new Array(closes.length).fill(null);
     for (let i = len; i < closes.length; i++) {
@@ -640,6 +680,7 @@
     return out;
   }
 
+  /** Подпрограмма `vwapSeries`. */
   function vwapSeries(candles) {
     const out = new Array(candles.length).fill(null);
     let pvSum = 0;
@@ -662,6 +703,7 @@
     return out;
   }
 
+  /** Подпрограмма `cciSeries`. */
   function cciSeries(candles, len) {
     const out = new Array(candles.length).fill(null);
     const tp = candles.map((c) => (c.high + c.low + c.close) / 3);
@@ -677,6 +719,7 @@
     return out;
   }
 
+  /** Подпрограмма `macdSeries`. */
   function macdSeries(closes, fast, slow, signal) {
     const ef = emaSeries(closes, fast);
     const es = emaSeries(closes, slow);
@@ -742,6 +785,7 @@
     }
   }
 
+  /** Подпрограмма `evalThreshold`. */
   function evalThreshold(signal, value, close) {
     const s = signal.replace(/\s+/g, "").toUpperCase();
     const m = s.match(/^(K|CCI|RSI|MOM)(>=|<=|>|<)(-?\d+(?:\.\d+)?)$/);
@@ -759,6 +803,7 @@
     return false;
   }
 
+  /** Подпрограмма `evaluateAtom`. */
   function evaluateAtom(atom, cache, idx) {
     const c = cache.candles[idx];
     const close = c.close;
@@ -868,15 +913,18 @@
     return false;
   }
 
+  /** Подпрограмма `evaluateExpr`. */
   function evaluateExpr(atoms, cache, idx) {
     if (!atoms.length) return false;
     return atoms.every((a) => evaluateAtom(a, cache, idx));
   }
 
+  /** Подпрограмма `warmupBars`. */
   function warmupBars() {
     return 120;
   }
 
+  /** Расчёт: `calcTradeVolume`. */
   function calcTradeVolume(price, volConfig) {
     const cfg = { ...DEFAULT_VOLUME, ...volConfig };
     const p = price > 0 ? price : 0;
@@ -886,12 +934,14 @@
     return Math.max(0, (cfg.deposit * cfg.volume / 100) / p);
   }
 
+  /** Подпрограмма `maxAbsPosition`. */
   function maxAbsPosition(price, volConfig) {
     const lot = calcTradeVolume(price, volConfig);
     const maxPos = Math.max(1, volConfig?.maxPositions ?? DEFAULT_VOLUME.maxPositions);
     return lot * maxPos;
   }
 
+  /** Разрешение id/метаданных: `resolveVolCommission`. */
   function resolveVolCommission(volConfig) {
     const cfg = volConfig?.commission;
     if (cfg != null && typeof cfg === "object" && cfg.type) {
@@ -904,17 +954,20 @@
     return normalizeCommission(DEFAULT_COMMISSION);
   }
 
+  /** Нормализация входных данных: `normalizedVolConfig`. */
   function normalizedVolConfig(volConfig) {
     const vol = { ...DEFAULT_VOLUME, ...volConfig };
     vol.commission = resolveVolCommission(vol);
     return vol;
   }
 
+  /** Комиссия: `commissionCost`. */
   function commissionCost(price, volume, volConfig) {
     const vol = volConfig?.commission ? volConfig : normalizedVolConfig(volConfig);
     return tradeCommission(volume, price, vol.commission);
   }
 
+  /** Подпрограмма `pushRow`. */
   function pushRow(rows, candle, fields) {
     if (!candle) return;
     rows.push({
@@ -924,6 +977,7 @@
     });
   }
 
+  /** Симуляция на свечах: `simulateNoSignalRows`. */
   function simulateNoSignalRows(candles, startIdx, endIdx, options) {
     const initial = options?.initial || {};
     const cash = initial.cash || 0;
@@ -956,11 +1010,13 @@
     };
   }
 
+  /** Подпрограмма `longestPack`. */
   function longestPack(packs) {
     if (!packs?.length) return [];
     return packs.reduce((best, p) => ((p?.length || 0) > (best?.length || 0) ? p : best), packs[0]);
   }
 
+  /** Подпрограмма `collectChartIndicators`. */
   function collectChartIndicators(cache, parsed, idx) {
     const ind = {};
     const atoms = [...(parsed?.opAtoms || []), ...(parsed?.clAtoms || [])];
@@ -1151,6 +1207,7 @@
     };
   }
 
+  /** Симуляция одной L-логики на массиве свечей. */
   function simulateLogicLine(candles, parsed, startIdx, endIdx, volConfig, options) {
     const opts = options || {};
     const signalCandles = opts.signalCandles || candles;
@@ -1271,6 +1328,7 @@
     };
   }
 
+  /** Симуляция на свечах: `simulateSmaSpread`. */
   function simulateSmaSpread(candles, smaLen, side, startIdx, endIdx, volConfig, options) {
     const opts = options || {};
     const signalCandles = opts.signalCandles || candles;
@@ -1542,6 +1600,7 @@
     };
   }
 
+  /** Применение настроек/результата: `applySlTpParams`. */
   function applySlTpParams(parsed, params) {
     const p = { ...DEFAULT_PARAMS, ...params };
     parsed.slAtr = Math.max(0, Number(p.SL) || 0);
@@ -1550,6 +1609,7 @@
     return parsed;
   }
 
+  /** Разрешение id/метаданных: `resolveLogicLineRaw`. */
   function resolveLogicLineRaw(logicId, customLines) {
     const lines = customLines || {};
     if (Object.prototype.hasOwnProperty.call(lines, logicId)) {
@@ -1559,6 +1619,7 @@
     return "";
   }
 
+  /** Разбор строки/времени/ключа: `parseAtrMultToken`. */
   function parseAtrMultToken(raw) {
     if (raw == null || raw === "") return null;
     const s = String(raw).trim();
@@ -1716,6 +1777,7 @@
     return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, options);
   }
 
+  /** Запуск расчёта: `runOnCandlesYielding`. */
   async function runOnCandlesYielding(candles, spec, startIdx, endIdx, params, volConfig, options) {
     const opts = options || {};
     const a = startIdx;
@@ -1787,11 +1849,13 @@
     };
   }
 
+  /** Подпрограмма `findCandleIndexByTime`. */
   function findCandleIndexByTime(candles, time) {
     if (!candles?.length || !time) return -1;
     return candles.findIndex((c) => c.time === time);
   }
 
+  /** Подпрограмма `findCandleIndexAtOrBefore`. */
   function findCandleIndexAtOrBefore(candles, time) {
     if (!candles?.length || !time) return -1;
     let idx = -1;
@@ -1804,6 +1868,7 @@
     return idx;
   }
 
+  /** Подпрограмма `indicesForTimeRange`. */
   function indicesForTimeRange(candles, tStart, tEnd) {
     if (!candles?.length || !tStart || !tEnd) return null;
     let a = -1;
@@ -1820,6 +1885,7 @@
     return { a, b };
   }
 
+  /** Подпрограмма `findRowIdxAtOrBefore`. */
   function findRowIdxAtOrBefore(rows, time) {
     if (!rows?.length || !time) return -1;
     let idx = -1;
@@ -1831,6 +1897,7 @@
     return idx;
   }
 
+  /** Equity-кривые: `equityAtTime`. */
   function equityAtTime(perSecItem, time) {
     const idx = findRowIdxAtOrBefore(perSecItem.rows, time);
     return idx >= 0 ? perSecItem.rows[idx].eq : 0;
@@ -1872,12 +1939,14 @@
     return { total, perInstrument };
   }
 
+  /** Построение структуры данных: `buildPortfolioEquityRows`. */
   function buildPortfolioEquityRows(perSec, times) {
     if (!perSec?.length || !times?.length) return [];
     const { total } = buildPortfolioEquitySeries(perSec, times);
     return times.map((time, i) => ({ time, eq: total[i] }));
   }
 
+  /** Подпрограмма `portfolioEquityAtr`. */
   function portfolioEquityAtr(history, index, length) {
     if (!history?.length || index < length) return null;
     let sum = 0;
@@ -1924,6 +1993,7 @@
     };
   }
 
+  /** Подпрограмма `recomputePerSecTotals`. */
   function recomputePerSecTotals(perSecItem) {
     const last = perSecItem.rows.at(-1);
     perSecItem.finresp = last?.eq ?? 0;
@@ -1934,6 +2004,7 @@
     perSecItem.sells = perSecItem.rows.reduce((s, r) => s + (r.sell || 0), 0);
   }
 
+  /** Подпрограмма `flattenRowAtIdx`. */
   function flattenRowAtIdx(perSecItem, rowIdx, volConfig) {
     const row = { ...perSecItem.rows[rowIdx] };
     if (row.pos !== 0) {
@@ -1949,6 +2020,7 @@
     return row;
   }
 
+  /** Подпрограмма `flattenAndResimTail`. */
   function flattenAndResimTail(perSecItem, candles, spec, triggerTime, endTime, params, volConfig, runOptions) {
     const rowIdx = findRowIdxAtOrBefore(perSecItem.rows, triggerTime);
     if (rowIdx < 0) return;
@@ -1987,6 +2059,7 @@
     recomputePerSecTotals(perSecItem);
   }
 
+  /** Портфельный stop-loss/take-profit по equity и ATR. */
   function applyPortfolioStopper(perSec, packs, spec, times, endTime, params, volConfig, cfg, signalPacks, progressOpts) {
     const stopper = { ...DEFAULT_STOPPER, ...cfg };
     const events = [];
@@ -2065,6 +2138,7 @@
     return { perSec, stopper: { events, referenceEquity } };
   }
 
+  /** Подпрограмма `moexFileProtocolHint`. */
   function moexFileProtocolHint() {
     if (typeof location !== "undefined" && location.protocol === "file:") {
       return " Страница открыта как file:// — браузер блокирует MOEX (CORS). "
@@ -2073,6 +2147,7 @@
     return "";
   }
 
+  /** Подпрограмма `moexFetchJson`. */
   async function moexFetchJson(url, context, timeoutMs = 45000) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
@@ -2094,6 +2169,7 @@
     }
   }
 
+  /** Подпрограмма `candlesUrl`. */
   function candlesUrl(sec, market) {
     if (market === "futures") {
       return `https://iss.moex.com/iss/engines/futures/markets/forts/securities/${sec}/candles.json`;
@@ -2101,6 +2177,7 @@
     return `https://iss.moex.com/iss/engines/stock/markets/shares/securities/${sec}/candles.json`;
   }
 
+  /** Подпрограмма `fetchIssSecIds`. */
   async function fetchIssSecIds(baseUrl, columns, filterFn) {
     const ids = [];
     const seen = new Set();
@@ -2130,18 +2207,22 @@
     return ids.sort();
   }
 
+  /** Подпрограмма `listShareTickers`. */
   function listShareTickers(stockPrefixesRaw) {
     return parseTickerPrefixes(stockPrefixesRaw || DEFAULT_STOCK_TICKERS_RAW);
   }
 
+  /** Подпрограмма `fetchShareList`. */
   async function fetchShareList(stockPrefixesRaw) {
     return listShareTickers(stockPrefixesRaw);
   }
 
+  /** Подпрограмма `listFuturesPrefixes`. */
   function listFuturesPrefixes(futuresPrefixesRaw) {
     return parseTickerPrefixes(futuresPrefixesRaw || DEFAULT_FUTURES_PREFIXES_RAW);
   }
 
+  /** Подпрограмма `fetchFuturesList`. */
   async function fetchFuturesList(futuresPrefixesRaw, period) {
     const prefixes = parseTickerPrefixes(futuresPrefixesRaw || DEFAULT_FUTURES_PREFIXES_RAW);
     if (!prefixes.length) return [];
@@ -2158,6 +2239,7 @@
     );
   }
 
+  /** Проверка булева условия: `isFullFuturesSecid`. */
   function isFullFuturesSecid(secid) {
     const s = String(secid || "").trim();
     if (!s) return false;
@@ -2165,6 +2247,7 @@
     return /-\d/.test(s) || /\d/.test(s.slice(-2));
   }
 
+  /** Подпрограмма `expandFuturesSelection`. */
   async function expandFuturesSelection(selectedSecs, futuresPrefixesRaw, period) {
     const selected = new Set((selectedSecs || []).map((s) => String(s || "").trim()).filter(Boolean));
     if (!selected.size) return [];
@@ -2194,6 +2277,7 @@
     return [...out].sort();
   }
 
+  /** Разрешение id/метаданных: `resolveFuturesMoexSec`. */
   async function resolveFuturesMoexSec(secOrPrefix, period) {
     const key = String(parseTickerPrefixes(secOrPrefix)[0] || "").trim();
     if (!key) return null;
@@ -2230,6 +2314,7 @@
     return exact?.SECID || front?.SECID || null;
   }
 
+  /** Разрешение id/метаданных: `resolveFuturesContract`. */
   async function resolveFuturesContract(secOrPrefix, period) {
     return resolveFuturesMoexSec(secOrPrefix, period);
   }
@@ -2239,6 +2324,7 @@
     "15": { moexInterval: "1", minutes: 15 }
   };
 
+  /** Разрешение id/метаданных: `resolveIntervalLoad`. */
   function resolveIntervalLoad(interval) {
     const key = String(interval);
     const agg = AGGREGATED_INTERVALS[key];
@@ -2248,6 +2334,7 @@
     return { cacheInterval: key, moexInterval: key, aggMinutes: 0 };
   }
 
+  /** Агрегация: `aggregateCandles`. */
   function aggregateCandles(candles, minutes) {
     if (!candles?.length || minutes <= 1) return candles || [];
     const ms = minutes * 60 * 1000;
@@ -2282,6 +2369,7 @@
       .map(({ key, ...rest }) => rest);
   }
 
+  /** Загрузка данных: `loadMoexCandles`. */
   async function loadMoexCandles(sec, from, till, interval, market = "shares") {
     const all = [];
     let start = 0;
@@ -2315,17 +2403,20 @@
       }));
   }
 
+  /** Загрузка данных: `loadMoexCandlesResolved`. */
   async function loadMoexCandlesResolved(sec, from, till, interval, market = "shares") {
     const { moexInterval, aggMinutes } = resolveIntervalLoad(interval);
     const raw = await loadMoexCandles(sec, from, till, moexInterval, market);
     return aggMinutes > 1 ? aggregateCandles(raw, aggMinutes) : raw;
   }
 
+  /** Подпрограмма `quotationToNumber`. */
   function quotationToNumber(q) {
     if (!q) return 0;
     return Number(q.units ?? 0) + Number(q.nano ?? 0) / 1e9;
   }
 
+  /** T-Bank REST API: `tbankTimeToMs`. */
   function tbankTimeToMs(time) {
     if (!time) return NaN;
     if (typeof time === "string") return new Date(time).getTime();
@@ -2335,6 +2426,7 @@
     return NaN;
   }
 
+  /** Форматирование для отображения: `formatCandleTimeMsk`. */
   function formatCandleTimeMsk(ms) {
     if (!Number.isFinite(ms)) return "";
     const parts = new Intl.DateTimeFormat("en-GB", {
@@ -2351,6 +2443,7 @@
     return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}:${g("second")}`;
   }
 
+  /** T-Bank REST API: `tbankIntervalForCalcTf`. */
   function tbankIntervalForCalcTf(tf) {
     const map = {
       "1": "CANDLE_INTERVAL_1_MIN",
@@ -2363,17 +2456,20 @@
     return map[String(tf)] || "CANDLE_INTERVAL_HOUR";
   }
 
+  /** T-Bank REST API: `tbankCandleChunkDays`. */
   function tbankCandleChunkDays(tf) {
     if (String(tf) === "24") return 365;
     if (String(tf) === "60") return 7;
     return 1;
   }
 
+  /** Live-торговля: `liveTbankTailHours`. */
   function liveTbankTailHours(tf) {
     const map = { "1": 8, "5": 24, "10": 36, "15": 48, "60": 168, "24": 720 };
     return map[String(tf)] || 24;
   }
 
+  /** Разбор строки/времени/ключа: `parseTbankHistoricCandles`. */
   function parseTbankHistoricCandles(candles, sec, market) {
     const out = [];
     for (const c of candles || []) {
@@ -2397,11 +2493,13 @@
   const CANDLE_CACHE_DB_NAME = "MultiLogicFinrespCandlesDB";
   const CANDLE_CACHE_STORE = "candles";
 
+  /** Подпрограмма `cacheNormDay`. */
   function cacheNormDay(value) {
     if (!value) return "";
     return String(value).slice(0, 10);
   }
 
+  /** Слияние: `mergeCandleSeries`. */
   function mergeCandleSeries(existing, incoming) {
     const map = new Map();
     for (const c of existing || []) {
@@ -2413,6 +2511,7 @@
     return [...map.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
   }
 
+  /** Подпрограмма `createCandleCache`. */
   function createCandleCache(options) {
     const dbName = options?.dbName || CANDLE_CACHE_DB_NAME;
     const storeName = options?.storeName || CANDLE_CACHE_STORE;
@@ -2427,12 +2526,14 @@
       ready: false
     };
 
+    /** Подпрограмма `requireIndexedDb`. */
     function requireIndexedDb() {
       if (typeof indexedDB === "undefined") {
         throw new Error("IndexedDB недоступен в этом браузере");
       }
     }
 
+    /** Подпрограмма `openDb`. */
     function openDb() {
       if (dbPromise) return dbPromise;
       requireIndexedDb();
@@ -2454,10 +2555,12 @@
       return dbPromise;
     }
 
+    /** Подпрограмма `txStore`. */
     function txStore(db, mode) {
       return db.transaction(storeName, mode).objectStore(storeName);
     }
 
+    /** Подпрограмма `requestPromise`. */
     function requestPromise(req) {
       return new Promise((resolve, reject) => {
         req.onsuccess = () => resolve(req.result);
@@ -2465,6 +2568,7 @@
       });
     }
 
+    /** Подпрограмма `txDone`. */
     function txDone(tx) {
       return new Promise((resolve, reject) => {
         tx.oncomplete = () => resolve();
@@ -2473,10 +2577,12 @@
       });
     }
 
+    /** Подпрограмма `entryKey`. */
     function entryKey(market, sec, interval) {
       return `${market}:${String(sec || "").trim().toUpperCase()}:${String(interval)}`;
     }
 
+    /** Подпрограмма `entryCoverage`. */
     function entryCoverage(entry) {
       if (!entry?.candles?.length) return null;
       return {
@@ -2485,12 +2591,14 @@
       };
     }
 
+    /** Подпрограмма `entryCovers`. */
     function entryCovers(entry, from, till) {
       const cov = entryCoverage(entry);
       if (!cov) return false;
       return cov.from <= cacheNormDay(from) && cov.till >= cacheNormDay(till);
     }
 
+    /** Подпрограмма `filterCandlesByRange`. */
     function filterCandlesByRange(candles, from, till) {
       const f = cacheNormDay(from);
       const t = cacheNormDay(till);
@@ -2500,10 +2608,12 @@
       });
     }
 
+    /** Подпрограмма `clonePack`. */
     function clonePack(candles, requestedSec, market) {
       return candles.map((c) => ({ ...c, sec: requestedSec, market }));
     }
 
+    /** Подпрограмма `estimateStorage`. */
     async function estimateStorage() {
       if (typeof navigator === "undefined" || !navigator.storage?.estimate) return;
       try {
@@ -2516,6 +2626,7 @@
       } catch (_) { /* estimate is optional */ }
     }
 
+    /** Подпрограмма `recomputeStats`. */
     async function recomputeStats() {
       const db = await openDb();
       let entriesCount = 0;
@@ -2539,11 +2650,13 @@
       await estimateStorage();
     }
 
+    /** Получение значения: `getEntry`. */
     async function getEntry(key) {
       const db = await openDb();
       return requestPromise(txStore(db, "readonly").get(key));
     }
 
+    /** Подпрограмма `putEntry`. */
     async function putEntry(entry) {
       const db = await openDb();
       const tx = db.transaction(storeName, "readwrite");
@@ -2551,6 +2664,7 @@
       await txDone(tx);
     }
 
+    /** Нормализация входных данных: `normalizeEntryForExport`. */
     function normalizeEntryForExport(entry) {
       if (!entry) return null;
       const { key, ...rest } = entry;
@@ -2661,6 +2775,7 @@
     };
   }
 
+  /** Загрузка данных: `loadInstrumentSec`. */
   async function loadInstrumentSec(sec, from, till, interval, market, cache, options) {
     const opts = options || {};
     const requestedSec = sec;
@@ -2689,6 +2804,7 @@
     }
   }
 
+  /** Обновление данных с источника: `refreshLiveMoexPacks`. */
   async function refreshLiveMoexPacks(instruments, from, till, interval, existingByKey, cache, onProgress) {
     const byKey = new Map(existingByKey || []);
     const failures = [];
@@ -2721,6 +2837,7 @@
     return { byKey, failures };
   }
 
+  /** Загрузка детальных свечей MOEX для списка инструментов. */
   async function loadManyDetailed(secs, from, till, interval, market = "shares", concurrency, onProgress, cache, shouldCancel) {
     const packs = [];
     const failures = [];
@@ -2746,16 +2863,19 @@
     return { packs, failures };
   }
 
+  /** Загрузка данных: `loadMany`. */
   async function loadMany(secs, from, till, interval, market = "shares") {
     const { packs } = await loadManyDetailed(secs, from, till, interval, market);
     return packs;
   }
 
+  /** Загрузка данных: `loadManyBatched`. */
   async function loadManyBatched(secs, from, till, interval, market, concurrency, onProgress) {
     const { packs } = await loadManyDetailed(secs, from, till, interval, market, concurrency, onProgress);
     return packs;
   }
 
+  /** Агрегация: `aggregateFinresp`. */
   function aggregateFinresp(perSecResults) {
     let finresp = 0, cash = 0, pos = 0, commission = 0, buys = 0, sells = 0;
     const bySec = {};
@@ -2773,6 +2893,7 @@
 
   const RANDOM_PRICE_SHIFT_MAX = 0.001;
 
+  /** Применение настроек/результата: `applyRandomPriceShift`. */
   function applyRandomPriceShift(packs, maxPct = RANDOM_PRICE_SHIFT_MAX) {
     if (!packs?.length || maxPct <= 0) return packs;
     return packs.map((pack) =>
@@ -2790,10 +2911,12 @@
     );
   }
 
+  /** Подпрограмма `delay`. */
   function delay(ms = 0) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /** Форматирование для отображения: `formatProgressTime`. */
   function formatProgressTime(time) {
     if (!time) return "";
     const s = String(time).trim();
@@ -2801,6 +2924,7 @@
     return s;
   }
 
+  /** Подпрограмма `finrespProgressText`. */
   function finrespProgressText(sec, doneBars, totalBars, candleTime) {
     const done = Math.max(0, Math.min(totalBars || 0, Math.round(doneBars || 0)));
     const total = Math.max(0, Math.round(totalBars || 0));
@@ -2810,6 +2934,7 @@
     return `Расчёт FINRESP: ${sec}${barsPart}${timePart}`;
   }
 
+  /** Остановка периодического опроса: `stopperProgressText`. */
   function stopperProgressText(doneBars, totalBars, candleTime) {
     const done = Math.max(0, Math.min(totalBars || 0, Math.round(doneBars || 0)));
     const total = Math.max(0, Math.round(totalBars || 0));
@@ -2819,6 +2944,7 @@
     return `Stopper портфеля${barsPart}${timePart}`;
   }
 
+  /** Подпрограмма `yieldChunkSize`. */
   function yieldChunkSize(span) {
     if (span <= 96) return span;
     return Math.max(24, Math.min(72, Math.floor(span / 14)));
@@ -2826,11 +2952,13 @@
 
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
 
+  /** Подпрограмма `lerpCalcProgress`. */
   function lerpCalcProgress(from, to, fraction) {
     const f = Math.max(0, Math.min(1, +fraction || 0));
     return from + (to - from) * f;
   }
 
+  /** Подпрограмма `emitFinrespPhaseProgress`. */
   function emitFinrespPhaseProgress(options, done, total, text, finrespEnd, sec, candleTime) {
     const end = finrespEnd ?? CALC_PROGRESS.FINRESP_MAX;
     const t = Math.max(1, +total || 1);
@@ -2843,6 +2971,7 @@
     );
   }
 
+  /** Подпрограмма `emitStopperPhaseProgress`. */
   function emitStopperPhaseProgress(options, done, total, text, candleTime) {
     const t = Math.max(1, +total || 1);
     const d = Math.max(0, Math.min(t, +done || 0));
@@ -2854,21 +2983,25 @@
     );
   }
 
+  /** Подпрограмма `emitRunProgress`. */
   function emitRunProgress(options, pct, text, detail) {
     if (typeof options?.onProgress === "function") {
       options.onProgress(Math.max(0, Math.min(CALC_PROGRESS.RUN_MAX, pct)), text, detail || null);
     }
   }
 
+  /** Подпрограмма `shouldAbortRun`. */
   function shouldAbortRun(options) {
     return typeof options?.shouldCancel === "function" && options.shouldCancel();
   }
 
+  /** Подпрограмма `emitRunProgressAsync`. */
   async function emitRunProgressAsync(options, pct, text, detail) {
     emitRunProgress(options, pct, text, detail);
     if (options?.yieldUi) await delay(0);
   }
 
+  /** Запуск расчёта: `runMultiPlan`. */
   function runMultiPlan(packs, startIdx, endIdx) {
     const emptyAgg = aggregateFinresp([]);
     const ref = longestPack(packs);
@@ -3062,6 +3195,7 @@
     };
   }
 
+  /** Асинхронный runMulti с yield для UI/worker. */
   async function runMultiAsync(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, options) {
     const opts = { ...(options || {}), yieldUi: true };
     const signalPacks = opts.signalPacks;

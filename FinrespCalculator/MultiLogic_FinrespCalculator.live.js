@@ -5,8 +5,10 @@
 (function (root) {
   "use strict";
 
+  /** Точка входа live-модуля: замыкание с deps из HTML, возвращает публичный API. */
   function install(d) {
 
+    // --- Зависимости из HTML (state, engine, UI-хелперы) ---
     const state = d.state;
     const E = d.E;
     const $ = d.$;
@@ -104,6 +106,7 @@
     return state.live.freeCashRub;
   }
 
+  /** Live-торговля: `livePositionsMtmRub`. */
   function livePositionsMtmRub() {
     if (isLiveSandbox()) return state.live.sandboxPositionsValue;
     if (Number.isFinite(state.live.positionsMtmRub)) return state.live.positionsMtmRub;
@@ -113,6 +116,7 @@
     return NaN;
   }
 
+  /** Синхронизация UI/state: `syncLiveStatsHint`. */
   function syncLiveStatsHint() {
     const el = $("live-trading-stats-hint");
     if (!el || !isLiveMode()) return;
@@ -142,6 +146,7 @@
     el.textContent = "Портфель = деньги (свободные RUB) + стоимость открытых позиций по текущим ценам.";
   }
 
+  /** Отрисовка элемента live-панели: `renderLiveFreeCashStat`. */
   function renderLiveFreeCashStat() {
     const stat = $("live-free-cash-stat");
     const el = $("live-free-cash-value");
@@ -155,6 +160,7 @@
     el.style.color = neg ? "#b91c1c" : "";
   }
 
+  /** Live-торговля: `liveSessionPortfolioBaseline`. */
   function liveSessionPortfolioBaseline() {
     const cs = state.live.chartSession;
     if (cs?.portfolioBaseline != null && Number.isFinite(cs.portfolioBaseline)) return cs.portfolioBaseline;
@@ -165,6 +171,7 @@
     return NaN;
   }
 
+  /** Live-торговля: `liveFinResultRub`. */
   function liveFinResultRub() {
     const base = liveSessionPortfolioBaseline();
     const cur = state.live.portfolioValue;
@@ -172,6 +179,7 @@
     return cur - base;
   }
 
+  /** Подпрограмма `snapshotLiveSessionPortfolioBaseline`. */
   function snapshotLiveSessionPortfolioBaseline() {
     const cs = state.live.chartSession;
     if (!cs || (cs.portfolioBaseline != null && Number.isFinite(cs.portfolioBaseline))) return;
@@ -190,6 +198,7 @@
     }
   }
 
+  /** Отрисовка элемента live-панели: `renderLiveFinResultStat`. */
   function renderLiveFinResultStat() {
     const stat = $("live-finresult-stat");
     const el = $("live-finresult-value");
@@ -209,14 +218,18 @@
     return false;
   }
 
+  /** Показ UI/уведомления: `showLiveInPageToast`. */
   function showLiveInPageToast(_title, _body, _ms) { /* noop */ }
 
+  /** Подпрограмма `sendSandboxTestNotification`. */
   function sendSandboxTestNotification() { /* noop */ }
 
+  /** Показ UI/уведомления: `showSandboxWebNotification`. */
   function showSandboxWebNotification(_title, _body, _tag, _opts) {
     return false;
   }
 
+  /** Песочница (фейк-брокер): `sandboxPositionLotsLabel`. */
   function sandboxPositionLotsLabel(pos, pieces) {
     const p = Math.abs(+pieces || +pos.pieces || 0);
     if (!p) return "0";
@@ -224,6 +237,7 @@
     return String(lots);
   }
 
+  /** Подпрограмма `notifySandboxPositionOpen`. */
   function notifySandboxPositionOpen(pos, price, pieces) {
     if (!pos) return;
     const sideLabel = pos.side === "short" ? "шорт" : "лонг";
@@ -238,6 +252,7 @@
     noteLiveTech("sandbox-pos-open", ticker, `${sideLabel} ${lots} lot @ ${fmt(price, 2)}`);
   }
 
+  /** Подпрограмма `notifySandboxPositionClose`. */
   function notifySandboxPositionClose(pos, closePieces, closePrice, pnl) {
     if (!pos) return;
     const sideLabel = pos.side === "short" ? "шорт" : "лонг";
@@ -255,14 +270,18 @@
     noteLiveTech("sandbox-pos-close", ticker, `${sideLabel} ${lots} lot @ ${fmt(closePrice, 2)}${pnlText}`);
   }
 
+  /** Синхронизация UI/state: `syncLiveNotifyStopperUi`. */
   function syncLiveNotifyStopperUi() { /* UI удалён */ }
 
+  /** Ленивая инициализация/проверка: `ensureLiveNotifyPermission`. */
   async function ensureLiveNotifyPermission() {
     return false;
   }
 
+  /** Обработчик события UI: `onLiveNotifyPermissionClick`. */
   async function onLiveNotifyPermissionClick() { /* noop */ }
 
+  /** Сброс состояния: `resetSandboxStopperWatch`. */
   function resetSandboxStopperWatch() {
     const cs = state.live.chartSession;
     if (!cs) return;
@@ -274,18 +293,21 @@
     };
   }
 
+  /** Ленивая инициализация/проверка: `ensureSandboxStopperWatch`. */
   function ensureSandboxStopperWatch() {
     if (!state.live.chartSession) return null;
     if (!state.live.chartSession.sandboxStopperWatch) resetSandboxStopperWatch();
     return state.live.chartSession.sandboxStopperWatch;
   }
 
+  /** Подпрограмма `portfolioStopperReferenceForWatch`. */
   function portfolioStopperReferenceForWatch(cfg, watch) {
     if (cfg.refEquity > 0) return cfg.refEquity;
     if (watch.referenceEquity != null && Number.isFinite(watch.referenceEquity)) return watch.referenceEquity;
     return null;
   }
 
+  /** Показ UI/уведомления: `showSandboxStopperNotification`. */
   function showSandboxStopperNotification(hit) {
     if (!hit) return;
     const isSl = hit.kind === "sl";
@@ -307,6 +329,7 @@
     );
   }
 
+  /** Проверка портфельного stopper в песочнице (уведомления отключены). */
   function checkSandboxPortfolioStopperNotify() {
     if (!liveSandboxNotifyActive()) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -343,7 +366,9 @@
     watch.referenceEquity = hit.equity;
   }
 
-  /** Сумма только в рублях (T-Bank MoneyValue); иное — NaN. */
+  // === T-Bank: токен, счета, статус подключения ===
+
+  /** Подпрограмма `setTbankStatus`. */
   function setTbankStatus(message, isError = false) {
     const el = $("tbank-status");
     if (!el) return;
@@ -351,6 +376,7 @@
     el.style.color = isError ? "#b91c1c" : "var(--muted)";
   }
 
+  /** Синхронизация UI/state: `syncTbankSettingsState`. */
   function syncTbankSettingsState() {
     const el = $("tbank-settings-state");
     if (!el) return;
@@ -363,11 +389,13 @@
       : stored ? "токен сохранён локально, нужен пароль" : "не подключено";
   }
 
+  /** Проверка булева условия: `isLiveMode`. */
   function isLiveMode() {
     const v = $("account-mode")?.value;
     if (v === "live" || v === "tbank" || v === "paper") return v === "live";
     return state.accountMode === "live";
   }
+  /** Проверка булева условия: `isTbankBackedMode`. */
   function isTbankBackedMode() {
     const v = $("account-mode")?.value;
     if (v === "live" || v === "tbank") return true;
@@ -375,6 +403,7 @@
     return state.accountMode === "tbank" || state.accountMode === "live";
   }
 
+  /** Чтение из формы/state: `readAccountModeFromUi`. */
   function readAccountModeFromUi() {
     const v = $("account-mode")?.value || "paper";
     if (v === "tbank") return "tbank";
@@ -382,12 +411,14 @@
     return "paper";
   }
 
+  /** Live-торговля: `liveOrderDirectionLabel`. */
   function liveOrderDirectionLabel(direction) {
     if (direction === "ORDER_DIRECTION_BUY" || direction === 1) return "Покупка";
     if (direction === "ORDER_DIRECTION_SELL" || direction === 2) return "Продажа";
     return direction || "—";
   }
 
+  /** Live-торговля: `liveOrderStatusLabel`. */
   function liveOrderStatusLabel(status) {
     const map = {
       EXECUTION_REPORT_STATUS_UNSPECIFIED: "неизвестно",
@@ -401,19 +432,23 @@
     return map[status] || String(status || "—").replace(/^EXECUTION_REPORT_STATUS_/, "").toLowerCase();
   }
 
+  /** Проверка булева условия: `isOrderBuy`. */
   function isOrderBuy(o) {
     return o.direction === "ORDER_DIRECTION_BUY" || o.direction === 1;
   }
 
+  /** Закрытие позиции/заявки: `closeAtMarketLabelForOrder`. */
   function closeAtMarketLabelForOrder(o) {
     if (!isLiveSandbox() && liveOrderCancellable(o, false)) return "Снять";
     return isOrderBuy(o) ? "Продать по рынку" : "Купить по рынку";
   }
 
+  /** Закрытие позиции/заявки: `closeAtMarketLabelForPosition`. */
   function closeAtMarketLabelForPosition(row) {
     return row?.side === "short" ? "Купить по рынку" : "Продать по рынку";
   }
 
+  /** Live-торговля: `liveOrderCloseable`. */
   function liveOrderCloseable(o) {
     if (isLiveSandbox()) return true;
     const st = String(o.executionReportStatus || o.orderState || "").toUpperCase();
@@ -423,15 +458,18 @@
     return st.includes("FILL");
   }
 
+  /** Live-торговля: `liveOrderRowId`. */
   function liveOrderRowId(o) {
     return String(o.orderId || o.order_id || o.id || "").trim();
   }
 
+  /** Ленивая инициализация/проверка: `ensureLiveTradeHistory`. */
   function ensureLiveTradeHistory() {
     if (!Array.isArray(state.live.tradeHistory)) state.live.tradeHistory = [];
     return state.live.tradeHistory;
   }
 
+  /** Проверка булева условия: `isLiveOrderActive`. */
   function isLiveOrderActive(o) {
     if (o.fake || isLiveSandbox()) return false;
     const st = String(o.executionReportStatus || o.orderState || "").toUpperCase();
@@ -441,6 +479,7 @@
     return st.includes("NEW") || st.includes("PARTIALLY") || st.includes("PENDING") || st.includes("SUBMIT");
   }
 
+  /** Live-торговля: `liveTradeSourceRobotLabel`. */
   function liveTradeSourceRobotLabel() {
     const ids = selectedLogicIds();
     if (!ids.length) return "Робот";
@@ -448,6 +487,7 @@
     return `Робот: ${ids.map(logicDisplayName).join(" → ")}`;
   }
 
+  /** Разрешение id/метаданных: `resolveTradeSourceLabel`. */
   function resolveTradeSourceLabel(source, customLabel) {
     if (customLabel) return customLabel;
     if (source === "robot") return liveTradeSourceRobotLabel();
@@ -459,6 +499,7 @@
     return "—";
   }
 
+  /** Подпрограмма `attachTradeSourceFields`. */
   function attachTradeSourceFields(obj, source, sourceLabel) {
     if (source) obj.tradeSource = source;
     const label = resolveTradeSourceLabel(source, sourceLabel);
@@ -466,6 +507,7 @@
     return obj;
   }
 
+  /** Подпрограмма `pickTradeSourceFromOptimisticRealEntry`. */
   function pickTradeSourceFromOptimisticRealEntry(entry) {
     const hist = ensureLiveTradeHistory();
     const t = Date.parse(entry.orderDate || 0) || 0;
@@ -484,6 +526,7 @@
     attachTradeSourceFields(entry, entry.tradeSource || "broker");
   }
 
+  /** Сделка/комиссия: `tradeHistoryFinrespForOrder`. */
   function tradeHistoryFinrespForOrder(o) {
     if (o.fake) {
       const role = o.tradeRole;
@@ -499,6 +542,7 @@
     return null;
   }
 
+  /** T-Bank REST API: `tbankOpTradeSide`. */
   function tbankOpTradeSide(op) {
     const ot = String(op?.operationType || op?.type || "").toUpperCase();
     if (!ot) return null;
@@ -507,6 +551,7 @@
     return null;
   }
 
+  /** Подпрограмма `dedupeOptimisticRealTradeHistory`. */
   function dedupeOptimisticRealTradeHistory(entry) {
     if (!entry || entry.fake) return;
     const hist = ensureLiveTradeHistory();
@@ -520,6 +565,7 @@
     }
   }
 
+  /** Подпрограмма `upsertTradeHistoryFromTbankOperation`. */
   function upsertTradeHistoryFromTbankOperation(op) {
     const side = op._histSide || tbankOpTradeSide(op);
     if (!side) return;
@@ -558,6 +604,7 @@
     dedupeOptimisticRealTradeHistory(tradeHistoryEntryFromOrder(entryOrder, "real"));
   }
 
+  /** Подпрограмма `enrichBrokerOperationsForHistory`. */
   async function enrichBrokerOperationsForHistory(operations) {
     const out = [];
     const instCache = new Map();
@@ -588,6 +635,7 @@
     return out;
   }
 
+  /** Синхронизация UI/state: `syncRealTradeHistoryFromBroker`. */
   async function syncRealTradeHistoryFromBroker() {
     if (isLiveSandbox() || !state.tbank.token || !state.tbank.selectedAccountId) return;
     const from = state.live.sessionStartedAt
@@ -607,6 +655,7 @@
     }
   }
 
+  /** Сделка/комиссия: `tradeHistoryEntryFromOrder`. */
   function tradeHistoryEntryFromOrder(o, mode) {
     const fake = mode === "sandbox" || !!o.fake;
     const isBuy = isOrderBuy(o);
@@ -650,6 +699,7 @@
     };
   }
 
+  /** Подпрограмма `upsertTradeHistoryFromOrder`. */
   function upsertTradeHistoryFromOrder(o, mode) {
     if (!o) return;
     const hist = ensureLiveTradeHistory();
@@ -701,6 +751,7 @@
     }, "sandbox");
   }
 
+  /** Подпрограмма `recordRealOrderToTradeHistory`. */
   function recordRealOrderToTradeHistory(apiResult, meta) {
     if (!apiResult || !meta) return;
     const lotsReq = Math.max(0, Math.floor(+(meta.lots || 0)));
@@ -726,6 +777,7 @@
     }, meta.tradeSource, meta.tradeSourceLabel), "real");
   }
 
+  /** Подпрограмма `markTradeHistoryCancelled`. */
   function markTradeHistoryCancelled(orderId) {
     if (!orderId) return;
     const hist = ensureLiveTradeHistory();
@@ -736,6 +788,7 @@
     }
   }
 
+  /** Синхронизация UI/state: `syncTradeHistoryFromSources`. */
   function syncTradeHistoryFromSources() {
     for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
     if (isLiveSandbox()) return;
@@ -745,6 +798,7 @@
     }
   }
 
+  /** Отрисовка элемента live-панели: `renderTradeHistoryRow`. */
   function renderTradeHistoryRow(entry) {
     const star = entry.isBuy
       ? '<span class="trade-star trade-star-buy" title="Покупка">★</span>'
@@ -772,6 +826,7 @@
     return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${sourceCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
   }
 
+  /** Отрисовка элемента live-панели: `renderLiveOrdersPanel`. */
   function renderLiveOrdersPanel() {
     const el = $("live-trading-orders");
     const metaEl = $("live-trade-history-meta");
@@ -808,6 +863,7 @@
     el.innerHTML = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Источник</th><th>Режим</th><th>Время</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
   }
 
+  /** Live-торговля: `liveOrderCancellable`. */
   function liveOrderCancellable(o, sandboxNewest) {
     if (isLiveSandbox()) return !!sandboxNewest && !!o.revertSnap;
     const st = String(o.executionReportStatus || o.orderState || "").toUpperCase();
@@ -816,6 +872,7 @@
     if (st.includes("CANCEL") || st.includes("REJECT") || st.includes("REJECTED")) return false;
     return st.includes("NEW") || st.includes("PARTIALLY") || st.includes("PENDING") || st.includes("SUBMIT");
   }
+  /** Синхронизация всей live-панели: статус, кнопки, опросы, стакан. */
   function syncLiveTradingUi() {
     const panel = $("live-trading-panel");
     const select = $("account-mode");
@@ -894,15 +951,18 @@
     syncLiveManualOrderUi();
   }
 
+  /** Остановка периодического опроса: `stopLiveTradingPoll`. */
   function stopLiveTradingPoll() {
     stopLiveModePoll();
   }
 
+  /** Остановка периодического опроса: `stopLiveStatsPoll`. */
   function stopLiveStatsPoll() {
     if (state.live.statsTimer) clearInterval(state.live.statsTimer);
     state.live.statsTimer = null;
   }
 
+  /** Запуск периодического опроса: `startLiveStatsPoll`. */
   function startLiveStatsPoll() {
     stopLiveStatsPoll();
     state.live.statsTimer = setInterval(() => {
@@ -914,6 +974,7 @@
     }, 8000);
   }
 
+  /** Остановка периодического опроса: `stopLiveTradingOnModeChange`. */
   function stopLiveTradingOnModeChange() {
     state.live.active = false;
     endLiveChartSession();
@@ -926,11 +987,13 @@
   const LIVE_ORDER_BOOK_DEPTH = 10;
   const LIVE_ORDER_BOOK_POLL_MS = 4000;
 
+  /** Заявка/ордер: `orderBookPrice`. */
   function orderBookPrice(q) {
     if (!q) return NaN;
     return (+q.units || 0) + (+q.nano || 0) / 1e9;
   }
 
+  /** Форматирование для отображения: `formatOrderBookTime`. */
   function formatOrderBookTime(ts) {
     if (!ts) return "—";
     try {
@@ -940,11 +1003,13 @@
     }
   }
 
+  /** Установка значения: `setLiveOrderBookStats`. */
   function setLiveOrderBookStats(text) {
     const statsEl = $("live-order-book-stats");
     if (statsEl) statsEl.textContent = text || "—";
   }
 
+  /** Отрисовка элемента live-панели: `renderLiveOrderBookView`. */
   function renderLiveOrderBookView(ob) {
     const tableEl = $("live-order-book-table");
     if (!tableEl) return;
@@ -989,11 +1054,13 @@
     tableEl.innerHTML = html;
   }
 
+  /** Остановка периодического опроса: `stopLiveOrderBookPoll`. */
   function stopLiveOrderBookPoll() {
     if (state.live.orderBookTimer) clearInterval(state.live.orderBookTimer);
     state.live.orderBookTimer = null;
   }
 
+  /** Обновление данных с источника: `refreshLiveOrderBook`. */
   async function refreshLiveOrderBook() {
     const panel = $("live-order-book-panel");
     if (!panel?.open || !isLiveMode()) return;
@@ -1028,6 +1095,7 @@
     }
   }
 
+  /** Запуск периодического опроса: `startLiveOrderBookPoll`. */
   function startLiveOrderBookPoll() {
     stopLiveOrderBookPoll();
     const panel = $("live-order-book-panel");
@@ -1044,12 +1112,14 @@
 
   const LIVE_POSITIONS_POLL_MS = 6000;
 
+  /** Подпрограмма `quotationToNumber`. */
   function quotationToNumber(q) {
     if (q == null) return NaN;
     if (typeof q === "number") return q;
     return (+q.units || 0) + (+q.nano || 0) / 1e9;
   }
 
+  /** Проверка булева условия: `isLiveSessionOpenPosition`. */
   function isLiveSessionOpenPosition(ticker, pieces, lot) {
     if (!pieces) return false;
     const baseline = state.live.sessionPositionBaseline;
@@ -1059,6 +1129,7 @@
     return Math.abs(pieces - basePieces) >= lotSize * 0.45;
   }
 
+  /** Подпрограмма `portByIdFromPortfolio`. */
   function portByIdFromPortfolio(portData) {
     const portById = new Map();
     for (const p of portData?.positions || []) {
@@ -1087,6 +1158,7 @@
     return p >= lot * 0.45;
   }
 
+  /** Подпрограмма `filterLiveOpenPositionRows`. */
   function filterLiveOpenPositionRows(rows) {
     return (rows || []).filter((r) => isLiveOpenPositionBalance(r.pieces, r.lot));
   }
@@ -1143,6 +1215,7 @@
     return rows;
   }
 
+  /** Подпрограмма `candlePriceForPosition`. */
   function candlePriceForPosition(pos) {
     const fromPack = packLastClose(pos.sec, pos.market);
     if (Number.isFinite(fromPack) && fromPack > 0) return fromPack;
@@ -1150,12 +1223,14 @@
     return Number.isFinite(cur) && cur > 0 ? cur : null;
   }
 
+  /** Применение настроек/результата: `applyMarketPriceToPosition`. */
   function applyMarketPriceToPosition(pos, cur) {
     if (!Number.isFinite(cur) || cur <= 0) return;
     pos.curPrice = cur;
     pos.sum = Math.abs(pos.pieces || 0) * cur;
   }
 
+  /** Синхронизация UI/state: `syncSessionPositionPricesFromPortfolio`. */
   function syncSessionPositionPricesFromPortfolio() {
     const byTicker = new Map((state.live.portfolioPositions || []).map((p) => [p.ticker, p]));
     for (const row of state.live.openPositions || []) {
@@ -1206,6 +1281,7 @@
     queueLiveChartsRefresh();
   }
 
+  /** Отрисовка элемента live-панели: `renderLivePositionsPanel`. */
   function renderLivePositionsPanel() {
     hideLivePositionsMenu();
     const tableEl = $("live-positions-table");
@@ -1312,11 +1388,13 @@
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
   }
 
+  /** Закрытие позиции/заявки: `closeDirectionForPosition`. */
   function closeDirectionForPosition(row) {
     if (!row) return null;
     return row.side === "short" ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL";
   }
 
+  /** Разрешение id/метаданных: `resolveLivePositionInstrumentKey`. */
   function resolveLivePositionInstrumentKey(row) {
     if (!row) return "";
     const market = row.market || (row.isFuture ? "futures" : "shares");
@@ -1324,6 +1402,7 @@
     return `${market}:${sec}`;
   }
 
+  /** Скрытие UI: `hideLivePositionsMenu`. */
   function hideLivePositionsMenu() {
     const menu = $("live-positions-menu");
     if (!menu) return;
@@ -1332,6 +1411,7 @@
     state.live.positionsMenuIdx = null;
   }
 
+  /** Показ UI/уведомления: `showLivePositionsMenu`. */
   function showLivePositionsMenu(clientX, clientY, idx) {
     const menu = $("live-positions-menu");
     const row = state.live.openPositions?.[idx];
@@ -1351,12 +1431,14 @@
     menu.style.top = `${y}px`;
   }
 
+  /** Получение значения: `getLivePositionMenuRow`. */
   function getLivePositionMenuRow() {
     const idx = state.live.positionsMenuIdx;
     if (idx == null) return null;
     return state.live.openPositions?.[idx] || null;
   }
 
+  /** Закрыть позицию по рынку (sandbox или T-Bank). */
   async function closeLivePositionAtMarket(row) {
     if (!row || !isLiveMode()) return;
     const metaEl = $("live-positions-meta");
@@ -1409,6 +1491,7 @@
     }
   }
 
+  /** Заполнение select/списка: `fillManualOrderFromPosition`. */
   function fillManualOrderFromPosition(row) {
     if (!row) return;
     const key = resolveLivePositionInstrumentKey(row);
@@ -1448,6 +1531,7 @@
 
   let livePosLongPressTimer = null;
 
+  /** Обработчик события UI: `onLivePositionsTableContextMenu`. */
   function onLivePositionsTableContextMenu(ev) {
     const tr = ev.target?.closest?.(".live-pos-row");
     if (!tr || !isLiveMode()) return;
@@ -1457,6 +1541,7 @@
     showLivePositionsMenu(ev.clientX, ev.clientY, idx);
   }
 
+  /** Обработчик события UI: `onLivePositionsPointerDown`. */
   function onLivePositionsPointerDown(ev) {
     const tr = ev.target?.closest?.(".live-pos-row");
     if (!tr || !isLiveMode() || ev.button !== 0) return;
@@ -1469,11 +1554,13 @@
     }, 550);
   }
 
+  /** Обработчик события UI: `onLivePositionsPointerEnd`. */
   function onLivePositionsPointerEnd() {
     clearTimeout(livePosLongPressTimer);
     livePosLongPressTimer = null;
   }
 
+  /** Обработчик события UI: `onLivePositionsMenuAction`. */
   function onLivePositionsMenuAction(action) {
     const row = getLivePositionMenuRow();
     hideLivePositionsMenu();
@@ -1482,11 +1569,13 @@
     else if (action === "limit") fillManualOrderFromPosition(row);
   }
 
+  /** Остановка периодического опроса: `stopLivePositionsPoll`. */
   function stopLivePositionsPoll() {
     if (state.live.positionsTimer) clearInterval(state.live.positionsTimer);
     state.live.positionsTimer = null;
   }
 
+  /** Обновление данных с источника: `refreshLiveOpenPositions`. */
   async function refreshLiveOpenPositions(opts) {
     const options = opts || {};
     if (state.live.tradingActionBusy && !options.force) return;
@@ -1532,6 +1621,7 @@
     }
   }
 
+  /** Запуск периодического опроса: `startLivePositionsPoll`. */
   function startLivePositionsPoll() {
     stopLivePositionsPoll();
     const panel = $("live-positions-panel");
@@ -1546,6 +1636,7 @@
     }, LIVE_POSITIONS_POLL_MS);
   }
 
+  /** T-Bank REST API: `tbankInstField`. */
   function tbankInstField(inst, ...keys) {
     if (!inst) return undefined;
     for (const k of keys) {
@@ -1554,11 +1645,13 @@
     return undefined;
   }
 
+  /** T-Bank REST API: `tbankInstApiTradable`. */
   function tbankInstApiTradable(inst) {
     const v = tbankInstField(inst, "apiTradeAvailableFlag", "api_trade_available_flag");
     return v === undefined ? null : !!v;
   }
 
+  /** Подпрограмма `scoreTbankInstrument`. */
   function scoreTbankInstrument(inst, market) {
     let s = 0;
     const cc = String(tbankInstField(inst, "classCode", "class_code") || "").toUpperCase();
@@ -1577,6 +1670,7 @@
     return s;
   }
 
+  /** Подпрограмма `pickTbankInstrument`. */
   function pickTbankInstrument(list, sec, market) {
     const secU = String(sec || "").trim().toUpperCase();
     let pool = (list || []).filter((i) => String(i.ticker || "").toUpperCase() === secU);
@@ -1588,6 +1682,7 @@
     return pool.slice().sort((a, b) => scoreTbankInstrument(b, market) - scoreTbankInstrument(a, market))[0];
   }
 
+  /** T-Bank REST API: `tbankFindInstrument`. */
   async function tbankFindInstrument(sec, market) {
     const key = `${market}:${String(sec || "").trim().toUpperCase()}`;
     if (state.live.instrumentCache.has(key)) return state.live.instrumentCache.get(key);
@@ -1633,6 +1728,7 @@
     };
   }
 
+  /** T-Bank REST API: `tbankGetTradingStatus`. */
   async function tbankGetTradingStatus(instrumentId) {
     if (!instrumentId) return null;
     const cacheKey = `ts:${instrumentId}`;
@@ -1642,10 +1738,12 @@
     return data || null;
   }
 
+  /** Подпрограмма `tradingStatusApiOk`. */
   function tradingStatusApiOk(ts) {
     return !!(ts?.apiTradeAvailableFlag ?? ts?.api_trade_available_flag);
   }
 
+  /** Подпрограмма `tradingStatusOrderOk`. */
   function tradingStatusOrderOk(ts, orderTypeOverride) {
     const isLimit = (orderTypeOverride || liveOrderTypeUi()) === "limit";
     const flag = isLimit
@@ -1654,6 +1752,7 @@
     return flag !== false;
   }
 
+  /** T-Bank REST API: `tbankValidateTradable`. */
   async function tbankValidateTradable(instrumentId, instMeta, orderTypeOverride) {
     const apiFromInst = tbankInstApiTradable(instMeta);
     if (apiFromInst === false) {
@@ -1672,6 +1771,7 @@
     return { ok: true };
   }
 
+  /** Подпрограмма `summarizeLiveReconcileIssues`. */
   function summarizeLiveReconcileIssues(skipped, failed, maxItems) {
     const n = Math.max(1, +maxItems || 4);
     const parts = [];
@@ -1686,10 +1786,12 @@
     return parts.join(" · ");
   }
 
+  /** Live-торговля: `liveIssueEntry`. */
   function liveIssueEntry(ticker, sec, fields) {
     return { ticker, sec: sec || ticker, ...fields };
   }
 
+  /** T-Bank REST API: `tbankGetInstrumentById`. */
   async function tbankGetInstrumentById(instrumentId) {
     if (!instrumentId) return null;
     const cacheKey = `id:${instrumentId}`;
@@ -1703,6 +1805,7 @@
     return inst;
   }
 
+  /** Подпрограмма `piecesToLots`. */
   function piecesToLots(pieces, lotSize) {
     const lot = Math.max(1, +lotSize || 1);
     const p = Math.abs(+pieces || 0);
@@ -1722,10 +1825,12 @@
     return lots > 0 ? lots : 1;
   }
 
+  /** Live-торговля: `liveOrderTypeUi`. */
   function liveOrderTypeUi() {
     return $("live-order-type")?.value === "limit" ? "limit" : "market";
   }
 
+  /** Подпрограмма `quotationFromNumber`. */
   function quotationFromNumber(price) {
     const p = Math.max(0, +price || 0);
     const units = Math.floor(p);
@@ -1733,6 +1838,7 @@
     return { units: String(units), nano };
   }
 
+  /** T-Bank REST API: `tbankGetLastPrice`. */
   async function tbankGetLastPrice(instrumentId) {
     const data = await tbankRequest("MarketDataService/GetLastPrices", {
       instrumentId: [instrumentId]
@@ -1742,10 +1848,12 @@
     return (+lp.price.units || 0) + (+lp.price.nano || 0) / 1e9;
   }
 
+  /** Live-торговля: `liveCandleSourceUi`. */
   function liveCandleSourceUi() {
     return $("live-candle-source")?.value || "auto";
   }
 
+  /** Разрешение id/метаданных: `resolveLiveCandleSource`. */
   function resolveLiveCandleSource() {
     const ui = liveCandleSourceUi();
     if (ui === "moex") return "moex";
@@ -1753,6 +1861,7 @@
     return state.tbank.token ? "tbank" : "moex";
   }
 
+  /** Live-торговля: `liveTbankTailFromDate`. */
   function liveTbankTailFromDate(fromStr, tillStr, interval) {
     const tillD = parseDay(tillStr);
     tillD.setHours(23, 59, 59, 999);
@@ -1764,6 +1873,7 @@
     return fromD > tailStart ? fromD : tailStart;
   }
 
+  /** T-Bank REST API: `tbankFetchCandlesRange`. */
   async function tbankFetchCandlesRange(instrumentId, fromDate, toDate, interval) {
     const chunkDays = E.tbankCandleChunkDays(interval);
     const candleInterval = E.tbankIntervalForCalcTf(interval);
@@ -1788,6 +1898,7 @@
     return out;
   }
 
+  /** Обновление данных с источника: `refreshLiveTbankTail`. */
   async function refreshLiveTbankTail(instruments, from, till, interval, existingByKey) {
     if (!(await ensureTbankTokenUnlocked())) {
       throw new Error("Токен T-Bank не расшифрован — свечи T-Bank недоступны.");
@@ -1833,6 +1944,7 @@
     return { byKey, failures };
   }
 
+  /** Подпрограмма `packLastClose`. */
   function packLastClose(sec, market) {
     const secU = String(sec || "").trim().toUpperCase();
     const mkt = market === "futures" ? "futures" : "shares";
@@ -1843,6 +1955,7 @@
     return Number.isFinite(close) && close > 0 ? close : null;
   }
 
+  /** Песочница (фейк-брокер): `sandboxLocalPrice`. */
   function sandboxLocalPrice(pos) {
     if (!pos) return NaN;
     const fromPack = packLastClose(pos.sec, pos.market);
@@ -1870,11 +1983,13 @@
     renderLivePortfolioStats();
   }
 
+  /** Синхронизация UI/state: `syncSandboxPositionsTable`. */
   function syncSandboxPositionsTable() {
     state.live.openPositions = filterLiveOpenPositionRows([...ensureSandboxState().open.values()]);
     renderLivePositionsPanel();
   }
 
+  /** Подпрограмма `clearLiveManualFlatten`. */
   function clearLiveManualFlatten() {
     state.live.manualFlatten = false;
   }
@@ -1896,6 +2011,7 @@
   }
 
   let liveChartsRefreshTimer = null;
+  /** Подпрограмма `queueLiveChartsRefresh`. */
   function queueLiveChartsRefresh() {
     if (!isLiveTradingSession()) return;
     clearTimeout(liveChartsRefreshTimer);
@@ -1906,11 +2022,13 @@
     }, 2500);
   }
 
+  /** Подпрограмма `cancelQueuedLiveChartsRefresh`. */
   function cancelQueuedLiveChartsRefresh() {
     clearTimeout(liveChartsRefreshTimer);
     liveChartsRefreshTimer = null;
   }
 
+  /** Разрешение id/метаданных: `resolveOrderPrice`. */
   async function resolveOrderPrice(instrumentId, sec, market) {
     const fromPack = packLastClose(sec, market);
     if (Number.isFinite(fromPack) && fromPack > 0) return fromPack;
@@ -1918,6 +2036,7 @@
     return await tbankGetLastPrice(instrumentId);
   }
 
+  /** Обновление данных с источника: `refreshLiveManualLimitPrice`. */
   async function refreshLiveManualLimitPrice(opts) {
     const options = opts || {};
     if (!isLiveMode()) return;
@@ -1997,6 +2116,7 @@
     return state.live.sandbox;
   }
 
+  /** Ленивая инициализация/проверка: `ensureSandboxLedger`. */
   function ensureSandboxLedger(sb) {
     if (!Array.isArray(sb.ledger)) sb.ledger = [];
     if (!Number.isFinite(sb.nextFillId)) sb.nextFillId = 0;
@@ -2007,6 +2127,7 @@
     return $("live-sandbox-match-mode")?.value === "lifo" ? "lifo" : "fifo";
   }
 
+  /** Подпрограмма `createSandboxReplayCtx`. */
   function createSandboxReplayCtx(sb) {
     return {
       startPortfolio: sb.startPortfolio,
@@ -2020,6 +2141,7 @@
     };
   }
 
+  /** Копирование: `copySandboxReplayToState`. */
   function copySandboxReplayToState(sb, ctx) {
     sb.cash = ctx.cash;
     sb.cashDelta = ctx.cash - sb.startPortfolio;
@@ -2031,6 +2153,7 @@
     sb.closed.push(...ctx.closed);
   }
 
+  /** Синхронизация UI/state: `syncSandboxOrdersTradeMetaFromLedger`. */
   function syncSandboxOrdersTradeMetaFromLedger(sb) {
     const byOrder = new Map();
     for (const fill of sb.ledger || []) {
@@ -2153,6 +2276,7 @@
     compactSandboxOrderJournal(sb);
   }
 
+  /** Применение настроек/результата: `applySandboxLedgerFill`. */
   function applySandboxLedgerFill(ctx, fill) {
     const signedPieces = Math.trunc(+fill.signedPieces || 0);
     const price = +fill.price;
@@ -2181,6 +2305,7 @@
     });
   }
 
+  /** Подпрограмма `appendSandboxFill`. */
   function appendSandboxFill(sb, fillData) {
     ensureSandboxLedger(sb);
     sb.nextFillId = (sb.nextFillId || 0) + 1;
@@ -2195,6 +2320,7 @@
     return fill;
   }
 
+  /** Песочница (фейк-брокер): `sandboxNotifyForFillTrade`. */
   function sandboxNotifyForFillTrade(fill, posMeta) {
     if (!fill?.tradeRole) return;
     const role = fill.tradeRole;
@@ -2221,17 +2347,20 @@
     }
   }
 
+  /** Ленивая инициализация/проверка: `ensureSandboxOpenLegs`. */
   function ensureSandboxOpenLegs(sb) {
     if (!(sb.openLegs instanceof Map)) sb.openLegs = new Map();
     if (!Number.isFinite(sb.nextLegId)) sb.nextLegId = 0;
   }
 
+  /** Подпрограмма `allocSandboxLegId`. */
   function allocSandboxLegId(sb) {
     ensureSandboxOpenLegs(sb);
     sb.nextLegId = (sb.nextLegId || 0) + 1;
     return sb.nextLegId;
   }
 
+  /** Подпрограмма `snapshotSandboxOpenLegs`. */
   function snapshotSandboxOpenLegs(openLegsMap) {
     const out = {};
     for (const [k, legs] of (openLegsMap || new Map()).entries()) {
@@ -2256,6 +2385,7 @@
     }]);
   }
 
+  /** Подпрограмма `rebuildSandboxOpenFromLegs`. */
   function rebuildSandboxOpenFromLegs(sb, key, posMeta) {
     ensureSandboxOpenLegs(sb);
     const pool = sb.openLegs.get(key) || [];
@@ -2298,6 +2428,7 @@
     return row;
   }
 
+  /** Подпрограмма `pushSandboxLeg`. */
   function pushSandboxLeg(sb, key, side, pieces, price) {
     ensureSandboxOpenLegs(sb);
     if (!sb.openLegs.has(key)) sb.openLegs.set(key, []);
@@ -2511,6 +2642,7 @@
     return sb.cash;
   }
 
+  /** Подпрограмма `snapshotSandboxState`. */
   function snapshotSandboxState(sb) {
     return {
       cash: sb.cash,
@@ -2528,6 +2660,7 @@
     };
   }
 
+  /** Подпрограмма `restoreSandboxSnapshot`. */
   function restoreSandboxSnapshot(sb, snap) {
     if (!snap) return;
     sb.cash = snap.cash;
@@ -2692,6 +2825,7 @@
     return orderId;
   }
 
+  /** Песочница (фейк-брокер): `sandboxOrderStatusLabel`. */
   function sandboxOrderStatusLabel(o) {
     const role = o.tradeRole;
     const mode = o.matchMode === "lifo" ? "LIFO" : "FIFO";
@@ -2713,6 +2847,7 @@
     return "исполнена (фейк)";
   }
 
+  /** Закрытие позиции/заявки: `closeSandboxOrderAtMarket`. */
   async function closeSandboxOrderAtMarket(order) {
     const sb = ensureSandboxState();
     const orderId = liveOrderRowId(order);
@@ -2740,6 +2875,7 @@
     syncSandboxPositionsTable();
   }
 
+  /** Закрытие позиции/заявки: `closeRealOrderAtMarket`. */
   async function closeRealOrderAtMarket(order) {
     if (!(await ensureTbankTokenUnlocked())) throw new Error("Расшифруйте токен T-Bank.");
     if (!state.tbank.selectedAccountId) await loadTbankAccounts();
@@ -2767,6 +2903,7 @@
     await postLiveOrder(instrumentId, invDir, lots, ticker, { orderType: "market", market });
   }
 
+  /** Закрытие позиции/заявки: `closeLiveOrderAtMarket`. */
   async function closeLiveOrderAtMarket(orderId) {
     if (!isLiveMode() || !orderId) return;
     const orders = isLiveSandbox()
@@ -2826,6 +2963,7 @@
     if (!options.skipNotify) notifySandboxPositionClose(pos, closePieces, closePrice, pnl);
   }
 
+  /** Подпрограмма `openSandboxPosition`. */
   function openSandboxPosition(sb, pos, side, pieces, price, opts) {
     const options = opts || {};
     const key = sandboxPosKey(pos.market, pos.ticker);
@@ -3186,6 +3324,7 @@
     refreshLiveChartsUi();
   }
 
+  /** POST OrdersService/PostOrder — рыночная или лимитная заявка T-Bank. */
   async function tbankPostOrder(instrumentId, direction, lots, secForPrice, options) {
     const opts = options || {};
     const qty = Math.max(0, Math.floor(+lots || 0));
@@ -3217,6 +3356,7 @@
     return tbankRequest("OrdersService/PostOrder", body);
   }
 
+  /** Разбор строки/времени/ключа: `parseLiveManualInstrumentKey`. */
   function parseLiveManualInstrumentKey(key) {
     const raw = String(key || "").trim();
     if (!raw) return null;
@@ -3225,6 +3365,7 @@
     return { market: raw.slice(0, sep), sec: raw.slice(sep + 1) };
   }
 
+  /** Заполнение select/списка: `fillLiveTradingInstrumentSelect`. */
   function fillLiveTradingInstrumentSelect(sel, restoredKey) {
     if (!sel) return;
     const prev = sel.value || restoredKey || "";
@@ -3248,6 +3389,7 @@
     if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
   }
 
+  /** Заполнение select/списка: `fillLiveTradingInstrumentSelects`. */
   function fillLiveTradingInstrumentSelects() {
     fillLiveTradingInstrumentSelect($("live-manual-sec"), state.restoredManualSec);
     state.restoredManualSec = "";
@@ -3255,6 +3397,7 @@
     state.restoredOrderBookSec = "";
   }
 
+  /** Заполнение select/списка: `fillManualOrderFromOrderBook`. */
   function fillManualOrderFromOrderBook(side, price) {
     const obKey = $("live-order-book-sec")?.value || "";
     const picked = parseLiveManualInstrumentKey(obKey);
@@ -3284,6 +3427,7 @@
     panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
+  /** Обработчик события UI: `onLiveOrderBookPriceDblClick`. */
   function onLiveOrderBookPriceDblClick(ev) {
     const cell = ev.target?.closest?.(".live-ob-price-pick");
     if (!cell || !isLiveMode()) return;
@@ -3293,6 +3437,7 @@
     fillManualOrderFromOrderBook(side, price);
   }
 
+  /** Синхронизация UI/state: `syncLiveManualOrderUi`. */
   function syncLiveManualOrderUi() {
     fillLiveTradingInstrumentSelects();
     const isLive = isLiveMode();
@@ -3307,6 +3452,7 @@
     if (priceWrap) priceWrap.hidden = !isLimit;
   }
 
+  /** Ручная заявка из панели live (market/limit). */
   async function placeManualLiveOrder() {
     if (!isLiveMode()) return;
     const statusEl = $("live-manual-order-status");
@@ -3386,6 +3532,7 @@
     }
   }
 
+  /** Отрисовка элемента live-панели: `renderLivePortfolioStats`. */
   function renderLivePortfolioStats() {
     const pv = $("live-portfolio-value");
     const cp = $("live-commission-paid");
@@ -3410,6 +3557,7 @@
     checkSandboxPortfolioStopperNotify();
   }
 
+  /** Обновление данных с источника: `refreshLivePortfolioStats`. */
   async function refreshLivePortfolioStats() {
     if (!isLiveMode()) return;
     if (isLiveSandbox()) {
@@ -3455,6 +3603,7 @@
     }
   }
 
+  /** Обновление данных с источника: `refreshLiveOrders`. */
   async function refreshLiveOrders() {
     if (!isLiveMode()) return;
     if (isLiveSandbox()) {
@@ -3478,6 +3627,7 @@
     }
   }
 
+  /** T-Bank REST API: `tbankPositionsByTicker`. */
   async function tbankPositionsByTicker() {
     const data = await tbankRequest("OperationsService/GetPositions", {
       accountId: state.tbank.selectedAccountId
@@ -3505,26 +3655,31 @@
     return map;
   }
 
+  /** Live-торговля: `liveReconcileTargets`. */
   function liveReconcileTargets() {
     const rows = state.lastResult?.perSec || [];
     if (!state.live.manualFlatten) return rows;
     return rows.map((p) => ({ ...p, pos: 0 }));
   }
 
+  /** Проверка булева условия: `isLiveObTrendGateEnabled`. */
   function isLiveObTrendGateEnabled() {
     return isLiveMode() && !!$("live-ob-trend-confirm")?.checked;
   }
 
+  /** Подпрограмма `activeLogicLineRaw`. */
   function activeLogicLineRaw() {
     const key = primaryLogicId();
     return state.customLines?.[key] || E.DEFAULT_LOGIC_LINES?.[key] || "";
   }
 
+  /** Live-торговля: `liveObTrendGateRequired`. */
   function liveObTrendGateRequired() {
     if (!isLiveObTrendGateEnabled()) return false;
     return E.logicUsesObTrend(activeLogicLineRaw());
   }
 
+  /** T-Bank REST API: `tbankFetchOrderBookCached`. */
   async function tbankFetchOrderBookCached(instrumentId) {
     const cacheKey = String(instrumentId || "");
     const prev = state.live.obTrendCache.get(cacheKey);
@@ -3538,6 +3693,7 @@
     return ob;
   }
 
+  /** Live-торговля: `liveObTrendAllowsOrder`. */
   async function liveObTrendAllowsOrder(instrumentId, direction) {
     if (!liveObTrendGateRequired()) return { ok: true, skipped: true };
     if (isLiveSandbox() && !state.tbank.token) {
@@ -3559,6 +3715,7 @@
     }
   }
 
+  /** Подпрограмма `tfDurationMs`. */
   function tfDurationMs(tf) {
     const map = {
       "1": 60000,
@@ -3580,6 +3737,7 @@
     return n;
   }
 
+  /** Live-торговля: `liveHasAnyCandles`. */
   function liveHasAnyCandles() {
     return liveCandlePackCount(state.packs) > 0;
   }
@@ -3593,6 +3751,7 @@
     return Number.isFinite(t0) ? t0 + tfDurationMs(tf) : 0;
   }
 
+  /** Подпрограмма `inLiveCandleGracePeriod`. */
   function inLiveCandleGracePeriod(nowMs) {
     const until = liveCandleDelayGraceUntilMs();
     return until > 0 && (nowMs ?? Date.now()) < until;
@@ -3649,6 +3808,7 @@
     return { stale: false, message: "" };
   }
 
+  /** Синхронизация UI/state: `syncLiveCandleDelayUi`. */
   function syncLiveCandleDelayUi(isLive) {
     const panel = $("live-trading-panel");
     const alertEl = $("live-candle-delay-alert");
@@ -3660,6 +3820,7 @@
     }
   }
 
+  /** Live-торговля: `liveCandlePollIntervalMs`. */
   function liveCandlePollIntervalMs(tf) {
     if (tf === "1") return 30000;
     if (tf === "5") return 45000;
@@ -3668,6 +3829,7 @@
     return 300000;
   }
 
+  /** Live-торговля: `liveCandleStreamRange`. */
   function liveCandleStreamRange(instruments) {
     const interval = $("calc-tf").value;
     const n = Math.max(1, instruments?.length || 1);
@@ -3686,6 +3848,7 @@
     return { from, till, interval };
   }
 
+  /** Применение настроек/результата: `applyCalcWindowIndices`. */
   function applyCalcWindowIndices(a, b, pack) {
     const p = pack || refPack();
     const n = p.length;
@@ -3705,6 +3868,7 @@
     $("calc-end-label").textContent = p[bi]?.time || "—";
   }
 
+  /** Сброс состояния: `resetLiveWindowToCommonOverlap`. */
   function resetLiveWindowToCommonOverlap() {
     const pack = refPack();
     if (!pack.length) return false;
@@ -3727,20 +3891,24 @@
     return true;
   }
 
+  /** Подпрограмма `timeToMs`. */
   function timeToMs(t) {
     if (!t) return NaN;
     return new Date(String(t).replace(" ", "T")).getTime();
   }
 
+  /** Проверка булева условия: `isLiveTradingSession`. */
   function isLiveTradingSession() {
     return isLiveMode() && !!state.live.chartSession;
   }
 
+  /** Live-торговля: `liveSessionStartTime`. */
   function liveSessionStartTime() {
     const cs = state.live.chartSession;
     return cs?.sessionBarTime || cs?.startedAt || state.live.sessionStartedAt || null;
   }
 
+  /** Подпрограмма `anchorLiveSessionBarIndex`. */
   function anchorLiveSessionBarIndex() {
     const cs = state.live.chartSession;
     if (!cs || cs.sessionBarAnchored) return;
@@ -3752,6 +3920,7 @@
     cs.sessionBarAnchored = true;
   }
 
+  /** Подпрограмма `pinLiveSessionEquityWindow`. */
   function pinLiveSessionEquityWindow() {
     const pack = refPack();
     if (!pack.length) return false;
@@ -3772,6 +3941,7 @@
     return true;
   }
 
+  /** Синхронизация UI/state: `syncLivePeriodControls`. */
   function syncLivePeriodControls() {
     const live = isLiveMode();
     $("calc-from")?.closest(".calc-field")?.classList.toggle("live-mode-hidden", live);
@@ -3782,12 +3952,14 @@
     document.querySelector(".range-grid")?.classList.toggle("live-mode-hidden", live);
   }
 
+  /** Live-торговля: `liveChartSessionNote`. */
   function liveChartSessionNote() {
     const t = formatMoexBarTime(liveSessionStartTime()) || "—";
     const modeHint = isLiveSandbox() ? "Зелёная область — песочница." : "Розовая область — реальная торговля.";
     return `Live-сессия с ${t}: графики с момента выбора «Реальная торговля». ${modeHint} Синяя линия — покупка, оранжевая — продажа; SL/TP — красная/зелёная.`;
   }
 
+  /** Подпрограмма `recordLiveOrderMarker`. */
   function recordLiveOrderMarker(sec, direction, orderType, extras) {
     const cs = state.live.chartSession;
     if (!cs) return;
@@ -3808,6 +3980,7 @@
     if (cs.orderMarkers.length > 300) cs.orderMarkers.splice(0, cs.orderMarkers.length - 300);
   }
 
+  /** Заявка/ордер: `orderMarkersForChart`. */
   function orderMarkersForChart(sec, rows) {
     if (!rows?.length || !state.live.chartSession?.orderMarkers?.length) return [];
     const key = String(sec || "").toUpperCase();
@@ -3824,6 +3997,7 @@
     return out;
   }
 
+  /** Заглушки графиков до старта торговли или без данных. */
   function drawLiveChartPlaceholders() {
     const instruments = selectedInstruments();
     const chartBox = $("calc-chart");
@@ -3845,6 +4019,7 @@
     syncChartBox(chartBox, `${note}<div class="chart-stack">${blocks.join("")}</div>`);
   }
 
+  /** Отрисовка SVG/графика: `drawLiveEquityPlaceholders`. */
   function drawLiveEquityPlaceholders() {
     const box = $("calc-chart-equity");
     if (!box) return;
@@ -3870,6 +4045,7 @@ ${totalBlock}
 </div>`);
   }
 
+  /** Обновление данных с источника: `refreshLiveChartsUi`. */
   function refreshLiveChartsUi() {
     if (!isLiveTradingSession()) return;
     if (state.lastResult?.perSec?.length) {
@@ -3883,6 +4059,7 @@ ${totalBlock}
     refreshLiveEquityChartsUi();
   }
 
+  /** Ленивая инициализация/проверка: `ensureLiveChartSession`. */
   function ensureLiveChartSession() {
     if (!isLiveMode()) return false;
     if (state.live.chartSession) return true;
@@ -3924,6 +4101,7 @@ ${totalBlock}
     return true;
   }
 
+  /** Подпрограмма `endLiveChartSession`. */
   function endLiveChartSession() {
     stopLiveModePoll();
     state.live.chartSession = null;
@@ -3935,10 +4113,12 @@ ${totalBlock}
     }
   }
 
+  /** Подпрограмма `beginLiveTradingSession`. */
   function beginLiveTradingSession() {
     ensureLiveChartSession();
   }
 
+  /** Подпрограмма `recordLiveModeRegionSwitch`. */
   function recordLiveModeRegionSwitch() {
     if (!state.live.active || !state.live.chartSession) return;
     const regions = state.live.chartSession.modeRegions;
@@ -3957,6 +4137,7 @@ ${totalBlock}
     if (regions.length > 30) regions.shift();
   }
 
+  /** Подпрограмма `sliceRowsForLiveSession`. */
   function sliceRowsForLiveSession(rows) {
     if (!isLiveTradingSession() || !rows?.length) return rows || [];
     const barTime = state.live.chartSession?.sessionBarTime;
@@ -3976,6 +4157,7 @@ ${totalBlock}
     return rows.slice(Math.max(0, rows.length - 1));
   }
 
+  /** Live-торговля: `liveEquityWindowIndices`. */
   function liveEquityWindowIndices() {
     const pack = refPack();
     if (!pack.length) return null;
@@ -3988,6 +4170,7 @@ ${totalBlock}
     return [a, b];
   }
 
+  /** Обновление данных с источника: `refreshLiveEquityChartsUi`. */
   function refreshLiveEquityChartsUi() {
     if (!isLiveTradingSession()) return;
     if (!state.packs.length || refPack().length < 1) {
@@ -4003,6 +4186,7 @@ ${totalBlock}
     drawEquityCharts(win[0], win[1], { liveSession: true });
   }
 
+  /** Подпрограмма `zeroBaseEquityRows`. */
   function zeroBaseEquityRows(rows, baselineKey) {
     if (!rows?.length) return rows;
     const cs = state.live.chartSession;
@@ -4012,6 +4196,7 @@ ${totalBlock}
     return rows.map((r) => ({ ...r, eq: (r?.eq ?? 0) - base }));
   }
 
+  /** Live-торговля: `liveDisplayFinresp`. */
   function liveDisplayFinresp(sec, finresp) {
     const cs = state.live.chartSession;
     if (!cs) return finresp;
@@ -4020,6 +4205,7 @@ ${totalBlock}
     return finresp - cs.perSecBaselines[key];
   }
 
+  /** Подпрограмма `modeRegionsForChartRows`. */
   function modeRegionsForChartRows(rows) {
     const regions = state.live.chartSession?.modeRegions || [];
     if (!rows?.length || !regions.length) return [];
@@ -4043,6 +4229,7 @@ ${totalBlock}
     return out;
   }
 
+  /** Цветные полосы режимов (live/sandbox/stopped) на графике. */
   function buildModeRegionBands(rows, modeRegions, x, top, bottom) {
     if (!modeRegions?.length) return "";
     return modeRegions.map(({ fromIdx, toIdx, mode }) => {
@@ -4056,6 +4243,7 @@ ${totalBlock}
     }).join("");
   }
 
+  /** Подпрограмма `chartDecorFromRows`. */
   function chartDecorFromRows(rows, vLines) {
     return {
       vLines: vLines || [],
@@ -4063,12 +4251,14 @@ ${totalBlock}
     };
   }
 
+  /** Логика FINRESP: `logicAbsentNote`. */
   function logicAbsentNote(liveSession) {
     return liveSession
       ? "В торговле не участвует · equity справочно, от нуля live-сессии"
       : "Не участвует в общем equity и FINRESP";
   }
 
+  /** Логика FINRESP: `logicChartHeading`. */
   function logicChartHeading(key, selected) {
     const badge = selected
       ? '<span class="chart-logic-badge chart-logic-badge--active">выбрана</span>'
@@ -4076,6 +4266,7 @@ ${totalBlock}
     return `${key} · ${logicEquityLabel(key)} ${badge}`;
   }
 
+  /** Подпрограмма `pinLiveWindowToLatestBar`. */
   function pinLiveWindowToLatestBar() {
     const pack = refPack();
     if (!pack.length) return;
@@ -4100,6 +4291,7 @@ ${totalBlock}
     applyCalcWindowIndices(a, b, pack);
   }
 
+  /** Подпрограмма `countPacksInTimeWindow`. */
   function countPacksInTimeWindow(tStart, tEnd, minBars = 3) {
     if (!tStart || !tEnd || tStart > tEnd) return 0;
     let n = 0;
@@ -4152,6 +4344,7 @@ ${totalBlock}
     return pinLiveWindowToLatestBar();
   }
 
+  /** Агрегация FINRESP по инструментам для live-отображения. */
   function aggregateFinrespLocal(perSecResults) {
     let finresp = 0;
     let cash = 0;
@@ -4207,10 +4400,12 @@ ${totalBlock}
     return { perSec, agg, preStopperAgg: agg, stopper: { events: [] }, a: aRef, b: bRef, skipped };
   }
 
+  /** Live-торговля: `liveFinrespPartialMessage`. */
   function liveFinrespPartialMessage(okN, skipN) {
     return `Сигнал по ${okN} инстр., без данных: ${skipN}. Торговля по доступным.`;
   }
 
+  /** Live-торговля: `liveFinrespEmptyMessage`. */
   function liveFinrespEmptyMessage() {
     const skipN = state.windowSkipped?.length || 0;
     if (skipN) {
@@ -4219,6 +4414,7 @@ ${totalBlock}
     return "Нет сигнала логики на последних свечах.";
   }
 
+  /** Запись в тех. журнал: `noteLiveFinrespSkipped`. */
   function noteLiveFinrespSkipped() {
     const skipped = state.windowSkipped || [];
     if (!skipped.length) return;
@@ -4226,6 +4422,7 @@ ${totalBlock}
     noteLiveTech("live-finresp-skipped", `count=${skipped.length}`, sample);
   }
 
+  /** Пересчёт FINRESP на live-сессии при новом баре (если не пропущен). */
   async function tryLiveFinrespCalc(runOptions) {
     const ro = runOptions || {};
     if (isLiveTradingSession()) {
@@ -4246,6 +4443,7 @@ ${totalBlock}
     return calcLiveSignalsPerInstrument(ro);
   }
 
+  /** Обновление: `updateLiveCandleBarMeta`. */
   function updateLiveCandleBarMeta() {
     const barTimes = liveMoexBarTimes(state.packs);
     state.live.lastCandleRefreshAt = new Date().toISOString();
@@ -4279,10 +4477,12 @@ ${totalBlock}
     return { byKey, failures };
   }
 
+  /** Подпрограмма `fileProtocolLiveHint`. */
   function fileProtocolLiveHint() {
     return "file://: MOEX недоступен — песочница/T-Bank/база свечей; для MOEX запустите serve-calculator.ps1";
   }
 
+  /** Подгрузка свечей MOEX/T-Bank для live-графиков и расчёта. */
   async function refreshLiveCandleStream(options) {
     const opts = options || {};
     if (!isLiveMode() || !state.live.chartSession) return false;
@@ -4386,6 +4586,7 @@ ${totalBlock}
     }
   }
 
+  /** Подпрограмма `validateLiveTradingStart`. */
   function validateLiveTradingStart() {
     applyEditorParams();
     const instruments = selectedInstruments();
@@ -4412,6 +4613,7 @@ ${totalBlock}
     return { ok: true, instruments, spec, vol };
   }
 
+  /** Сверка позиций/заявок с брокером (T-Bank) или локальным ledger песочницы. */
   async function liveTradingReconcile() {
     if (!state.live.active || state.live.reconcileBusy || state.live.tradingActionBusy) return;
     const targets = liveReconcileTargets();
@@ -4518,6 +4720,7 @@ ${totalBlock}
     }
   }
 
+  /** Остановка периодического опроса: `stopLiveModePoll`. */
   function stopLiveModePoll() {
     if (state.live.pollTimer) clearInterval(state.live.pollTimer);
     state.live.pollTimer = null;
@@ -4525,6 +4728,9 @@ ${totalBlock}
     state.live.delayUiTimer = null;
   }
 
+  // === Live: опрос баров, FINRESP на сессии, задержка свечей ===
+
+  /** Запуск периодического опроса: `startLiveModePoll`. */
   function startLiveModePoll() {
     stopLiveModePoll();
     if (!isLiveMode() || !state.live.chartSession) return;
@@ -4556,6 +4762,7 @@ ${totalBlock}
     }, 15000);
   }
 
+  /** Подключение T-Bank перед live-торговлей (токен, счёт, депозит). */
   async function connectTbankForLive() {
     if (!isLiveMode()) return;
     if (!(await ensureTbankTokenUnlocked({ interactive: true, openUi: true }))) return;
@@ -4567,6 +4774,7 @@ ${totalBlock}
     syncLiveTradingUi();
   }
 
+  /** Вкл/выкл live-торговлю: старт/стоп опросов, reconcile, FINRESP на барах. */
   async function toggleLiveTrading() {
     if (!isLiveMode()) return;
     if (state.uiBusy) {
@@ -4642,6 +4850,7 @@ ${totalBlock}
     }
   }
 
+  /** Закрытие позиции/заявки: `closeAllSandboxPositionsLive`. */
   async function closeAllSandboxPositionsLive() {
     const sb = ensureSandboxState();
     let sent = 0;
@@ -4672,6 +4881,7 @@ ${totalBlock}
     return { sent, failed };
   }
 
+  /** Закрыть все позиции по рынку и отменить активные заявки. */
   async function sellAllMarketLive() {
     if (!isLiveMode() || state.live.tradingActionBusy) return;
     clearLiveManualFlatten();
@@ -4803,6 +5013,7 @@ ${totalBlock}
     }
   }
 
+  /** Синхронизация UI/state: `syncAccountModeUi`. */
   function syncAccountModeUi() {
     state.accountMode = readAccountModeFromUi();
     const isTbank = state.accountMode === "tbank";
@@ -4865,6 +5076,7 @@ ${totalBlock}
     }
   }
 
+  /** Заполнение select/списка: `fillTbankAccounts`. */
   function fillTbankAccounts() {
     if (!state.tbank.accounts.length) {
       state.tbank.selectedAccountId = "";
@@ -4881,17 +5093,20 @@ ${totalBlock}
     syncTbankSettingsState();
   }
 
+  /** Выбранные элементы UI: `selectedTbankHostId`. */
   function selectedTbankHostId() {
     const id = safeStorageGet(TBANK_HOST_STORE_KEY) || "tinkoff";
     return TBANK_REST_BASES[id] ? id : "tinkoff";
   }
 
+  /** Установка значения: `setTbankHostId`. */
   function setTbankHostId(id) {
     const safeId = TBANK_REST_BASES[id] ? id : "tinkoff";
     safeStorageSet(TBANK_HOST_STORE_KEY, safeId);
     return safeId;
   }
 
+  /** T-Bank REST API: `tbankFetchErrorMessage`. */
   function tbankFetchErrorMessage(err, hostId) {
     const raw = err?.message || String(err || "ошибка сети");
     if (err instanceof TypeError) {
@@ -4900,6 +5115,9 @@ ${totalBlock}
     return raw;
   }
 
+  // === T-Bank REST: HTTP-запросы к Invest API ===
+
+  /** T-Bank REST API: `tbankRequest`. */
   async function tbankRequest(serviceMethod, body) {
     if (!state.tbank.token) throw new Error("Токен не расшифрован.");
     const firstHost = selectedTbankHostId();
@@ -4941,6 +5159,7 @@ ${totalBlock}
     throw lastNetworkError || new Error("Не удалось подключиться к API T-Bank.");
   }
 
+  /** Сохранение: `saveTbankToken`. */
   async function saveTbankToken() {
     const token = $("tbank-token").value.trim();
     const passphrase = $("tbank-passphrase").value;
@@ -4961,6 +5180,7 @@ ${totalBlock}
     }
   }
 
+  /** Получение значения: `getTbankPassphrase`. */
   function getTbankPassphrase(opts) {
     const options = opts || {};
     return ($("tbank-passphrase")?.value || "").trim() || "";
@@ -4970,6 +5190,7 @@ ${totalBlock}
   let tbankPassphraseModalPromise = null;
   let tbankUnlockInFlight = null;
 
+  /** Закрытие позиции/заявки: `closeTbankPassphraseModal`. */
   function closeTbankPassphraseModal(value) {
     const modal = document.getElementById("tbank-passphrase-modal");
     if (modal) modal.hidden = true;
@@ -4981,6 +5202,7 @@ ${totalBlock}
     }
   }
 
+  /** Показ UI/уведомления: `showTbankPassphraseModal`. */
   function showTbankPassphraseModal(title) {
     if (tbankPassphraseModalPromise) return tbankPassphraseModalPromise;
     bindTbankPassphraseModalUi();
@@ -5022,6 +5244,7 @@ ${totalBlock}
     return passphrase;
   }
 
+  /** Подпрограмма `openTbankPassphraseUi`. */
   function openTbankPassphraseUi(hint) {
     const details = $("tbank-settings");
     if (details) details.open = true;
@@ -5032,6 +5255,7 @@ ${totalBlock}
     if (hint) setTbankStatus(hint, true);
   }
 
+  /** Ленивая инициализация/проверка: `ensureTbankTokenUnlocked`. */
   async function ensureTbankTokenUnlocked(opts) {
     const options = opts || {};
     if (state.tbank.token) return true;
@@ -5080,6 +5304,7 @@ ${totalBlock}
     }
   }
 
+  /** Модалка пароля для расшифровки токена T-Bank. */
   async function unlockTbankTokenInteractive() {
     openTbankPassphraseUi();
     const ok = await ensureTbankTokenUnlocked({ interactive: true, openUi: true });
@@ -5089,6 +5314,7 @@ ${totalBlock}
     return true;
   }
 
+  /** Загрузка данных: `loadTbankAccounts`. */
   async function loadTbankAccounts() {
     try {
       setTbankStatus("Загрузка счетов T-Bank…");
@@ -5106,6 +5332,7 @@ ${totalBlock}
     }
   }
 
+  /** Загрузка данных: `loadTbankDeposit`. */
   async function loadTbankDeposit() {
     try {
       const accountId = state.tbank.selectedAccountId;
@@ -5134,6 +5361,7 @@ ${totalBlock}
     }
   }
 
+  /** Подпрограмма `connectTbankAndLoadDeposit`. */
   async function connectTbankAndLoadDeposit(opts) {
     const options = opts && typeof opts === "object" ? opts : { interactive: !!opts };
     if (!isTbankBackedMode()) return;
@@ -5150,6 +5378,7 @@ ${totalBlock}
     if (isLiveMode()) await refreshLiveOrders();
   }
 
+  /** Подпрограмма `initAccountMode`. */
   function initAccountMode() {
     $("account-mode").value = "paper";
     state.accountMode = "paper";
@@ -5159,6 +5388,7 @@ ${totalBlock}
     syncAccountModeUi();
   }
 
+  /** Подпрограмма `requireTbankDepositForRun`. */
   function requireTbankDepositForRun() {
     if (!isTbankBackedMode()) return true;
     const deposit = +($("vol-deposit")?.value || 0);
@@ -5178,6 +5408,7 @@ ${totalBlock}
     $("tbank-settings").open = true;
     return false;
   }
+  /** Подпрограмма `handleAccountModeUserChange`. */
   async function handleAccountModeUserChange() {
     if ($("account-mode")?.value !== "live" && state.live.active) stopLiveTradingOnModeChange();
     state.accountMode = readAccountModeFromUi();

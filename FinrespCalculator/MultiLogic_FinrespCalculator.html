@@ -858,10 +858,12 @@ body.calc-running .help-ftr{opacity:.75;}
 (function () {
   "use strict";
   window.__mlFinresp = window.__mlFinresp || {};
+  /** Установка значения: `setTechPre`. */
   function setTechPre(text) {
     var el = document.getElementById("tech-info-text");
     if (el) el.textContent = text;
   }
+  /** Синхронизация UI/state: `syncLivePanelFromMode`. */
   function syncLivePanelFromMode() {
     var panel = document.getElementById("live-trading-panel");
     var mode = document.getElementById("account-mode");
@@ -874,6 +876,7 @@ body.calc-running .help-ftr{opacity:.75;}
     var lbl = document.querySelector("label.account-mode");
     if (lbl) lbl.classList.toggle("account-mode--live", isLive);
   }
+  /** Обработчик события UI: `onModeChange`. */
   function onModeChange() {
     syncLivePanelFromMode();
     if (typeof window.__mlOnAccountModeUserChange === "function") {
@@ -929,16 +932,19 @@ body.calc-running .help-ftr{opacity:.75;}
     lastEvent: "boot"
   };
 
+  /** Подпрограмма `pushTechLogLine`. */
   function pushTechLogLine(line) {
     techLog.errors.push(line);
     while (techLog.errors.length > TECH_LOG_MAX_ERRORS) techLog.errors.shift();
   }
 
+  /** Запись в тех. журнал: `noteTechError`. */
   function noteTechError(msg) {
     pushTechLogLine(`${new Date().toISOString()} ${msg}`);
     updateTechInfo();
   }
 
+  /** Запись в тех. журнал: `noteLiveTech`. */
   function noteLiveTech(tag, msg, extra) {
     const at = new Date().toISOString();
     const suffix = extra ? ` | ${extra}` : "";
@@ -947,17 +953,20 @@ body.calc-running .help-ftr{opacity:.75;}
     updateTechInfo();
   }
 
+  /** Live-торговля: `liveIssueLine`. */
   function liveIssueLine(item) {
     if (!item) return "—";
     if (typeof item === "string") return item;
     return `${item.ticker || item.sec || "?"}: ${item.reason || item.message || "—"}`;
   }
 
+  /** Live-торговля: `liveForbiddenLabel`. */
   function liveForbiddenLabel(item) {
     if (!item || typeof item === "string") return String(item || "?");
     return String(item.ticker || item.sec || "?");
   }
 
+  /** Live-торговля: `liveIssueIsApiForbidden`. */
   function liveIssueIsApiForbidden(item) {
     if (!item) return false;
     if (typeof item === "string") {
@@ -970,6 +979,7 @@ body.calc-running .help-ftr{opacity:.75;}
       || text.includes("торговля через api недоступна");
   }
 
+  /** Слияние: `mergeLiveForbiddenIssues`. */
   function mergeLiveForbiddenIssues(skipped, failed) {
     const out = [];
     const seen = new Set();
@@ -983,6 +993,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Форматирование для отображения: `formatLiveForbiddenTechLine`. */
   function formatLiveForbiddenTechLine(item) {
     const label = liveForbiddenLabel(item);
     if (typeof item === "string") return `${label} | ${item}`;
@@ -990,6 +1001,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return `${label} sec=${item.sec || label} name=${name} uid=${item.instrumentId || "—"} class=${item.classCode || "—"} market=${item.market || "—"} | ${item.reason || item.message || "API forbidden"}`;
   }
 
+  /** Запись в тех. журнал: `noteLiveReconcileToTech`. */
   function noteLiveReconcileToTech(report) {
     if (!report) return;
     const at = report.at || new Date().toISOString();
@@ -1026,6 +1038,7 @@ body.calc-running .help-ftr{opacity:.75;}
     updateTechInfo();
   }
 
+  /** Построение структуры данных: `buildTechInfoText`. */
   function buildTechInfoText() {
     const E = window.MultiLogicFinrespEngine;
     const st = $("calc-status");
@@ -1161,6 +1174,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return lines.join("\n");
   }
 
+  /** Обновление: `updateTechInfo`. */
   function updateTechInfo(eventName) {
     if (eventName) techLog.lastEvent = eventName;
     const el = $("tech-info-text");
@@ -1231,6 +1245,7 @@ body.calc-running .help-ftr{opacity:.75;}
     document.querySelector("label.account-mode")?.classList.toggle("account-mode--live", isLive);
   }
 
+  /** Подпрограмма `bootstrapRestoreAccountModeFromStorage`. */
   function bootstrapRestoreAccountModeFromStorage() {
     try {
       const raw = localStorage.getItem(ML_CONFIG_KEY);
@@ -1456,6 +1471,7 @@ body.calc-running .help-ftr{opacity:.75;}
     catch (_) { return false; }
   };
 
+  /** Чтение из формы/state: `readSavedConfig`. */
   function readSavedConfig() {
     const raw = safeStorageGet(CONFIG_STORE_KEY);
     if (!raw) return null;
@@ -1467,12 +1483,14 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Установка значения: `setValueIfExists`. */
   function setValueIfExists(id, value) {
     const el = $(id);
     if (!el || value == null) return;
     el.value = String(value);
   }
 
+  /** Логика FINRESP: `logicLinesConfig`. */
   function logicLinesConfig() {
     const out = {};
     document.querySelectorAll("#logic-lines textarea").forEach((ta) => {
@@ -1481,6 +1499,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Сериализация state в localStorage config. */
   function collectConfig() {
     return {
       v: 1,
@@ -1542,6 +1561,7 @@ body.calc-running .help-ftr{opacity:.75;}
     };
   }
 
+  /** Сохранение: `saveConfig`. */
   function saveConfig() {
     if (state.restoringConfig) return;
     try {
@@ -1551,6 +1571,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Восстановление формы и state из сохранённого config. */
   function applySavedConfig() {
     const cfg = readSavedConfig();
     if (!cfg) return false;
@@ -1632,6 +1653,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Применение настроек/результата: `applyRestoredInstrumentSelection`. */
   function applyRestoredInstrumentSelection() {
     const saved = state.restoredSelectedInstruments || [];
     if (!saved.length) return;
@@ -1660,12 +1682,14 @@ body.calc-running .help-ftr{opacity:.75;}
     state.prevSelectCount = selectedInstrumentCount();
   }
 
+  /** Подпрограмма `bytesToBase64`. */
   function bytesToBase64(bytes) {
     let s = "";
     for (const b of bytes) s += String.fromCharCode(b);
     return btoa(s);
   }
 
+  /** Подпрограмма `base64ToBytes`. */
   function base64ToBytes(value) {
     const s = atob(value);
     const out = new Uint8Array(s.length);
@@ -1673,10 +1697,12 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Подпрограмма `cryptoAvailable`. */
   function cryptoAvailable() {
     return !!(window.crypto?.subtle && window.crypto?.getRandomValues && window.TextEncoder && window.TextDecoder);
   }
 
+  /** Подпрограмма `deriveTbankKey`. */
   async function deriveTbankKey(passphrase, salt, iterations) {
     const enc = new TextEncoder();
     const material = await crypto.subtle.importKey(
@@ -1695,6 +1721,7 @@ body.calc-running .help-ftr{opacity:.75;}
     );
   }
 
+  /** Подпрограмма `encryptTbankToken`. */
   async function encryptTbankToken(token, passphrase) {
     if (!cryptoAvailable()) throw new Error("Web Crypto недоступен в этом браузере/режиме.");
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -1716,6 +1743,7 @@ body.calc-running .help-ftr{opacity:.75;}
     });
   }
 
+  /** Подпрограмма `decryptTbankToken`. */
   async function decryptTbankToken(payload, passphrase) {
     if (!cryptoAvailable()) throw new Error("Web Crypto недоступен в этом браузере/режиме.");
     const box = JSON.parse(payload);
@@ -1733,6 +1761,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return new TextDecoder().decode(plain);
   }
 
+  /** Подпрограмма `moneyValueToNumber`. */
   function moneyValueToNumber(value) {
     if (!value) return NaN;
     const units = Number(value.units ?? 0);
@@ -1756,6 +1785,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return found ? sum : NaN;
   }
 
+  /** Подпрограмма `moneyValueRub`. */
   function moneyValueRub(value) {
     if (!value) return NaN;
     const cur = String(value.currency || "rub").toLowerCase();
@@ -1763,6 +1793,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return moneyValueToNumber(value);
   }
 
+  /** Подпрограмма `accountLabel`. */
   function accountLabel(account) {
     const name = account.name || "Без названия";
     const type = account.type || "тип ?";
@@ -1770,16 +1801,19 @@ body.calc-running .help-ftr{opacity:.75;}
     return `${name} · ${type} · ${access} · ${account.id}`;
   }
 
+  /** Разбор строки/времени/ключа: `parseMoexTime`. */
   function parseMoexTime(t) {
     if (!t || t === "—") return null;
     const d = new Date(String(t).replace(" ", "T"));
     return Number.isFinite(d.getTime()) ? d : null;
   }
 
+  /** Подпрограмма `calendarDateOnly`. */
   function calendarDateOnly(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
 
+  /** Подпрограмма `calendarDaysBetweenTimes`. */
   function calendarDaysBetweenTimes(t0, t1) {
     const d0 = parseMoexTime(t0);
     const d1 = parseMoexTime(t1);
@@ -1789,6 +1823,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return elapsed;
   }
 
+  /** Подпрограмма `calendarDaysBetweenFormDates`. */
   function calendarDaysBetweenFormDates(fromStr, tillStr) {
     const d0 = parseDay(fromStr);
     const d1 = parseDay(tillStr);
@@ -1798,14 +1833,17 @@ body.calc-running .help-ftr{opacity:.75;}
     return elapsed;
   }
 
+  /** Подпрограмма `robotOperatingDays`. */
   function robotOperatingDays() {
     return calendarDaysBetweenFormDates($("calc-from").value, $("calc-till").value);
   }
 
+  /** Подпрограмма `annualPeriodDays`. */
   function annualPeriodDays(windowStart, windowEnd) {
     return robotOperatingDays() ?? calendarDaysBetweenTimes(windowStart, windowEnd);
   }
 
+  /** Подпрограмма `annualSimplePct`. */
   function annualSimplePct(finresp, deposit, days) {
     if (!deposit || deposit <= 0 || !days || days < 1) return null;
     const profitFraction = finresp / deposit;
@@ -1813,6 +1851,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return (profitFraction / elapsedYears) * 100;
   }
 
+  /** Подпрограмма `annualCompoundPct`. */
   function annualCompoundPct(finresp, deposit, days) {
     if (!deposit || deposit <= 0 || !days || days < 1) return null;
     const ratio = 1 + finresp / deposit;
@@ -1821,6 +1860,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return (Math.pow(ratio, 1 / elapsedYears) - 1) * 100;
   }
 
+  /** Установка значения: `setAnnMetric`. */
   function setAnnMetric(id, value) {
     const el = $(id);
     el.textContent = fmtPct(value);
@@ -1831,6 +1871,7 @@ body.calc-running .help-ftr{opacity:.75;}
     el.style.color = value < 0 ? "#b91c1c" : "#047857";
   }
 
+  /** Установка значения: `setCommissionMetric`. */
   function setCommissionMetric(id, commission) {
     const el = $(id);
     if (!el) return;
@@ -1843,6 +1884,7 @@ body.calc-running .help-ftr{opacity:.75;}
     el.style.color = "#b91c1c";
   }
 
+  /** Комиссия: `commissionPctValue`. */
   function commissionPctValue() {
     const s = String($("commission-pct")?.value ?? "").trim();
     if (s === "") return 0;
@@ -1850,16 +1892,19 @@ body.calc-running .help-ftr{opacity:.75;}
     return Number.isFinite(raw) && raw >= 0 ? raw : 0;
   }
 
+  /** Комиссия: `commissionConfig`. */
   function commissionConfig() {
     return E.normalizeCommission({ type: "Percent", value: commissionPctValue() });
   }
 
+  /** Расчёт: `calcLeverageAmount`. */
   function calcLeverageAmount() {
     const volumePct = +$("vol-value")?.value || 0;
     const maxPos = Math.max(0, +$("vol-maxpos")?.value ?? E.DEFAULT_VOLUME.maxPositions);
     return maxPos * volumePct / 100;
   }
 
+  /** Синхронизация UI/state: `syncLeverageDisplay`. */
   function syncLeverageDisplay() {
     const amount = calcLeverageAmount();
     const text = Number.isFinite(amount) && amount > 0 ? fmt(amount, 2) : "—";
@@ -1886,6 +1931,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return new Date(n.getFullYear(), n.getMonth(), n.getDate());
   };
 
+  /** Подпрограмма `barsPerTradingDay`. */
   function barsPerTradingDay(tf) {
     if (tf === "1") return MOEX_MINUTES_PER_SESSION;
     if (tf === "5") return Math.ceil(MOEX_MINUTES_PER_SESSION / 5);
@@ -1896,15 +1942,18 @@ body.calc-running .help-ftr{opacity:.75;}
     return Math.ceil(MOEX_MINUTES_PER_SESSION / 60);
   }
 
+  /** Проверка булева условия: `isUnlimitedPeriodTf`. */
   function isUnlimitedPeriodTf(tf) {
     return tf === "60" || tf === "24";
   }
 
+  /** Подпрограмма `calendarSpanDays`. */
   function calendarSpanDays() {
     const { min, max } = dateBounds();
     return Math.max(1, Math.round((max - min) / 86400000));
   }
 
+  /** Подпрограмма `maxCalcDays`. */
   function maxCalcDays(tf, instrumentCount) {
     if (isUnlimitedPeriodTf(tf)) return calendarSpanDays();
     const lim = TF_LIMITS[tf] || TF_LIMITS["60"];
@@ -1915,10 +1964,12 @@ body.calc-running .help-ftr{opacity:.75;}
     return Math.max(minDays, Math.min(lim.maxDays, daysByBars));
   }
 
+  /** Подпрограмма `dateBounds`. */
   function dateBounds() {
     return { min: parseDay(DATE_MIN), max: todayDate() };
   }
 
+  /** Подпрограмма `initDateInputs`. */
   function initDateInputs() {
     const maxStr = formatDay(todayDate());
     for (const id of ["calc-from", "calc-till"]) {
@@ -1934,6 +1985,7 @@ body.calc-running .help-ftr{opacity:.75;}
     month.disabled = false;
   }
 
+  /** Синхронизация UI/state: `syncMonthInputFromDates`. */
   function syncMonthInputFromDates() {
     const month = $("calc-month");
     if (!month) return;
@@ -1955,6 +2007,7 @@ body.calc-running .help-ftr{opacity:.75;}
       : "";
   }
 
+  /** Применение настроек/результата: `applyMonthSelection`. */
   function applyMonthSelection() {
     const value = $("calc-month").value;
     if (!value) return;
@@ -1980,10 +2033,12 @@ body.calc-running .help-ftr{opacity:.75;}
       : "Выбран полный месяц расчёта.";
   }
 
+  /** Выбранные элементы UI: `selectedInstrumentCount`. */
   function selectedInstrumentCount() {
     return selectedInstruments().length;
   }
 
+  /** Обновление: `updateDateHint`. */
   function updateDateHint(instrumentCount) {
     const tf = $("calc-tf").value;
     const n = instrumentCount ?? selectedInstrumentCount();
@@ -2003,6 +2058,7 @@ body.calc-running .help-ftr{opacity:.75;}
       `Календарь: ${DATE_MIN} — сегодня · макс. период ~${maxD} дн. (${lim.label}, ${n} инстр.)`;
   }
 
+  /** Подпрограмма `params`. */
   function params() {
     const sl = Math.max(0, +$("param-sl").value);
     const tp = Math.max(0, +$("param-tp").value);
@@ -2019,6 +2075,7 @@ body.calc-running .help-ftr{opacity:.75;}
     };
   }
 
+  /** Подпрограмма `volConfig`. */
   function volConfig() {
     return {
       volumeType: $("vol-type").value,
@@ -2123,20 +2180,24 @@ body.calc-running .help-ftr{opacity:.75;}
   } = __mlLive;
   bindTbankPassphraseModalUi();
 
+  /** Подпрограмма `randomPriceShiftEnabled`. */
   function randomPriceShiftEnabled() {
     return !!$("random-price-shift")?.checked;
   }
 
+  /** Подпрограмма `signalPacksForCalc`. */
   function signalPacksForCalc() {
     if (!randomPriceShiftEnabled()) return null;
     return E.applyRandomPriceShift(state.packs);
   }
 
+  /** Подпрограмма `finrespRunOptions`. */
   function finrespRunOptions() {
     const signalPacks = signalPacksForCalc();
     return signalPacks ? { signalPacks } : undefined;
   }
 
+  /** Синхронизация UI/state: `syncPageVersionBadge`. */
   function syncPageVersionBadge() {
     const mainBadge = $("calc-page-version-badge");
     if (mainBadge) mainBadge.textContent = `v ${CALC_PAGE_VERSION}`;
@@ -2145,6 +2206,7 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
 
+  /** Остановка периодического опроса: `stopperConfig`. */
   function stopperConfig() {
     const slMult = Math.max(0, +$("stopper-sl-mult").value || 0);
     const tpMult = Math.max(0, +$("stopper-tp-mult").value || 0);
@@ -2162,12 +2224,14 @@ body.calc-running .help-ftr{opacity:.75;}
     };
   }
 
+  /** Выбранные элементы UI: `selectedIndicatorKeys`. */
   function selectedIndicatorKeys() {
     const boxes = Array.from(document.querySelectorAll("#indicator-toggles input[type=checkbox]"));
     if (!boxes.length) return INDICATOR_OPTIONS.map((x) => x.key);
     return boxes.filter((el) => el.checked).map((el) => el.value).filter(Boolean);
   }
 
+  /** Подпрограмма `indicatorSelection`. */
   function indicatorSelection() {
     const selected = new Set(selectedIndicatorKeys());
     const out = {};
@@ -2175,6 +2239,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Нормализация входных данных: `normalizeIndicatorCandidate`. */
   function normalizeIndicatorCandidate(value) {
     const keys = INDICATOR_OPTIONS.map((x) => x.key);
     if (Array.isArray(value)) {
@@ -2190,11 +2255,13 @@ body.calc-running .help-ftr{opacity:.75;}
     return selectedIndicatorKeys();
   }
 
+  /** Подпрограмма `indicatorCandidateLabel`. */
   function indicatorCandidateLabel(value) {
     const keys = normalizeIndicatorCandidate(value);
     return keys.length ? keys.map((key) => INDICATOR_LABELS[key] || key).join("+") : "нет индикаторов";
   }
 
+  /** Применение настроек/результата: `applyIndicatorSelection`. */
   function applyIndicatorSelection(value) {
     const keys = new Set(normalizeIndicatorCandidate(value));
     document.querySelectorAll("#indicator-toggles input[type=checkbox]").forEach((el) => {
@@ -2202,12 +2269,14 @@ body.calc-running .help-ftr{opacity:.75;}
     });
   }
 
+  /** Установка значения: `setIndicatorInputsDisabled`. */
   function setIndicatorInputsDisabled(disabled) {
     document.querySelectorAll("#indicator-toggles input[type=checkbox]").forEach((el) => {
       el.disabled = disabled;
     });
   }
 
+  /** Синхронизация UI/state: `syncVolumeFields`. */
   function syncVolumeFields() {
     const t = $("vol-type").value;
     $("vol-deposit-wrap").style.display = t === "Deposit percent" ? "" : "none";
@@ -2221,6 +2290,7 @@ body.calc-running .help-ftr{opacity:.75;}
     syncAccountModeUi();
   }
 
+  /** Выбранные элементы UI: `selectedInstruments`. */
   function selectedInstruments() {
     return Array.from($("calc-sec").selectedOptions).map((o) => ({
       sec: o.value,
@@ -2228,20 +2298,24 @@ body.calc-running .help-ftr{opacity:.75;}
     })).filter((i) => i.sec);
   }
 
+  /** Выбранные элементы UI: `selectedSecs`. */
   function selectedSecs() {
     return selectedInstruments().map((i) => i.sec);
   }
 
+  /** Инструмент портфеля: `instrumentKey`. */
   function instrumentKey(inst) {
     const sec = inst?.sec ?? inst;
     const market = inst?.market === "futures" ? "futures" : "shares";
     return `${market}:${String(sec || "").trim().toUpperCase()}`;
   }
 
+  /** Загрузка данных: `loadMetaKey`. */
   function loadMetaKey(from, till, interval) {
     return `${from}|${till}|${interval}`;
   }
 
+  /** Подпрограмма `packsByInstrumentKey`. */
   function packsByInstrumentKey(packs) {
     const map = new Map();
     for (const pack of packs || []) {
@@ -2250,6 +2324,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return map;
   }
 
+  /** Заявка/ордер: `orderPacksForInstruments`. */
   function orderPacksForInstruments(instruments, byKey) {
     const out = [];
     for (const inst of instruments) {
@@ -2268,6 +2343,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Подпрограмма `tryRefreshFromLoadedPacks`. */
   function tryRefreshFromLoadedPacks() {
     if (!state.packs.length || state.uiBusy || isOptimizing()) return false;
     const instruments = selectedInstruments();
@@ -2291,6 +2367,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return true;
   }
 
+  /** Подпрограмма `selectNonNegativeFinrespInstruments`. */
   function selectNonNegativeFinrespInstruments() {
     if (state.uiBusy || isOptimizing()) return;
     const result = state.lastResult;
@@ -2334,6 +2411,7 @@ body.calc-running .help-ftr{opacity:.75;}
     saveConfig();
   }
 
+  /** Синхронизация UI/state: `syncMarketCheckbox`. */
   function syncMarketCheckbox(market, cbId) {
     const sel = $("calc-sec");
     const cb = $(cbId);
@@ -2349,11 +2427,13 @@ body.calc-running .help-ftr{opacity:.75;}
     cb.checked = n > 0 && n === opts.length;
   }
 
+  /** Синхронизация UI/state: `syncSelectAllCheckboxes`. */
   function syncSelectAllCheckboxes() {
     syncMarketCheckbox("shares", "calc-sec-all-shares");
     syncMarketCheckbox("futures", "calc-sec-all-futures");
   }
 
+  /** Установка значения: `setSelectAllMarket`. */
   function setSelectAllMarket(market, checked) {
     const sel = $("calc-sec");
     for (const o of sel.options) {
@@ -2362,6 +2442,7 @@ body.calc-running .help-ftr{opacity:.75;}
     syncSelectAllCheckboxes();
   }
 
+  /** Обработчик события UI: `onMarketCheckboxChange`. */
   function onMarketCheckboxChange(market, cbId) {
     const cb = $(cbId);
     if (cb.disabled) return;
@@ -2369,11 +2450,13 @@ body.calc-running .help-ftr{opacity:.75;}
     onSecSelectionChanged();
   }
 
+  /** Подпрограмма `allSharesInListSelected`. */
   function allSharesInListSelected() {
     const opts = Array.from($("calc-sec").options).filter((o) => o.dataset.market === "shares");
     return opts.length > 0 && opts.every((o) => o.selected);
   }
 
+  /** Разрешение id/метаданных: `resolveBulkMode`. */
   function resolveBulkMode(instruments) {
     if (!instruments.length) return null;
     const hasFutures = instruments.some((i) => i.market === "futures");
@@ -2383,6 +2466,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return null;
   }
 
+  /** Подпрограмма `releaseRunBusy`. */
   function releaseRunBusy(runGen) {
     if (state.runBusyOwner === runGen) {
       state.runBusyOwner = null;
@@ -2390,6 +2474,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Обработчик события UI: `onSecSelectionChanged`. */
   function onSecSelectionChanged() {
     invalidateFinrespResult(false);
     applyUiLocks();
@@ -2438,19 +2523,23 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Проверка булева условия: `isOptimizing`. */
   function isOptimizing() {
     return state.optim.active != null;
   }
 
+  /** Подпрограмма `roundParam`. */
   function roundParam(v) {
     return Math.round(v * 100) / 100;
   }
 
+  /** Подпрограмма `optimStepSize`. */
   function optimStepSize(value, min, max) {
     const ref = value > 0 ? value : Math.max((max - min) * 0.1, 0.1);
     return Math.max(ref * 0.02, 0.02);
   }
 
+  /** Подпрограмма `enumerateOptimValues`. */
   function enumerateOptimValues(min, max, integer) {
     const vals = [];
     const seen = new Set();
@@ -2471,6 +2560,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return vals;
   }
 
+  /** Подпрограмма `enumerateIndicatorSelections`. */
   function enumerateIndicatorSelections() {
     const keys = INDICATOR_OPTIONS.map((x) => x.key);
     const vals = [];
@@ -2485,24 +2575,29 @@ body.calc-running .help-ftr{opacity:.75;}
     return vals;
   }
 
+  /** Подпрограмма `optimMeta`. */
   function optimMeta(kind) {
     return OPT_BUTTONS.find((x) => x.kind === kind);
   }
 
+  /** Проверка булева условия: `isIndicatorOptimKind`. */
   function isIndicatorOptimKind(kind) {
     return !!optimMeta(kind)?.indicators;
   }
 
+  /** Подпрограмма `optimDisplayLabel`. */
   function optimDisplayLabel(kind) {
     const m = optimMeta(kind);
     return m?.label || kind.toUpperCase();
   }
 
+  /** Подпрограмма `optimValueLabel`. */
   function optimValueLabel(kind, value) {
     if (isIndicatorOptimKind(kind)) return indicatorCandidateLabel(value);
     return String(optimCandidateValue(kind, value));
   }
 
+  /** Остановка периодического опроса: `stopOptimLabel`. */
   function stopOptimLabel() {
     const dots = ".".repeat(state.optim.dots % 4);
     return `Остановить${dots}`;
@@ -2510,16 +2605,19 @@ body.calc-running .help-ftr{opacity:.75;}
 
   const CALC_LOCK_SELECTOR = "#finresp-calc input, #finresp-calc select, #finresp-calc textarea, #finresp-calc button, #account-mode";
 
+  /** Подпрограмма `yieldToUi`. */
   function yieldToUi() {
     return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
   }
 
+  /** Подпрограмма `mapLoadProgressPct`. */
   function mapLoadProgressPct(done, total) {
     const t = Math.max(1, +total || 1);
     const d = Math.max(0, Math.min(t, +done || 0));
     return Math.round((d / t) * CALC_PROGRESS.LOAD_MAX);
   }
 
+  /** Установка значения: `setCalcProgress`. */
   function setCalcProgress(message, pct, opts) {
     const options = opts || {};
     const text = String(message || "").trim() || "…";
@@ -2541,11 +2639,13 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подпрограмма `finishCalcProgress`. */
   async function finishCalcProgress(message) {
     setCalcProgress(message || "Расчёт завершён", 100, { final: true });
     await yieldToUi();
   }
 
+  /** Подпрограмма `clearCalcProgress`. */
   function clearCalcProgress() {
     const banner = $("calc-progress-banner");
     if (banner) {
@@ -2558,10 +2658,12 @@ body.calc-running .help-ftr{opacity:.75;}
     if (barWrap) barWrap.setAttribute("aria-valuenow", "0");
   }
 
+  /** Проверка булева условия: `isRunCancelled`. */
   function isRunCancelled(runGen) {
     return state.runCancelRequested || (runGen != null && runGen !== state.runGeneration);
   }
 
+  /** Подпрограмма `trackRunCheckpoint`. */
   function trackRunCheckpoint(detail) {
     if (!detail) return;
     state.runCheckpoint = {
@@ -2573,6 +2675,7 @@ body.calc-running .help-ftr{opacity:.75;}
     };
   }
 
+  /** Подпрограмма `terminateCalcWorker`. */
   function terminateCalcWorker() {
     if (state.calcWorker) {
       try { state.calcWorker.terminate(); } catch (_) { /* ignore */ }
@@ -2580,11 +2683,13 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Сброс состояния: `resetEquityConfigMarkers`. */
   function resetEquityConfigMarkers() {
     state.equityConfigMarkers = [];
     state.lastEquityConfigFp = null;
   }
 
+  /** Сброс состояния: `resetFinrespDisplay`. */
   function resetFinrespDisplay() {
     /* Процедура: очистить FINRESP, графики инструментов и lastResult без пересчёта. */
     syncChartBox($("calc-chart"), "");
@@ -2625,6 +2730,7 @@ body.calc-running .help-ftr{opacity:.75;}
     invalidateFinrespResult(opts.message);
   }
 
+  /** Подпрограмма `requestStopRun`. */
   function requestStopRun() {
     if (!state.uiBusy) return;
     state.runCancelRequested = true;
@@ -2642,6 +2748,7 @@ body.calc-running .help-ftr{opacity:.75;}
     updateTechInfo("run-cancelled");
   }
 
+  /** Подпрограмма `finishCancelledRun`. */
   async function finishCancelledRun(runGen, loadedData) {
     if (loadedData?.packs?.length) {
       state.packs = loadedData.packs;
@@ -2662,6 +2769,7 @@ body.calc-running .help-ftr{opacity:.75;}
     await yieldToUi();
   }
 
+  /** Установка значения: `setFormLocked`. */
   function setFormLocked(lock) {
     document.body.classList.toggle("calc-running", !!lock);
     const banner = $("calc-progress-banner");
@@ -2682,6 +2790,7 @@ body.calc-running .help-ftr{opacity:.75;}
     });
   }
 
+  /** Получение значения: `getCalcWorker`. */
   function getCalcWorker() {
     if (state.calcWorker) return state.calcWorker;
     if (typeof Worker === "undefined") return null;
@@ -2694,6 +2803,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Построение структуры данных: `buildRunProgressHandler`. */
   function buildRunProgressHandler(runOptions) {
     const ro = runOptions || {};
     if (ro.silent) return null;
@@ -2703,6 +2813,7 @@ body.calc-running .help-ftr{opacity:.75;}
     };
   }
 
+  /** Запуск расчёта: `runMultiInWorker`. */
   function runMultiInWorker(packs, spec, a, b, params, volConfig, sc, randomPriceShift, runOptions) {
     const ro = runOptions || {};
     const worker = getCalcWorker();
@@ -2786,6 +2897,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return { perSec, agg, preStopperAgg, stopper, a, b, skipped };
   }
 
+  /** Применение настроек/результата: `applyUiLocks`. */
   function applyUiLocks() {
     const lock = state.uiBusy || isOptimizing();
     setFormLocked(state.uiBusy);
@@ -2800,6 +2912,7 @@ body.calc-running .help-ftr{opacity:.75;}
     setIndicatorInputsDisabled(lock);
   }
 
+  /** Синхронизация UI/state: `syncOptimButtons`. */
   function syncOptimButtons() {
     const active = state.optim.active;
     for (const { kind, btnId } of OPT_BUTTONS) {
@@ -2817,6 +2930,7 @@ body.calc-running .help-ftr{opacity:.75;}
     applyUiLocks();
   }
 
+  /** Запуск периодического опроса: `startOptimDots`. */
   function startOptimDots() {
     stopOptimDots();
     state.optim.dots = 0;
@@ -2826,6 +2940,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }, 420);
   }
 
+  /** Остановка периодического опроса: `stopOptimDots`. */
   function stopOptimDots() {
     if (state.optim.dotTimer) {
       clearInterval(state.optim.dotTimer);
@@ -2833,6 +2948,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подпрограмма `finishOptim`. */
   function finishOptim(token, autoDone) {
     if (token !== state.optim.runToken || !state.optim.active) return;
     const kind = state.optim.active;
@@ -2855,22 +2971,26 @@ body.calc-running .help-ftr{opacity:.75;}
       : `Оптимизация ${optimDisplayLabel(kind)} остановлена: лучшее ${bestLabel}, FINRESP ${fmt(bestFinresp)} ₽${scoreNote}`;
   }
 
+  /** Остановка периодического опроса: `stopOptim`. */
   function stopOptim() {
     if (!state.optim.active) return;
     const token = state.optim.runToken;
     finishOptim(token, false);
   }
 
+  /** Подпрограмма `optimCandidateValue`. */
   function optimCandidateValue(kind, value) {
     const meta = optimMeta(kind);
     if (meta?.indicators) return normalizeIndicatorCandidate(value);
     return meta?.integer ? Math.round(value) : roundParam(value);
   }
 
+  /** Проверка булева условия: `isPositionOptimKind`. */
   function isPositionOptimKind(kind) {
     return !!optimMeta(kind)?.position;
   }
 
+  /** Подпрограмма `optimScore`. */
   function optimScore(trial, kind) {
     if (!trial) return -Infinity;
     if (isPositionOptimKind(kind)) {
@@ -2879,6 +2999,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return trial.agg.finresp;
   }
 
+  /** Подпрограмма `optimRunContext`. */
   function optimRunContext(kind, value) {
     const cv = optimCandidateValue(kind, value);
     const p = params();
@@ -2907,6 +3028,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Расчёт: `calcResult`. */
   function calcResult(optimCtx) {
     if (!state.packs.length) return null;
     const [a, b] = normalizeSliders();
@@ -2923,6 +3045,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return { perSec, agg, preStopperAgg, stopper, a, b, skipped };
   }
 
+  /** Подпрограмма `optimLoop`. */
   async function optimLoop(token) {
     if (token !== state.optim.runToken || !state.optim.active) return;
     const kind = state.optim.active;
@@ -2956,6 +3079,7 @@ body.calc-running .help-ftr{opacity:.75;}
     optimLoop(token);
   }
 
+  /** Подпрограмма `toggleOptim`. */
   function toggleOptim(kind) {
     if (state.optim.active === kind) {
       stopOptim();
@@ -2994,6 +3118,7 @@ body.calc-running .help-ftr{opacity:.75;}
     optimLoop(token);
   }
 
+  /** Установка значения: `setBusy`. */
   function setBusy(busy) {
     state.uiBusy = busy;
     if (!busy) clearCalcProgress();
@@ -3001,6 +3126,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!state.uiBusy && !isOptimizing()) syncOptimButtons();
   }
 
+  /** Обновление: `updateSecHint`. */
   function updateSecHint() {
     const futLabel = state.futuresFromMoex
       ? `${state.futuresList.length} фьючерсов MOEX (за период расчёта)`
@@ -3009,6 +3135,7 @@ body.calc-running .help-ftr{opacity:.75;}
       `${state.shareList.length} тикеров акций · ${futLabel}`;
   }
 
+  /** Заполнение select/списка: `fillSecSelect`. */
   function fillSecSelect(opts) {
     const options = opts || {};
     const sel = $("calc-sec");
@@ -3036,17 +3163,20 @@ body.calc-running .help-ftr{opacity:.75;}
     syncSelectAllCheckboxes();
   }
 
+  /** Подпрограмма `initPrefixFields`. */
   function initPrefixFields() {
     $("prefix-stocks").value = E.DEFAULT_STOCK_TICKERS_RAW;
     $("prefix-futures").value = E.DEFAULT_FUTURES_PREFIXES_RAW;
   }
 
+  /** Подпрограмма `reloadShareList`. */
   function reloadShareList() {
     state.shareList = E.listShareTickers($("prefix-stocks").value);
     fillSecSelect();
     updateSecHint();
   }
 
+  /** Подпрограмма `reloadFuturesList`. */
   function reloadFuturesList() {
     state.futuresList = E.listFuturesPrefixes($("prefix-futures").value);
     state.futuresFromMoex = false;
@@ -3054,6 +3184,7 @@ body.calc-running .help-ftr{opacity:.75;}
     updateSecHint();
   }
 
+  /** Подпрограмма `reloadFuturesListFromMoex`. */
   async function reloadFuturesListFromMoex() {
     const from = $("calc-from").value;
     const till = $("calc-till").value;
@@ -3064,11 +3195,13 @@ body.calc-running .help-ftr{opacity:.75;}
     return state.futuresList.length;
   }
 
+  /** Подпрограмма `allFuturesInListSelected`. */
   function allFuturesInListSelected() {
     const opts = Array.from($("calc-sec").options).filter((o) => o.dataset.market === "futures");
     return opts.length > 0 && opts.every((o) => o.selected);
   }
 
+  /** Подпрограмма `expandFuturesForCalcPeriod`. */
   async function expandFuturesForCalcPeriod(instruments) {
     const futuresInst = instruments.filter((i) => i.market === "futures");
     if (!futuresInst.length) return instruments;
@@ -3091,11 +3224,13 @@ body.calc-running .help-ftr{opacity:.75;}
     return [...shares, ...expanded.map((sec) => ({ sec, market: "futures" }))];
   }
 
+  /** Подпрограмма `initInstrumentLists`. */
   function initInstrumentLists() {
     reloadShareList();
     reloadFuturesList();
   }
 
+  /** Форматирование для отображения: `formatBySec`. */
   function formatBySec(bySec, limit = 40) {
     const entries = Object.entries(bySec).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
     const shown = entries.slice(0, limit).map(([k, v]) => `${k}:${fmt(v)}`).join(" · ");
@@ -3141,6 +3276,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Ленивая инициализация/проверка: `ensureDefaultLogicLines`. */
   function ensureDefaultLogicLines() {
     for (const k of DEFAULT_LOGIC_LINE_KEYS) {
       if (state.customLines[k] == null && E.DEFAULT_LOGIC_LINES[k] != null) {
@@ -3155,10 +3291,12 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Логика FINRESP: `logicLineText`. */
   function logicLineText(logicId) {
     return state.customLines?.[logicId] ?? E.DEFAULT_LOGIC_LINES?.[logicId] ?? "";
   }
 
+  /** Нормализация входных данных: `normalizeLogicKey`. */
   function normalizeLogicKey(raw) {
     const s = String(raw || "").trim().replace(/\s+/g, "_");
     if (!s) return "";
@@ -3166,12 +3304,14 @@ body.calc-running .help-ftr{opacity:.75;}
     return s;
   }
 
+  /** Подпрограмма `allocNextUserLogicKey`. */
   function allocNextUserLogicKey() {
     let n = 1;
     while (state.logicLineKeys.includes(`U${n}`) || state.customLines[`U${n}`]) n += 1;
     return `U${n}`;
   }
 
+  /** Подпрограмма `selectLogicInCalc`. */
   function selectLogicInCalc(key) {
     const sel = $("calc-logic");
     if (!sel || !key) return;
@@ -3185,6 +3325,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (found) syncLogicSelectedHint();
   }
 
+  /** Добавление: `addUserLogicLine`. */
   function addUserLogicLine(lineText, srcKey) {
     readLogicEditor();
     const key = allocNextUserLogicKey();
@@ -3210,6 +3351,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подпрограмма `promptAddLogicLine`. */
   function promptAddLogicLine() {
     const line = window.prompt(
       "Строка логики Op/Cl для новой записи.\nМожно вставить сразу или оставить пусто — отредактируете в блоке ниже (шаблон — L5).",
@@ -3219,6 +3361,7 @@ body.calc-running .help-ftr{opacity:.75;}
     addUserLogicLine(line, null);
   }
 
+  /** Копирование: `copyLogicLine`. */
   function copyLogicLine(srcKey) {
     if (!srcKey) return;
     readLogicEditor();
@@ -3345,6 +3488,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подпрограмма `initIndicatorToggles`. */
   function initIndicatorToggles() {
     const box = $("indicator-toggles");
     if (!box) return;
@@ -3357,6 +3501,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Обновление: `updatePositionSlHint`. */
   function updatePositionSlHint() {
     const el = $("position-sl-hint");
     if (!el) return;
@@ -3376,16 +3521,19 @@ body.calc-running .help-ftr{opacity:.75;}
     el.hidden = !text;
   }
 
+  /** Синхронизация UI/state: `syncChartBox`. */
   function syncChartBox(box, html) {
     if (!box) return;
     box.innerHTML = html ?? "";
     box.hidden = !String(box.innerHTML).trim();
   }
 
+  /** Отрисовка элемента live-панели: `renderFromParams`. */
   function renderFromParams() {
     invalidateFormChange();
   }
 
+  /** Заполнение select/списка: `fillLogicEditor`. */
   function fillLogicEditor() {
     ensureLogicLineKeys();
     ensureDefaultLogicLines();
@@ -3431,6 +3579,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Чтение из формы/state: `readLogicEditor`. */
   function readLogicEditor() {
     document.querySelectorAll("#logic-lines textarea").forEach((ta) => {
       state.customLines[ta.dataset.key] = ta.value;
@@ -3438,10 +3587,12 @@ body.calc-running .help-ftr{opacity:.75;}
     fillLogicSelect();
   }
 
+  /** Применение настроек/результата: `applyEditorParams`. */
   function applyEditorParams() {
     readLogicEditor();
   }
 
+  /** Обновление: `updateCacheHint`. */
   function updateCacheHint(extra) {
     const el = $("cache-hint");
     if (!el) return;
@@ -3459,6 +3610,7 @@ body.calc-running .help-ftr{opacity:.75;}
       : `${prefix}: цен нет${storage}${s.ready ? "" : " · открывается…"}${extra ? ` · ${extra}` : ""}`;
   }
 
+  /** Сохранение: `saveCacheToFile`. */
   async function saveCacheToFile() {
     if (!state.candleCache) return;
     const s = state.candleCache.stats();
@@ -3477,6 +3629,7 @@ body.calc-running .help-ftr{opacity:.75;}
     $("calc-status").textContent = `База цен сохранена в файл (${s.entries} инстр./ТФ, ${s.bars} свечей).`;
   }
 
+  /** Подпрограмма `initCandleCache`. */
   function initCandleCache() {
     state.candleCache = null;
     if (typeof E.createCandleCache !== "function") {
@@ -3508,6 +3661,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подпрограмма `initDates`. */
   function initDates() {
     initDateInputs();
     const { min, max } = dateBounds();
@@ -3521,6 +3675,7 @@ body.calc-running .help-ftr{opacity:.75;}
     updateDateHint(0);
   }
 
+  /** Подпрограмма `enforceDateRange`. */
   function enforceDateRange(anchor = "till", instrumentCount) {
     const tf = $("calc-tf").value;
     const n = instrumentCount ?? selectedInstrumentCount();
@@ -3562,6 +3717,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return $("calc-from").value !== beforeFrom || $("calc-till").value !== beforeTill;
   }
 
+  /** Подпрограмма `relaxDateRangeForInstrumentCount`. */
   function relaxDateRangeForInstrumentCount(n) {
     if (n <= 0) return false;
     const tf = $("calc-tf").value;
@@ -3589,6 +3745,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return beforeFrom !== $("calc-from").value || beforeTill !== $("calc-till").value;
   }
 
+  /** Подпрограмма `refPack`. */
   function refPack() {
     if (!state.packs.length) return [];
     return state.packs.reduce(
@@ -3597,6 +3754,7 @@ body.calc-running .help-ftr{opacity:.75;}
     );
   }
 
+  /** Подпрограмма `findIndexByTime`. */
   function findIndexByTime(pack, timeStr) {
     if (!timeStr || timeStr === "—" || !pack?.length) return 0;
     const target = new Date(String(timeStr).replace(" ", "T")).getTime();
@@ -3614,6 +3772,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return best;
   }
 
+  /** Подпрограмма `findFirstIndexAtOrAfter`. */
   function findFirstIndexAtOrAfter(pack, timeStr) {
     if (!pack?.length || !timeStr) return 0;
     for (let i = 0; i < pack.length; i++) {
@@ -3622,6 +3781,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return pack.length - 1;
   }
 
+  /** Подпрограмма `findLastIndexAtOrBefore`. */
   function findLastIndexAtOrBefore(pack, timeStr) {
     if (!pack?.length || !timeStr) return 0;
     let idx = 0;
@@ -3632,6 +3792,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return idx;
   }
 
+  /** Подпрограмма `commonTimeRange`. */
   function commonTimeRange(packs) {
     if (!packs?.length) return null;
     let start = null;
@@ -3660,11 +3821,13 @@ body.calc-running .help-ftr{opacity:.75;}
     return { calcEnd: common?.end || freshest, freshest };
   }
 
+  /** Форматирование для отображения: `formatMoexBarTime`. */
   function formatMoexBarTime(timeStr) {
     if (!timeStr) return "—";
     return String(timeStr).replace("T", " ").slice(0, 16);
   }
 
+  /** Форматирование для отображения: `formatLiveRefreshClock`. */
   function formatLiveRefreshClock(iso) {
     if (!iso) return "—";
     try {
@@ -3674,6 +3837,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Сохранение: `saveWindowAnchor`. */
   function saveWindowAnchor() {
     const pack = refPack();
     if (!pack.length) return;
@@ -3684,12 +3848,14 @@ body.calc-running .help-ftr{opacity:.75;}
     state.hasWindow = state.anchorStartTime != null && state.anchorEndTime != null;
   }
 
+  /** Подпрограмма `clearWindowAnchor`. */
   function clearWindowAnchor() {
     state.anchorStartTime = null;
     state.anchorEndTime = null;
     state.hasWindow = false;
   }
 
+  /** Установка значения: `setSliderBounds`. */
   function setSliderBounds(preserve = false) {
     const pack = refPack();
     const n = pack.length;
@@ -3748,6 +3914,7 @@ body.calc-running .help-ftr{opacity:.75;}
     state.hasWindow = true;
   }
 
+  /** Нормализация входных данных: `normalizeSliders`. */
   function normalizeSliders() {
     const n = refPack().length;
     let a = +$("calc-start").value;
@@ -3759,6 +3926,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return [a, b];
   }
 
+  /** Подпрограмма `niceTicks`. */
   function niceTicks(lo, hi, count = 5) {
     const range = hi - lo;
     if (!Number.isFinite(range) || range <= 0) return [lo, hi];
@@ -3776,6 +3944,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return ticks.length ? ticks : [lo, hi];
   }
 
+  /** Подпрограмма `axisPrice`. */
   function axisPrice(v) {
     const a = Math.abs(v);
     if (a >= 10000) return v.toFixed(0);
@@ -3784,6 +3953,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return v.toFixed(3);
   }
 
+  /** Подпрограмма `axisTime`. */
   function axisTime(t) {
     if (!t) return "";
     const s = String(t).replace("T", " ");
@@ -3791,6 +3961,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return s.slice(0, 10);
   }
 
+  /** Подпрограмма `rowIndexByTime`. */
   function rowIndexByTime(rows, time) {
     if (!rows?.length || !time) return -1;
     const exact = rows.findIndex((r) => r?.time === time);
@@ -3804,6 +3975,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return idx;
   }
 
+  /** Подпрограмма `chartStopLines`. */
   function chartStopLines(rows, portfolioEvents) {
     const lines = [];
     rows.forEach((r, idx) => {
@@ -3818,6 +3990,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return lines;
   }
 
+  /** Построение структуры данных: `buildStopVLines`. */
   function buildStopVLines(vLines, x, top, bottom) {
     return vLines.map(({ idx, kind, scope, label }) => {
       const xi = x(idx).toFixed(1);
@@ -3840,6 +4013,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }).join("");
   }
 
+  /** Построение структуры данных: `buildChartSvg`. */
   function buildChartSvg(rows, finresp, title, compact, vLines, chartDecor) {
     if (!rows?.length) return "";
     const decor = chartDecor || { vLines: vLines || [], modeRegions: [] };
@@ -3942,6 +4116,7 @@ ${markers}
     return state.logicLineKeys.slice();
   }
 
+  /** Equity-кривые: `equityLogicColor`. */
   function equityLogicColor(key) {
     if (LOGIC_EQUITY_COLORS[key]) return LOGIC_EQUITY_COLORS[key];
     let h = 0;
@@ -3949,20 +4124,24 @@ ${markers}
     return EQUITY_EXTRA_PALETTE[Math.abs(h) % EQUITY_EXTRA_PALETTE.length];
   }
 
+  /** Логика FINRESP: `logicEquityLabel`. */
   function logicEquityLabel(key) {
     return logicDisplayName(key);
   }
 
+  /** Выбранные элементы UI: `selectedEquityLogicKeys`. */
   function selectedEquityLogicKeys() {
     const selected = new Set(selectedLogicIds());
     return equityCatalogLogicKeys().filter((key) => selected.has(key));
   }
 
+  /** Подпрограмма `totalEquityTitle`. */
   function totalEquityTitle(keys) {
     if (!keys.length) return "Общий equity";
     return `Общий equity (${keys.map((key) => key).join(" + ")})`;
   }
 
+  /** Equity-кривые: `equityConfigFingerprint`. */
   function equityConfigFingerprint() {
     return JSON.stringify({
       logics: selectedLogicIds(),
@@ -3971,6 +4150,7 @@ ${markers}
     });
   }
 
+  /** Подпрограмма `describeEquityConfigChange`. */
   function describeEquityConfigChange(prev, next) {
     const parts = [];
     const prevLogics = (prev?.logics || []).join(", ");
@@ -3987,6 +4167,7 @@ ${markers}
     return parts.length ? parts.join("; ") : "изменение параметров";
   }
 
+  /** Подпрограмма `recordEquityConfigMarker`. */
   function recordEquityConfigMarker(time) {
     if (!time) return;
     const fp = equityConfigFingerprint();
@@ -4005,6 +4186,7 @@ ${markers}
     state.lastEquityConfigFp = fp;
   }
 
+  /** Подпрограмма `configMarkersForRows`. */
   function configMarkersForRows(rows) {
     const byIdx = new Map();
     for (const m of state.equityConfigMarkers || []) {
@@ -4016,6 +4198,7 @@ ${markers}
     return [...byIdx.entries()].map(([idx, label]) => ({ idx, kind: "config", scope: "config", label }));
   }
 
+  /** Построение структуры данных: `buildEquityChartSvg`. */
   function buildEquityChartSvg(rows, finresp, title, compact, strokeColor, chartDecor) {
     if (!rows?.length) return "";
     const decor = chartDecor || { vLines: [], modeRegions: [] };
@@ -4090,6 +4273,7 @@ ${pointDot}
 </svg>`;
   }
 
+  /** Расчёт: `calcLogicEquityRuns`. */
   function calcLogicEquityRuns(a, b) {
     if (!state.packs.length) return null;
     const pack = refPack();
@@ -4110,6 +4294,7 @@ ${pointDot}
     return { runs, times };
   }
 
+  /** Построение структуры данных: `buildTotalEquityRows`. */
   function buildTotalEquityRows(runs, times, keys) {
     const active = keys || selectedEquityLogicKeys();
     return times.map((time, i) => ({
@@ -4118,6 +4303,7 @@ ${pointDot}
     }));
   }
 
+  /** Equity-кривые: `equityWindowNote`. */
   function equityWindowNote(a, b) {
     const pack = refPack();
     if (!pack.length || a == null || b == null) return "";
@@ -4127,12 +4313,14 @@ ${pointDot}
     return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
   }
 
+  /** Подпрограмма `tryRefreshEquityCharts`. */
   function tryRefreshEquityCharts() {
     if (!state.packs.length || refPack().length < 3) return;
     const [a, b] = normalizeSliders();
     drawEquityCharts(a, b);
   }
 
+  /** Кривые equity по логикам каталога. */
   function drawEquityCharts(a, b, drawOpts) {
     const opts = drawOpts || {};
     const liveSession = opts.liveSession || isLiveTradingSession();
@@ -4239,6 +4427,7 @@ ${totalBlock}
 </div>`);
   }
 
+  /** Подпрограмма `chartFailuresForDraw`. */
   function chartFailuresForDraw() {
     const out = new Map();
     for (const f of state.failedInstruments || []) {
@@ -4251,6 +4440,7 @@ ${totalBlock}
     return [...out.values()];
   }
 
+  /** Подпрограмма `chartEntriesForDraw`. */
   function chartEntriesForDraw(perSec, failed) {
     const ok = perSec || [];
     const bad = failed || [];
@@ -4288,6 +4478,7 @@ ${totalBlock}
     return entries;
   }
 
+  /** Отрисовка SVG-графиков FINRESP по результату расчёта. */
   function drawCharts(perSec, stopper, drawOpts) {
     const liveSession = drawOpts?.liveSession || isLiveTradingSession();
     const failed = chartFailuresForDraw();
@@ -4343,6 +4534,7 @@ ${totalBlock}
       : "<p class=\"note\">Нет данных для графика.</p>");
   }
 
+  /** Подпрограмма `optimDisplayAgg`. */
   function optimDisplayAgg(result, opts) {
     const kind = state.optim.active;
     if (opts?.optimTrial && kind && isPositionOptimKind(kind) && result.preStopperAgg) {
@@ -4351,6 +4543,7 @@ ${totalBlock}
     return result.agg;
   }
 
+  /** Применение настроек/результата: `applyResult`. */
   function applyResult(result, options) {
     const opts = options || {};
     const { perSec, stopper, a, b } = result;
@@ -4438,6 +4631,7 @@ ${totalBlock}
     }
   }
 
+  /** Отрисовка элемента live-панели: `renderWithStatus`. */
   function renderWithStatus(options) {
     const result = calcResult();
     if (!result) {
@@ -4467,10 +4661,12 @@ ${totalBlock}
     return true;
   }
 
+  /** Отрисовка элемента live-панели: `render`. */
   function render(options) {
     return renderWithStatus(options);
   }
 
+  /** Ленивая инициализация/проверка: `ensureInstrumentPacks`. */
   async function ensureInstrumentPacks(instruments, from, till, interval, onProgress, shouldCancel) {
     const periodKey = loadMetaKey(from, till, interval);
     const periodChanged = state.lastLoadMeta?.periodKey !== periodKey;
@@ -4515,6 +4711,7 @@ ${totalBlock}
     };
   }
 
+  /** Загрузка данных: `loadInstrumentPacks`. */
   async function loadInstrumentPacks(instruments, from, till, interval, onProgress, shouldCancel) {
     const shares = instruments.filter((i) => i.market === "shares").map((i) => i.sec);
     const futures = instruments.filter((i) => i.market === "futures").map((i) => i.sec);
@@ -4535,6 +4732,7 @@ ${totalBlock}
     return { packs, failures };
   }
 
+  /** Запуск расчёта: `runWithInstruments`. */
   async function runWithInstruments(instruments, bulkMode, runGen) {
     if (!instruments.length) throw new Error("Список инструментов пуст.");
     if (runGen == null) runGen = ++state.runGeneration;
@@ -4663,6 +4861,7 @@ ${totalBlock}
     }
   }
 
+  /** Запуск расчёта: `run`. */
   async function run() {
     if (state.uiBusy) {
       setCalcProgress("Идёт расчёт — дождитесь завершения…");
@@ -4697,6 +4896,7 @@ ${totalBlock}
   }
 
 
+  /** Привязка обработчиков DOM (клики, change, делегирование). */
   function bindUiEvents() {
   if (bindUiEvents._done) return;
   bindUiEvents._done = true;
@@ -4945,10 +5145,12 @@ ${totalBlock}
     saveWindowAnchor();
     invalidateFormChange();
   });
+  /** Подпрограмма `bindCollapsibleToggle`. */
   function bindCollapsibleToggle(detailsId, toggleId) {
     const details = $(detailsId);
     const toggle = $(toggleId);
     if (!details || !toggle) return;
+    /** Синхронизация UI/state: `syncLabel`. */
     function syncLabel() {
       toggle.textContent = details.open ? "Свернуть" : "Развернуть";
     }
