@@ -8,6 +8,7 @@
 |------|------------|
 | `MultiLogic_FinrespCalculator.html` | Калькулятор (UI) |
 | `MultiLogic_FinrespCalculator.engine.js` | Движок расчёта и MOEX |
+| `MultiLogic_FinrespCalculator.live.js` | Live-торговля (реал + песочница, T-Bank API) |
 | `MultiLogic_FinrespCalculator.worker.js` | Web Worker для расчёта FINRESP |
 | `MultiLogic_FinrespCalculator_Help.html` | Справка по форме |
 | `serve-calculator.ps1` | Локальный HTTP-сервер |
