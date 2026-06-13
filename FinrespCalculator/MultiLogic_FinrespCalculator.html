@@ -4486,6 +4486,7 @@ body.calc-running .help-ftr{opacity:.75;}
         signedPieces: pieceDelta,
         lot
       });
+    }
     if (!opts.skipRecord) {
       await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
       renderLiveOrdersPanel();
@@ -6020,7 +6021,8 @@ ${totalBlock}
     clearLiveManualFlatten();
     state.live.lastError = "";
     syncLiveTradingUi();
-    if (!(await ensureTbankTokenUnlocked({ interactive: true, openUi: true })) {
+    const unlockedForLive = await ensureTbankTokenUnlocked({ interactive: true, openUi: true });
+    if (!unlockedForLive) {
       state.live.lastError = "нужен токен и пароль";
       syncLiveTradingUi();
       return;
@@ -6481,7 +6483,8 @@ ${totalBlock}
 
   async function unlockTbankTokenInteractive() {
     openTbankPassphraseUi();
-    if (!(await ensureTbankTokenUnlocked({ interactive: true, openUi: true }))) return false;
+    const ok = await ensureTbankTokenUnlocked({ interactive: true, openUi: true });
+    if (!ok) return false;
     await connectTbankAndLoadDeposit({ interactive: true });
     if (isLiveMode()) await connectTbankForLive();
     return true;
@@ -6535,10 +6538,11 @@ ${totalBlock}
   async function connectTbankAndLoadDeposit(opts) {
     const options = opts && typeof opts === "object" ? opts : { interactive: !!opts };
     if (!isTbankBackedMode()) return;
-    if (!(await ensureTbankTokenUnlocked({
+    const unlocked = await ensureTbankTokenUnlocked({
       interactive: !!options.interactive,
       openUi: options.openUi !== false
-    }))) return;
+    });
+    if (!unlocked) return;
     if (!state.tbank.accounts.length) {
       await loadTbankAccounts();
       return;
