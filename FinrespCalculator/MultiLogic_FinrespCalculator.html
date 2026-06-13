@@ -102,8 +102,16 @@ h2:first-child{margin-top:0;}
 .chart-sec-title{margin:0 0 .4rem;font-size:.88rem;font-weight:600;color:#374151;font-family:Consolas,monospace;}
 .chart-equity-section{margin-top:1.35rem;padding-top:1.1rem;border-top:2px solid var(--accent);}
 .chart-equity-section-title{margin:0 0 .85rem;font-size:1.05rem;font-weight:700;color:#1e3a5f;}
-.chart-equity-total{margin-top:.85rem;padding:.75rem;border:2px solid var(--accent);border-radius:10px;background:linear-gradient(180deg,#eef4ff 0%,#fff 70%);}
+.chart-equity-total{margin:0 0 .85rem;padding:.75rem;border:2px solid var(--accent);border-radius:10px;background:linear-gradient(180deg,#eef4ff 0%,#fff 70%);}
 .chart-equity-total .chart-sec-title{font-size:1rem;color:#1e3a5f;}
+.chart-logic-badge{font-size:.72rem;font-weight:700;padding:.12rem .45rem;border-radius:999px;margin-left:.35rem;vertical-align:middle;}
+.chart-logic-badge--active{background:#dbeafe;color:#1d4ed8;}
+.chart-logic-badge:not(.chart-logic-badge--active){background:#f3f4f6;color:#6b7280;}
+.chart-logic-absent-note{margin:-.15rem 0 .35rem;font-size:.8rem;color:#9ca3af;font-style:italic;}
+.chart-mini--inactive{opacity:.55;background:#f9fafb;border-radius:8px;padding:.35rem .25rem;}
+.chart-mini--inactive .chart-sec-title{color:#6b7280;}
+.chart-mini--inactive svg{filter:saturate(.35) contrast(.92);}
+.chart-mini-empty{min-height:4.5rem;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:.85rem;border:1px dashed var(--border);border-radius:8px;margin-top:.25rem;}
 details.logic-editor{border:1px solid var(--border);border-radius:10px;padding:.5rem .85rem;margin:1rem 0;background:#fafbfc;}
 details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px 6px rgba(37,99,235,.08);}
 .extra-params-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem .15rem .55rem;margin:-.5rem -.85rem 0;cursor:pointer;list-style:none;}
@@ -682,8 +690,8 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
 <p class="note">РљР°Рє РІРєР»Р°РґРєРё В«MOEX Р°РєС†РёРёВ» / В«MOEX С„СЊСЋС‡РµСЂСЃС‹В» РІ СЂРѕР±РѕС‚Рµ. РђРєС†РёРё: В«РџРѕРґРѕР±СЂР°С‚СЊВ» вЂ” РёР· С‚РµРєСЃС‚Р° РїРѕР»СЏ. Р¤СЊСЋС‡РµСЂСЃС‹: В«РџРѕРґРѕР±СЂР°С‚СЊВ» Рё В«Р Р°СЃСЃС‡РёС‚Р°С‚СЊВ» вЂ” РєРѕРЅС‚СЂР°РєС‚С‹ MOEX РїРѕ РїСЂРµС„РёРєСЃР°Рј Рё РїРµСЂРёРѕРґСѓ СЂР°СЃС‡С‘С‚Р°: СЌРєСЃРїРёСЂР°С†РёСЏ (LASTTRADEDATE) РЅРµ СЂР°РЅСЊС€Рµ РЅР°С‡Р°Р»Р° РїРµСЂРёРѕРґР°, РІС‹РїСѓСЃРє (FIRSTTRADEDATE) РІРЅСѓС‚СЂРё РїРµСЂРёРѕРґР°; Р±РµСЃСЃСЂРѕС‡РЅС‹Рµ (вЂ¦RUBF, IMOEXF) вЂ” РїРѕ СЌРєСЃРїРёСЂР°С†РёРё. РџСЂРё В«РІС‹Р±СЂР°С‚СЊ РІСЃРµ С„СЊСЋС‡РµСЂСЃС‹В» РІ СЂР°СЃС‡С‘С‚ РїРѕРїР°РґР°СЋС‚ РІСЃРµ РїРѕРґС…РѕРґСЏС‰РёРµ СЃРµСЂРёРё, РЅРµ С‚РѕР»СЊРєРѕ РїРѕ РѕРґРЅРѕРјСѓ РЅР° РїСЂРµС„РёРєСЃ.</p>
 </details>
 
-<div class="chart-card" id="calc-chart" hidden></div>
 <div class="chart-card" id="calc-chart-equity" hidden></div>
+<div class="chart-card" id="calc-chart" hidden></div>
 
 <details class="real-account-card" id="tbank-settings">
 <summary class="real-account-head">
@@ -1050,6 +1058,8 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
     lastInstruments: [],
     lastLoadMeta: null,
     lastResult: null,
+    equityConfigMarkers: [],
+    lastEquityConfigFp: null,
     prevSelectCount: 0,
     runGeneration: 0,
     runCancelRequested: false,
@@ -1097,6 +1107,7 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
       },
       sessionStartedAt: null,
       sessionPositionBaseline: null,
+      chartSession: null,
       openPositions: [],
       positionsUpdatedAt: null,
       positionsError: "",
@@ -1917,6 +1928,7 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
 
   function stopLiveTradingOnModeChange() {
     state.live.active = false;
+    state.live.chartSession = null;
     stopLiveTradingPoll();
     stopLiveStatsPoll();
     stopLiveOrderBookPoll();
@@ -3019,10 +3031,16 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
   /** РџСЂРѕС†РµРґСѓСЂР° (async): РѕР±СЂР°Р±РѕС‚С‡РёРє РіР°Р»РѕС‡РєРё В«РџРµСЃРѕС‡РЅРёС†Р° (С„РµР№Рє)В». */
   async function onLiveSandboxToggle() {
     const on = !!$("live-sandbox-mode")?.checked;
+    if (state.live.active) recordLiveModeRegionSwitch();
     if (on) await enableLiveSandbox();
     else await disableLiveSandbox();
     saveConfig();
     syncLiveTradingUi();
+    if (state.live.active && state.lastResult) {
+      const { a, b, perSec, stopper } = state.lastResult;
+      drawCharts(perSec, stopper);
+      drawEquityCharts(a, b, { liveSession: true });
+    }
   }
 
   async function tbankPostOrder(instrumentId, direction, lots, secForPrice, options) {
@@ -3410,6 +3428,147 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
     return true;
   }
 
+  function timeToMs(t) {
+    if (!t) return NaN;
+    return new Date(String(t).replace(" ", "T")).getTime();
+  }
+
+  function isLiveTradingSession() {
+    return isLiveMode() && !!state.live.active && !!state.live.chartSession;
+  }
+
+  function liveSessionStartTime() {
+    return state.live.chartSession?.startedAt || state.live.sessionStartedAt || null;
+  }
+
+  function beginLiveTradingSession() {
+    resetFinrespDisplay();
+    resetEquityConfigMarkers();
+    const startedAt = state.live.sessionStartedAt || new Date().toISOString();
+    state.live.sessionStartedAt = startedAt;
+    const mode = isLiveSandbox() ? "sandbox" : "real";
+    state.live.chartSession = {
+      startedAt,
+      finrespBaseline: null,
+      commissionBaseline: null,
+      equityBaselines: {},
+      perSecBaselines: {},
+      modeRegions: [{ startTime: startedAt, endTime: null, mode }]
+    };
+    $("calc-finresp").textContent = `${fmt(0)} ₽`;
+    $("calc-finresp").style.color = "#047857";
+    setCommissionMetric("calc-commission", 0);
+    $("calc-ann-simple").textContent = "—";
+    $("calc-ann-compound").textContent = "—";
+    $("calc-count").textContent = "0";
+    $("calc-pos").textContent = "0";
+    $("calc-cash").textContent = `${fmt(0)} ₽`;
+    $("calc-bysec").textContent = "—";
+    const annHint = $("calc-ann-hint");
+    if (annHint) annHint.textContent = "Live-сессия: FINRESP и графики с нуля с момента «Начать торговлю».";
+    state.lastResult = null;
+  }
+
+  function recordLiveModeRegionSwitch() {
+    if (!state.live.active || !state.live.chartSession) return;
+    const regions = state.live.chartSession.modeRegions;
+    const pack = refPack();
+    const barTime = pack.length ? pack.at(-1)?.time : null;
+    const stamp = barTime || new Date().toISOString();
+    if (regions.length) {
+      const last = regions.at(-1);
+      if (last && !last.endTime) last.endTime = stamp;
+    }
+    regions.push({
+      startTime: stamp,
+      endTime: null,
+      mode: isLiveSandbox() ? "sandbox" : "real"
+    });
+    if (regions.length > 30) regions.shift();
+  }
+
+  function sliceRowsForLiveSession(rows) {
+    if (!isLiveTradingSession() || !rows?.length) return rows || [];
+    const startMs = timeToMs(liveSessionStartTime());
+    if (!Number.isFinite(startMs)) return rows;
+    const idx = rows.findIndex((r) => Number.isFinite(timeToMs(r?.time)) && timeToMs(r.time) >= startMs);
+    if (idx < 0) return [];
+    return rows.slice(idx);
+  }
+
+  function zeroBaseEquityRows(rows, baselineKey) {
+    if (!rows?.length) return rows;
+    const cs = state.live.chartSession;
+    if (!cs) return rows;
+    if (cs.equityBaselines[baselineKey] == null) cs.equityBaselines[baselineKey] = rows[0]?.eq ?? 0;
+    const base = cs.equityBaselines[baselineKey];
+    return rows.map((r) => ({ ...r, eq: (r?.eq ?? 0) - base }));
+  }
+
+  function liveDisplayFinresp(sec, finresp) {
+    const cs = state.live.chartSession;
+    if (!cs) return finresp;
+    const key = sec || "__agg";
+    if (cs.perSecBaselines[key] == null) cs.perSecBaselines[key] = finresp;
+    return finresp - cs.perSecBaselines[key];
+  }
+
+  function modeRegionsForChartRows(rows) {
+    const regions = state.live.chartSession?.modeRegions || [];
+    if (!rows?.length || !regions.length) return [];
+    const out = [];
+    for (const reg of regions) {
+      const startMs = timeToMs(reg.startTime);
+      let i0 = rows.findIndex((r) => Number.isFinite(timeToMs(r?.time)) && timeToMs(r.time) >= startMs);
+      if (i0 < 0) continue;
+      let i1 = rows.length - 1;
+      if (reg.endTime) {
+        const endMs = timeToMs(reg.endTime);
+        let ie = -1;
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const ms = timeToMs(rows[i]?.time);
+          if (Number.isFinite(ms) && ms <= endMs) { ie = i; break; }
+        }
+        if (ie >= i0) i1 = ie;
+      }
+      out.push({ fromIdx: i0, toIdx: i1, mode: reg.mode });
+    }
+    return out;
+  }
+
+  function buildModeRegionBands(rows, modeRegions, x, top, bottom) {
+    if (!modeRegions?.length) return "";
+    return modeRegions.map(({ fromIdx, toIdx, mode }) => {
+      const x0 = x(fromIdx);
+      const x1 = x(toIdx);
+      const fill = mode === "sandbox" ? "#ecfdf5" : "#fef2f2";
+      const stroke = mode === "sandbox" ? "#bbf7d0" : "#fecaca";
+      const w = Math.max(2, x1 - x0 + (toIdx === rows.length - 1 ? 4 : 0));
+      const title = mode === "sandbox" ? "Песочница (фейк)" : "Реальная торговля";
+      return `<g opacity="0.88"><rect x="${x0.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${bottom - top}" fill="${fill}" stroke="${stroke}" stroke-width="0.6"/><title>${title}</title></g>`;
+    }).join("");
+  }
+
+  function chartDecorFromRows(rows, vLines) {
+    return {
+      vLines: vLines || [],
+      modeRegions: isLiveTradingSession() ? modeRegionsForChartRows(rows) : []
+    };
+  }
+
+  function logicAbsentNote(liveSession) {
+    return liveSession
+      ? "Логика в торговле не участвует"
+      : "Не участвует в общем equity и FINRESP";
+  }
+
+  function logicChartHeading(key, selected) {
+    const badge = selected
+      ? '<span class="chart-logic-badge chart-logic-badge--active">выбрана</span>'
+      : '<span class="chart-logic-badge">справочно</span>';
+    return `${key} · ${logicEquityLabel(key)} ${badge}`;
+  }
+
   function pinLiveWindowToLatestBar() {
     const pack = refPack();
     if (!pack.length) return;
@@ -3543,7 +3702,7 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
       }
       state.lastResult = result;
       state.live.lastError = "";
-      if (!opts.silent) applyResult(result, { redrawCharts: false });
+      applyResult(result, { redrawCharts: true, liveSession: true, silent: !!opts.silent });
       syncLiveTradingUi();
       return true;
     } catch (err) {
@@ -3761,6 +3920,10 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
       state.live.sessionPositionBaseline = null;
       noteLiveTech("live-session-baseline", err.message);
     }
+    if (isLiveSandbox()) {
+      try { await enableLiveSandbox(); } catch (err) { noteLiveTech("live-sandbox-start", err.message); }
+    }
+    beginLiveTradingSession();
     state.live.active = true;
     state.live.lastError = "";
     syncLiveTradingUi();
@@ -4549,8 +4712,13 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
     }
   }
 
+  function resetEquityConfigMarkers() {
+    state.equityConfigMarkers = [];
+    state.lastEquityConfigFp = null;
+  }
+
   function resetFinrespDisplay() {
-    /* РџСЂРѕС†РµРґСѓСЂР°: РѕС‡РёСЃС‚РёС‚СЊ FINRESP, РіСЂР°С„РёРєРё Рё lastResult Р±РµР· РїРµСЂРµСЃС‡С‘С‚Р°. */
+    /* Процедура: очистить FINRESP, графики инструментов и lastResult без пересчёта. */
     syncChartBox($("calc-chart"), "");
     syncChartBox($("calc-chart-equity"), "");
     $("calc-finresp").textContent = "вЂ”";
@@ -4571,10 +4739,11 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
 
   // === FINRESP: СЃР±СЂРѕСЃ РїСЂРё РёР·РјРµРЅРµРЅРёРё С„РѕСЂРјС‹ (Р±РµР· Р°РІС‚РѕРїРµСЂРµСЃС‡С‘С‚Р°) ===
 
-  /** РџСЂРѕС†РµРґСѓСЂР°: СЃР±СЂРѕСЃРёС‚СЊ РѕС‚РѕР±СЂР°Р¶РµРЅРёРµ FINRESP; РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ вЂ” С‚РµРєСЃС‚ РІ calc-status. */
+  /** Процедура: сбросить отображение FINRESP; опционально — текст в calc-status. */
   function invalidateFinrespResult(message) {
     if (isOptimizing()) return;
     resetFinrespDisplay();
+    tryRefreshEquityCharts();
     if (message !== false) {
       $("calc-status").textContent = message || FINRESP_STALE_MSG;
     }
@@ -5601,17 +5770,25 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
   }
 
   function buildStopVLines(vLines, x, top, bottom) {
-    return vLines.map(({ idx, kind, scope }) => {
+    return vLines.map(({ idx, kind, scope, label }) => {
+      const xi = x(idx).toFixed(1);
+      if (kind === "config") {
+        const tip = String(label || "изменение параметров")
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+        return `<g opacity="0.9"><line x1="${xi}" y1="${top}" x2="${xi}" y2="${bottom}" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="6 4"/><title>${tip}</title></g>`;
+      }
       const stroke = kind === "tp" ? "#16a34a" : "#dc2626";
       const dash = scope === "portfolio" ? "7 4" : "4 3";
       const width = scope === "portfolio" ? 2 : 1.3;
       const op = scope === "portfolio" ? 0.9 : 0.75;
-      return `<line x1="${x(idx).toFixed(1)}" y1="${top}" x2="${x(idx).toFixed(1)}" y2="${bottom}" stroke="${stroke}" stroke-width="${width}" stroke-dasharray="${dash}" opacity="${op}"/>`;
+      return `<line x1="${xi}" y1="${top}" x2="${xi}" y2="${bottom}" stroke="${stroke}" stroke-width="${width}" stroke-dasharray="${dash}" opacity="${op}"/>`;
     }).join("");
   }
 
-  function buildChartSvg(rows, finresp, title, compact, vLines) {
+  function buildChartSvg(rows, finresp, title, compact, vLines, chartDecor) {
     if (!rows?.length) return "";
+    const decor = chartDecor || { vLines: vLines || [], modeRegions: [] };
+    const stopLines = decor.vLines?.length ? decor.vLines : (vLines || []);
     const w = 820;
     const h = compact ? 210 : 340;
     const left = 68, right = 28, top = compact ? 24 : 28, bottom = 58;
@@ -5661,14 +5838,19 @@ Cursor В«Open with BrowserВ» Рё РґРІРѕР№РЅРѕР№ РєР»Р�
       if (r.sell > 0) parts.push(`<circle cx="${x(i).toFixed(1)}" cy="${y(r.close).toFixed(1)}" r="3.2" fill="#dc2626" stroke="#fff" stroke-width=".8"/>`);
       return parts.join("");
     }).join("");
-    const stopLines = buildStopVLines(vLines || [], x, top, h - bottom);
-    const stopLegend = (vLines?.length)
-      ? " В· SL/TP РїРѕР·. вЂ” С‚РѕРЅРєР°СЏ В· РїРѕСЂС‚С„. вЂ” Р¶РёСЂРЅР°СЏ"
+    const stopLinesSvg = buildStopVLines(stopLines, x, top, h - bottom);
+    const modeBands = buildModeRegionBands(rows, decor.modeRegions, x, top, h - bottom);
+    const stopLegend = stopLines.length
+      ? " · SL/TP поз. — тонкая · портф. — жирная"
+      : "";
+    const modeLegend = decor.modeRegions?.length
+      ? " · зелёная область — песочница · розовая — реальная торговля"
       : "";
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
+${modeBands}
 ${gridH}${gridV}
-${stopLines}
+${stopLinesSvg}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 ${yLabels}${xLabels}
@@ -5678,7 +5860,7 @@ ${indLines}
 <polyline fill="none" stroke="#2563eb" stroke-width="${closeStroke}" points="${line("close")}"/>
 ${markers}
 <text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${color}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace">FINRESP ${fmt(finresp)} в‚Ѕ</text>
-<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">в—Џ РїРѕРєСѓРїРєР° В· в—Џ РїСЂРѕРґР°Р¶Р° В· СЃРёРЅСЏСЏ вЂ” Close${stopLegend}</text>
+<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">● покупка · ● продажа · синяя — Close${stopLegend}${modeLegend}</text>
 </svg>`;
   }
 
@@ -5687,12 +5869,76 @@ ${markers}
   const EQUITY_STOPPER_OFF = { useSl: false, useTp: false, slMult: 0, tpMult: 0, atrLen: 14, refEquity: 0 };
 
   function logicEquityLabel(key) {
-    const meta = E.BUILTIN_META.find((m) => m.key === key);
+    const meta = E.BUILTIN_META.find((m) => m.key === key || m.id === key);
     return meta?.name || key;
   }
 
-  function buildEquityChartSvg(rows, finresp, title, compact, strokeColor) {
+  function selectedEquityLogicKeys() {
+    const selected = new Set(selectedLogicIds());
+    return LOGIC_EQUITY_KEYS.filter((key) => selected.has(key));
+  }
+
+  function totalEquityTitle(keys) {
+    if (!keys.length) return "Общий equity";
+    return `Общий equity (${keys.map((key) => key).join(" + ")})`;
+  }
+
+  function equityConfigFingerprint() {
+    return JSON.stringify({
+      logics: selectedLogicIds(),
+      indicators: selectedIndicatorKeys().slice().sort(),
+      commissionPct: commissionPctValue()
+    });
+  }
+
+  function describeEquityConfigChange(prev, next) {
+    const parts = [];
+    const prevLogics = (prev?.logics || []).join(", ");
+    const nextLogics = (next?.logics || []).join(", ");
+    if (prevLogics !== nextLogics) {
+      parts.push(`логики: ${prevLogics || "—"} → ${nextLogics || "—"}`);
+    }
+    if (prev?.commissionPct !== next?.commissionPct) {
+      parts.push(`комиссия: ${prev?.commissionPct}% → ${next?.commissionPct}%`);
+    }
+    const prevInd = (prev?.indicators || []).join(",");
+    const nextInd = (next?.indicators || []).join(",");
+    if (prevInd !== nextInd) parts.push("индикаторы изменены");
+    return parts.length ? parts.join("; ") : "изменение параметров";
+  }
+
+  function recordEquityConfigMarker(time) {
+    if (!time) return;
+    const fp = equityConfigFingerprint();
+    if (fp === state.lastEquityConfigFp) return;
+    if (state.lastEquityConfigFp) {
+      let label = "изменение параметров";
+      try {
+        label = describeEquityConfigChange(JSON.parse(state.lastEquityConfigFp), JSON.parse(fp));
+      } catch (_) { /* keep default */ }
+      const last = state.equityConfigMarkers.at(-1);
+      if (!(last?.time === time && last?.label === label)) {
+        state.equityConfigMarkers.push({ time, label });
+        if (state.equityConfigMarkers.length > 40) state.equityConfigMarkers.shift();
+      }
+    }
+    state.lastEquityConfigFp = fp;
+  }
+
+  function configMarkersForRows(rows) {
+    const byIdx = new Map();
+    for (const m of state.equityConfigMarkers || []) {
+      const idx = rowIndexByTime(rows, m.time);
+      if (idx < 0) continue;
+      const prev = byIdx.get(idx);
+      byIdx.set(idx, prev ? `${prev}; ${m.label}` : m.label);
+    }
+    return [...byIdx.entries()].map(([idx, label]) => ({ idx, kind: "config", scope: "config", label }));
+  }
+
+  function buildEquityChartSvg(rows, finresp, title, compact, strokeColor, chartDecor) {
     if (!rows?.length) return "";
+    const decor = chartDecor || { vLines: [], modeRegions: [] };
     const w = 820;
     const h = compact ? 190 : 240;
     const left = 72, right = 28, top = 26, bottom = 58;
@@ -5716,8 +5962,11 @@ ${markers}
     const step = Math.max(1, Math.ceil(rows.length / 420));
     const sample = rows.map((_, i) => i).filter((i) => i % step === 0 || i === rows.length - 1);
     const eqLine = sample.map((i) => `${x(i).toFixed(1)},${y(rows[i].eq).toFixed(1)}`).join(" ");
-    const color = strokeColor || (finresp < 0 ? "#b91c1c" : "#047857");
-    const finColor = finresp < 0 ? "#b91c1c" : "#047857";
+    const faded = !!decor.faded;
+    const color = faded ? "#9ca3af" : (strokeColor || (finresp < 0 ? "#b91c1c" : "#047857"));
+    const finColor = faded ? "#9ca3af" : (finresp < 0 ? "#b91c1c" : "#047857");
+    const lineOpacity = faded ? 0.55 : 1;
+    const dashLine = faded ? ' stroke-dasharray="5 4"' : "";
     const gridH = yTicks.map((v) =>
       `<line x1="${left}" y1="${y(v).toFixed(1)}" x2="${w - right}" y2="${y(v).toFixed(1)}" stroke="#e8edf4" stroke-width="1"/>`).join("");
     const gridV = xTickIdx.map((i) =>
@@ -5731,16 +5980,29 @@ ${markers}
       ? `<line x1="${left}" y1="${zeroY}" x2="${w - right}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>`
       : "";
     const strokeW = compact ? 1.8 : 2.2;
+    const configLines = buildStopVLines(decor.vLines || [], x, top, h - bottom);
+    const modeBands = buildModeRegionBands(rows, decor.modeRegions, x, top, h - bottom);
+    const configLegend = (decor.vLines || []).some((l) => l.kind === "config")
+      ? " · фиолетовая — смена логик/комиссии/индикаторов"
+      : "";
+    const modeLegend = decor.modeRegions?.length
+      ? " · зелёная область — песочница · розовая — реальная торговля"
+      : "";
+    const caption = faded
+      ? "Справочный equity (логика не участвует в торговле / сумме)"
+      : `Equity по выбранным логикам${configLegend}${modeLegend}`;
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
-${gridH}${gridV}${zeroLine}
+${modeBands}
+${gridH}${gridV}${zeroLine}${configLines}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 ${yLabels}${xLabels}
-<text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, в‚Ѕ</text>
-<text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Р’СЂРµРјСЏ</text>
-<polyline fill="none" stroke="${color}" stroke-width="${strokeW}" points="${eqLine}"/>
-<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace">FINRESP ${fmt(finresp)} в‚Ѕ</text>
+<text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, ₽</text>
+<text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
+<polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
+<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
+<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">${caption}</text>
 </svg>`;
   }
 
@@ -5764,14 +6026,23 @@ ${yLabels}${xLabels}
     return { runs, times };
   }
 
-  function buildTotalEquityRows(runs, times) {
+  function buildTotalEquityRows(runs, times, keys) {
+    const active = keys || selectedEquityLogicKeys();
     return times.map((time, i) => ({
       time,
-      eq: LOGIC_EQUITY_KEYS.reduce((sum, key) => sum + (runs[key]?.rows[i]?.eq ?? 0), 0)
+      eq: active.reduce((sum, key) => sum + (runs[key]?.rows[i]?.eq ?? 0), 0)
     }));
   }
 
-  function drawEquityCharts(a, b) {
+  function tryRefreshEquityCharts() {
+    if (!state.packs.length || refPack().length < 3) return;
+    const [a, b] = normalizeSliders();
+    drawEquityCharts(a, b);
+  }
+
+  function drawEquityCharts(a, b, drawOpts) {
+    const opts = drawOpts || {};
+    const liveSession = opts.liveSession || isLiveTradingSession();
     const box = $("calc-chart-equity");
     if (!box) return;
     if (!state.packs.length) {
@@ -5779,27 +6050,93 @@ ${yLabels}${xLabels}
       return;
     }
     const data = calcLogicEquityRuns(a, b);
-    if (!data || !Object.keys(data.runs).length) {
+    const activeKeys = selectedEquityLogicKeys();
+    const selectedSet = new Set(activeKeys);
+
+    if (!data) {
       syncChartBox(box, "");
       return;
     }
+    if (!LOGIC_EQUITY_KEYS.some((key) => data.runs[key]?.rows?.length)) {
+      syncChartBox(box, !activeKeys.length
+        ? `<p class="note">Выберите хотя бы одну логику L1…L5 для расчёта FINRESP.</p>`
+        : "");
+      return;
+    }
+
     const { runs, times } = data;
-    const logicBlocks = LOGIC_EQUITY_KEYS.filter((key) => runs[key]?.rows?.length).map((key) => {
+    const processEquityRows = (rows, key) => {
+      let r = sliceRowsForLiveSession(rows);
+      if (liveSession && r.length) r = zeroBaseEquityRows(r, key);
+      return r;
+    };
+
+    const refKey = LOGIC_EQUITY_KEYS.find((key) => runs[key]?.rows?.length);
+    const refRows = refKey ? processEquityRows(runs[refKey]?.rows || [], refKey) : [];
+    if (liveSession && !refRows.length) {
+      syncChartBox(box, `<p class="note">Live-сессия: ждём свечи с момента старта торговли…</p>`);
+      return;
+    }
+
+    const totalSource = activeKeys.length
+      ? buildTotalEquityRows(runs, times, activeKeys)
+      : [];
+    const totalRows = processEquityRows(totalSource, "__total");
+    const decorBase = chartDecorFromRows(refRows.length ? refRows : totalRows, configMarkersForRows(totalRows));
+
+    const logicBlocks = LOGIC_EQUITY_KEYS.map((key) => {
+      const selected = selectedSet.has(key);
+      const heading = logicChartHeading(key, selected);
+      const absentNote = !selected
+        ? `<p class="chart-logic-absent-note">${logicAbsentNote(liveSession)}</p>`
+        : "";
       const run = runs[key];
-      const svg = buildEquityChartSvg(run.rows, run.finresp, `Equity ${key}`, true, LOGIC_EQUITY_COLORS[key]);
+      if (!run?.rows?.length) {
+        const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+        return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет данных в окне</div></div>`;
+      }
+      const rows = processEquityRows(run.rows, key);
+      if (!rows.length) {
+        const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+        return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Сессия ещё не началась на этой свече</div></div>`;
+      }
+      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected };
+      const fin = rows.at(-1).eq;
+      const lineColor = selected ? LOGIC_EQUITY_COLORS[key] : undefined;
+      const svg = buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor);
       if (!svg) return "";
-      return `<div class="chart-mini"><p class="chart-sec-title">${logicEquityLabel(key)}</p>${svg}</div>`;
+      const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+      return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}${svg}</div>`;
     }).filter(Boolean);
-    const totalRows = buildTotalEquityRows(runs, times);
-    const totalFin = totalRows.length ? totalRows.at(-1).eq : 0;
-    const totalSvg = buildEquityChartSvg(totalRows, totalFin, "Equity ОЈ L1вЂ¦L5", false, "#1d4ed8");
-    const totalBlock = totalSvg
-      ? `<div class="chart-equity-total"><p class="chart-sec-title">РћР±С‰РёР№ equity (L5 + L1 + L2 + L3 + L4)</p>${totalSvg}</div>`
+
+    let totalBlock = "";
+    if (activeKeys.length && totalRows.length) {
+      const totalFin = totalRows.at(-1).eq;
+      const totalSvg = buildEquityChartSvg(
+        totalRows, totalFin, `Equity Σ ${activeKeys.join("+")}`, false, "#1d4ed8", decorBase
+      );
+      if (totalSvg) {
+        totalBlock = `<div class="chart-equity-total"><p class="chart-sec-title">${totalEquityTitle(activeKeys)}</p>${totalSvg}</div>`;
+      }
+    } else if (!activeKeys.length) {
+      totalBlock = `<p class="note">Общий equity: выберите хотя бы одну логику L1…L5.</p>`;
+    }
+
+    const markerNote = state.equityConfigMarkers?.length
+      ? `<p class="note">Фиолетовые линии — смена логик, комиссии или индикаторов.</p>`
       : "";
+    const liveNote = liveSession
+      ? `<p class="note">Live-сессия с ${formatMoexBarTime(liveSessionStartTime())}: equity и FINRESP от нуля. ${isLiveSandbox() ? "Песочница — бледно-зелёные области." : "Реальная торговля — бледно-розовые области."}</p>`
+      : "";
+    const sectionTitle = liveSession
+      ? "Equity по логикам — live-сессия (без портф. Stopper)"
+      : "Equity по логикам (сумма по выбранным инструментам, без портф. Stopper)";
+
     syncChartBox(box, `<div class="chart-equity-section">
-<p class="chart-equity-section-title">Equity РїРѕ Р»РѕРіРёРєР°Рј (СЃСѓРјРјР° РїРѕ РІС‹Р±СЂР°РЅРЅС‹Рј РёРЅСЃС‚СЂСѓРјРµРЅС‚Р°Рј, Р±РµР· РїРѕСЂС‚С„. Stopper)</p>
-<div class="chart-stack">${logicBlocks.join("")}</div>
+<p class="chart-equity-section-title">${sectionTitle}</p>
+${liveNote}${markerNote}
 ${totalBlock}
+<div class="chart-stack">${logicBlocks.join("")}</div>
 </div>`);
   }
 
@@ -5852,34 +6189,44 @@ ${totalBlock}
     return entries;
   }
 
-  function drawCharts(perSec, stopper) {
+  function drawCharts(perSec, stopper, drawOpts) {
+    const liveSession = drawOpts?.liveSession || isLiveTradingSession();
     const failed = chartFailuresForDraw();
     const entries = chartEntriesForDraw(perSec, failed);
     const chartBox = $("calc-chart");
     if (!entries.length) {
-      syncChartBox(chartBox, "<p class=\"note\">РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РіСЂР°С„РёРєР°.</p>");
+      syncChartBox(chartBox, "<p class=\"note\">Нет данных для графика.</p>");
       return;
     }
     const compact = entries.length > 1;
     const portfolioEvents = stopper?.events || [];
     let note = "";
+    if (liveSession) {
+      note = `<p class="note">Live-сессия: графики инструментов с момента «Начать торговлю». ${isLiveSandbox() ? "Зелёная область — песочница." : "Розовая область — реальная торговля."}</p>`;
+    }
     const nOk = entries.filter((e) => e.kind === "ok").length;
     const nFail = entries.filter((e) => e.kind === "fail").length;
     if (entries.length > 1) {
-      note = `<p class="note">Р“СЂР°С„РёРєРё: ${entries.length} РёРЅСЃС‚СЂ. (${nOk} СЃ РґР°РЅРЅС‹РјРё${nFail ? `, ${nFail} СЃ СЃРѕРѕР±С‰РµРЅРёРµРј РѕР± РѕС€РёР±РєРµ` : ""}).</p>`;
+      note += `<p class="note">Графики: ${entries.length} инстр. (${nOk} с данными${nFail ? `, ${nFail} с сообщением об ошибке` : ""}).</p>`;
     }
     if (portfolioEvents.length) {
-      note += `<span class="note">Р’РµСЂС‚. С‡РµСЂС‚Р°: SL РєСЂР°СЃРЅР°СЏ, TP Р·РµР»С‘РЅР°СЏ; С‚РѕРЅРєР°СЏ вЂ” РїРѕР·РёС†РёСЏ, Р¶РёСЂРЅР°СЏ вЂ” РїРѕСЂС‚С„РµР»СЊ (РЅР° РІСЃРµС… РіСЂР°С„РёРєР°С…).</span>`;
+      note += `<span class="note">Верт. черта: SL красная, TP зелёная; тонкая — позиция, жирная — портфель (на всех графиках).</span>`;
     }
     const blocks = entries.map((entry) => {
       if (entry.kind === "fail") {
         return `<div class="chart-mini chart-fail"><p class="chart-sec-title">${entry.sec}</p><p class="chart-fail-msg">${entry.error}</p></div>`;
       }
       const p = entry.row;
-      const vLines = chartStopLines(p.rows, portfolioEvents);
-      const svg = buildChartSvg(p.rows, p.finresp, `Р“СЂР°С„РёРє ${p.sec}`, compact, vLines);
+      const rows = sliceRowsForLiveSession(p.rows);
+      if (liveSession && !rows.length) {
+        return `<div class="chart-mini"><p class="chart-sec-title">${p.sec}</p><div class="chart-mini-empty">Ожидание свечей live-сессии…</div></div>`;
+      }
+      const displayFin = liveSession ? liveDisplayFinresp(p.sec, p.finresp) : p.finresp;
+      const vLines = chartStopLines(rows.length ? rows : p.rows, portfolioEvents);
+      const decor = chartDecorFromRows(rows.length ? rows : p.rows, vLines);
+      const svg = buildChartSvg(rows.length ? rows : p.rows, displayFin, `График ${p.sec}`, compact, vLines, decor);
       if (!svg) {
-        return `<div class="chart-mini chart-fail"><p class="chart-sec-title">${p.sec}</p><p class="chart-fail-msg">РќРµС‚ РґР°РЅРЅС‹С… РґР»СЏ РіСЂР°С„РёРєР° РІ РІС‹Р±СЂР°РЅРЅРѕРј РѕРєРЅРµ.</p></div>`;
+        return `<div class="chart-mini chart-fail"><p class="chart-sec-title">${p.sec}</p><p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p></div>`;
       }
       return `<div class="chart-mini"><p class="chart-sec-title">${p.sec}</p>${svg}</div>`;
     });
@@ -5899,26 +6246,43 @@ ${totalBlock}
   function applyResult(result, options) {
     const opts = options || {};
     const { perSec, stopper, a, b } = result;
-    const agg = optimDisplayAgg(result, opts);
+    let agg = optimDisplayAgg(result, opts);
+    const liveSession = opts.liveSession || isLiveTradingSession();
+    if (liveSession && state.live.chartSession) {
+      const cs = state.live.chartSession;
+      if (cs.finrespBaseline == null) cs.finrespBaseline = agg.finresp;
+      if (cs.commissionBaseline == null) cs.commissionBaseline = agg.commission || 0;
+      agg = {
+        ...agg,
+        finresp: agg.finresp - cs.finrespBaseline,
+        commission: Math.max(0, (agg.commission || 0) - cs.commissionBaseline)
+      };
+    }
     if (!opts.optimTrial) state.lastResult = result;
     applyUiLocks();
-    const winLen = perSec.reduce((m, p) => Math.max(m, p.rows?.length ?? 0), 0);
-    $("calc-finresp").textContent = `${fmt(agg.finresp)} в‚Ѕ`;
+    const winLen = liveSession
+      ? sliceRowsForLiveSession(refPack().slice(a, b + 1)).length
+      : perSec.reduce((m, p) => Math.max(m, p.rows?.length ?? 0), 0);
+    $("calc-finresp").textContent = `${fmt(agg.finresp)} ₽`;
     $("calc-finresp").style.color = agg.finresp < 0 ? "#b91c1c" : "#047857";
     setCommissionMetric("calc-commission", agg.commission || 0);
     $("calc-count").textContent = String(winLen);
     $("calc-pos").textContent = fmt(agg.pos, 4);
     $("calc-cash").textContent = `${fmt(agg.cash)} в‚Ѕ`;
     $("calc-bysec").textContent = formatBySec(agg.bySec) || "вЂ”";
-    const c0 = refPack()[a]?.time || "вЂ”";
-    const c1 = refPack()[b]?.time || "вЂ”";
+    const c0 = liveSession
+      ? (formatMoexBarTime(liveSessionStartTime()) || refPack()[a]?.time || "—")
+      : (refPack()[a]?.time || "—");
+    const c1 = refPack()[b]?.time || "—";
     const deposit = volConfig().deposit;
     const days = annualPeriodDays(c0, c1);
     setAnnMetric("calc-ann-simple", annualSimplePct(agg.finresp, deposit, days));
     setAnnMetric("calc-ann-compound", annualCompoundPct(agg.finresp, deposit, days));
     const annHint = $("calc-ann-hint");
     if (annHint) {
-      if (days && deposit > 0) {
+      if (liveSession) {
+        annHint.textContent = `Live-сессия · ${isLiveSandbox() ? "песочница (фейк)" : "реальная торговля"} · FINRESP и equity с нуля.`;
+      } else if (days && deposit > 0) {
         const periodPct = (agg.finresp / deposit) * 100;
         const windowDays = calendarDaysBetweenTimes(c0, c1);
         const opDays = robotOperatingDays();
@@ -5937,7 +6301,9 @@ ${totalBlock}
     $("calc-start-label").textContent = c0;
     $("calc-end-label").textContent = c1;
     const mode = state.bulkMode === "futures" ? "С„СЊСЋС‡РµСЂСЃС‹" : state.bulkMode === "shares" ? "РІСЃРµ Р°РєС†РёРё" : "РІС‹Р±РѕСЂ";
-    let status = `FINRESP: ${c0} вЂ” ${c1} | ${perSec.length} РёРЅСЃС‚СЂ. (${mode}) | ${winLen} СЃРІРµС‡РµР№ РІ РѕРєРЅРµ`;
+    let status = liveSession
+      ? `Live-сессия · FINRESP ${fmt(agg.finresp)} ₽ · ${winLen} св. с ${c0} · ${perSec.length} инстр.`
+      : `FINRESP: ${c0} — ${c1} | ${perSec.length} инстр. (${mode}) | ${winLen} свечей в окне`;
     if (state.failedInstruments?.length) {
       status += ` | РЅРµС‚ MOEX: ${state.failedInstruments.length}`;
     }
@@ -5953,9 +6319,14 @@ ${totalBlock}
     }
     $("calc-status").textContent = status;
     updateTechInfo("result-applied");
+    if (!opts.optimTrial && !liveSession) {
+      const pack = refPack();
+      recordEquityConfigMarker(pack[a]?.time);
+    }
     if (opts.redrawCharts !== false) {
-      drawCharts(perSec, stopper);
-      drawEquityCharts(a, b);
+      const chartOpts = { liveSession };
+      drawCharts(perSec, stopper, chartOpts);
+      drawEquityCharts(a, b, chartOpts);
     }
   }
 
@@ -6109,6 +6480,7 @@ ${totalBlock}
       state.packs = loadedData.packs;
       state.failedInstruments = loadedData.failures;
       state.windowSkipped = [];
+      resetEquityConfigMarkers();
       state.lastLoadMeta = {
         periodKey: loadedData.periodKey,
         keys: instruments.map(instrumentKey)
