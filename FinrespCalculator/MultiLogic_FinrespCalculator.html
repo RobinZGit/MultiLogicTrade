@@ -135,6 +135,12 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 .logic-grid{display:grid;gap:.75rem;margin-top:.75rem;}
 .logic-grid label{font-size:.82rem;color:var(--muted);display:block;margin-bottom:.2rem;}
 .logic-grid textarea{width:100%;min-height:4.5rem;font-family:Consolas,monospace;font-size:.78rem;padding:.45rem;border:1px solid var(--border);border-radius:6px;resize:vertical;}
+.logic-line-row{margin-bottom:.65rem;}
+.logic-line-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.35rem .65rem;margin-bottom:.25rem;}
+.logic-line-head label{font-size:.82rem;color:var(--muted);margin:0;font-weight:600;}
+.logic-line-actions{display:flex;flex-wrap:wrap;gap:.35rem;}
+.logic-line-copy-btn,.logic-lines-add-btn{padding:.28rem .55rem;font-size:.78rem;min-height:auto;}
+.logic-lines-toolbar{display:flex;flex-wrap:wrap;gap:.5rem;margin:.35rem 0 .55rem;}
 .prefix-pick-row{display:flex;gap:.5rem;align-items:stretch;}
 .prefix-pick-row textarea{flex:1;min-width:0;min-height:4.5rem;}
 .prefix-pick-btn{flex:0 0 auto;align-self:flex-end;padding:.48rem .75rem;}
@@ -211,6 +217,18 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 .live-trading-panel--sandbox .live-trading-orders-wrap{border-top-color:#bbf7d0;}
 .live-trading-panel--sandbox .live-trading-orders th,.live-trading-panel--sandbox .live-trading-orders td{border-bottom-color:#bbf7d0;}
 .live-trading-panel--sandbox .live-trading-orders th{color:#166534;}
+.live-trade-history-panel .live-trading-orders{max-height:20rem;}
+.live-trade-history-panel tr.trade-row-fake{background:#ecfdf5;}
+.live-trade-history-panel tr.trade-row-real{background:#fdf2f8;}
+.live-trade-history-panel tr.trade-row-active{font-weight:600;}
+.live-trade-history-panel .trade-star{font-size:1.05rem;line-height:1;}
+.live-trade-history-panel .trade-star-buy{color:#166534;}
+.live-trade-history-panel .trade-star-sell{color:#991b1b;}
+.live-trade-history-panel .trade-mode-fake{color:#166534;font-weight:600;font-size:.76rem;}
+.live-trade-history-panel .trade-mode-real{color:#9d174d;font-weight:600;font-size:.76rem;}
+.live-trade-history-panel .trade-finresp-pos{color:#166534;font-weight:600;}
+.live-trade-history-panel .trade-finresp-neg{color:#991b1b;font-weight:600;}
+.live-trade-history-subhead td{padding:.45rem .35rem .2rem;font-size:.72rem;font-weight:700;color:#64748b;border-bottom:1px solid var(--border);background:#f8fafc;}
 .live-trading-panel--sandbox .live-trading-stat b{color:#166534;}
 .live-trading-panel--sandbox .live-trading-stat-commission span{color:#15803d;}
 .live-trading-panel--sandbox.live-trading-panel--active{
@@ -564,10 +582,13 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </div>
 </details>
-<div class="live-trading-orders-wrap">
-<div class="live-trading-orders-head">Заявки в реальном времени</div>
-<div id="live-trading-orders" class="live-trading-orders"></div>
+<details class="live-order-book live-trade-history-panel" id="live-trade-history-panel">
+<summary class="live-manual-order-summary">История сделок</summary>
+<div class="live-order-book-body">
+<p class="live-order-book-meta" id="live-trade-history-meta">Текущие заявки (исполнена / ожидает) и все сделки сессии. Фейк — зелёный фон, реал — розовый. ★ — покупка, ☆ — продажа; FINRESPΔ — результат закрытия (продажа лонга / покупка шорта).</p>
+<div id="live-trading-orders" class="live-trading-orders"><p class="live-trading-orders-empty">Разверните блок в режиме live.</p></div>
 </div>
+</details>
 </div>
 
 <div class="calc-card" id="finresp-calc">
@@ -605,8 +626,8 @@ body.calc-running .help-ftr{opacity:.75;}
 <label for="calc-logic">Логика (Ctrl+клик — несколько; приоритет сверху вниз)</label>
 </div>
 <p class="calc-logic-selected" id="calc-logic-selected">—</p>
-<select id="calc-logic" class="calc-logic-multi" multiple size="5"></select>
-<p class="calc-sec-hint" id="calc-logic-hint">При нескольких логиках на каждой свече сначала проверяются сигналы верхней выбранной, затем следующей (как слоты L1…L5 в MultiLogic).</p>
+<select id="calc-logic" class="calc-logic-multi" multiple size="9"></select>
+<p class="calc-sec-hint" id="calc-logic-hint">Все логики — редактируемые строки в каталоге (Op/Cl или <code>SMA(L;Vol)(Ab|Bl)</code>, <code>SMA(L;Spread=…)(Trend|Anti)</code>). При нескольких выбранных — приоритет сверху вниз.</p>
 </div>
 <div class="calc-field calc-field-wide cache-row">
 <label>База цен MOEX (IndexedDB браузера)</label>
@@ -710,8 +731,12 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="param-atr-sl" type="number" value="14" min="2" max="200" step="1">
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-atr-sl">Оптимизировать</button>
 </div></div>
+<div class="calc-field"><label for="param-sma-corridor" title="Мёртвая зона ±K×ATR вокруг SMA для логик SMA-эталон">Коридор SMA, кратность ATR</label>
+<input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any">
+</div>
 </div>
 <p class="note">Подставляется в строку L1…L5 как SL[@SL] TP[@TP] и в расчёт для всех логик. Для лонга: SL = вход − K×ATR, TP = вход + K×ATR; для шорта наоборот. 0 у кратности — без стопа. После изменения полей нажмите «Рассчитать».</p>
+<p class="note">Логики <strong>SMA-эталон</strong> в каталоге: <code>SMA(L;Spread=@SmaCorridor)(Trend|Anti)</code> — коридор ±K×ATR (длина ATR — «Длина ATR для SL/TP»). Внутри коридора сделок нет. K=0 — как <code>SMA(L;Vol)(Ab|Bl)</code>.</p>
 <p class="note" id="position-sl-hint" hidden></p>
 
 <p class="extra-section">Общепортфельный Stopper (вкладка «Stopper» робота)</p>
@@ -753,7 +778,11 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="note">По умолчанию выбраны все индикаторы. Оптимизация перебирает все непустые комбинации и оставляет набор с лучшим FINRESP.</p>
 </div>
 
-<p class="extra-section">Строки L1…L5</p>
+<p class="extra-section">Каталог логик</p>
+<p class="note">Список «Логика» = этот каталог. Строка как у L1…L5: Op/Cl, либо объёмная SMA — <code>SMA(3;Vol)(Ab)</code> / <code>SMA(3;Vol)(Bl)</code>, либо коридор — <code>SMA(3;Spread=@SmaCorridor)(Trend)</code> / <code>(Anti)</code>, плюс SL/TP.</p>
+<div class="logic-lines-toolbar">
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
+</div>
 <div class="logic-grid" id="logic-lines"></div>
 <button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
 <p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
@@ -882,7 +911,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-tbank-passphrase-modal";
+  const CALC_PAGE_VERSION = "2026-06-13-logic-catalog";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1239,6 +1268,8 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
+    logicLineKeys: ["L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLabels: {},
     anchorStartTime: null,
     anchorEndTime: null,
     hasWindow: false,
@@ -1315,7 +1346,8 @@ body.calc-running .help-ftr{opacity:.75;}
       positionsBusy: false,
       obTrendCache: new Map(),
       positionsMenuIdx: null,
-      manualPriceSec: ""
+      manualPriceSec: "",
+      tradeHistory: []
     },
     optim: {
       active: null,
@@ -1469,6 +1501,7 @@ body.calc-running .help-ftr{opacity:.75;}
         sl: $("param-sl")?.value || "",
         tp: $("param-tp")?.value || "",
         atrSl: $("param-atr-sl")?.value || "",
+        smaCorridor: $("param-sma-corridor")?.value || "",
         lr: $("param-lr")?.value || "",
         sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
@@ -1484,6 +1517,8 @@ body.calc-running .help-ftr{opacity:.75;}
       },
       indicators: selectedIndicatorKeys(),
       logicLines: logicLinesConfig(),
+      logicLineKeys: state.logicLineKeys.slice(),
+      logicLabels: { ...state.logicLabels },
       randomPriceShift: !!$("random-price-shift")?.checked
     };
   }
@@ -1546,6 +1581,7 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-sl", cfg.params?.sl);
       setValueIfExists("param-tp", cfg.params?.tp);
       setValueIfExists("param-atr-sl", cfg.params?.atrSl);
+      setValueIfExists("param-sma-corridor", cfg.params?.smaCorridor);
       setValueIfExists("param-lr", cfg.params?.lr);
       setValueIfExists("stopper-sl-mult", cfg.stopper?.slMult);
       setValueIfExists("stopper-tp-mult", cfg.stopper?.tpMult);
@@ -1559,8 +1595,17 @@ body.calc-running .help-ftr{opacity:.75;}
       if (Array.isArray(cfg.indicators)) applyIndicatorSelection(cfg.indicators);
       if (cfg.logicLines && typeof cfg.logicLines === "object") {
         state.customLines = { ...state.customLines, ...cfg.logicLines };
-        fillLogicEditor();
       }
+      ensureDefaultLogicLines();
+      if (Array.isArray(cfg.logicLineKeys) && cfg.logicLineKeys.length) {
+        state.logicLineKeys = cfg.logicLineKeys.filter(Boolean);
+      }
+      if (cfg.logicLabels && typeof cfg.logicLabels === "object") {
+        state.logicLabels = { ...cfg.logicLabels };
+      }
+      ensureLogicLineKeys();
+      fillLogicEditor();
+      fillLogicSelect();
       state.restoredSelectedInstruments = Array.isArray(cfg.selectedInstruments) ? cfg.selectedInstruments : [];
       return true;
     } finally {
@@ -2291,7 +2336,8 @@ body.calc-running .help-ftr{opacity:.75;}
       LR: +$("param-lr").value || E.DEFAULT_PARAMS.LR,
       SL: sl,
       TP: tp,
-      slTpAtrLen: atrLen
+      slTpAtrLen: atrLen,
+      smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr)
     };
   }
 
@@ -2398,6 +2444,171 @@ body.calc-running .help-ftr{opacity:.75;}
     return String(o.orderId || o.order_id || o.id || "").trim();
   }
 
+  function ensureLiveTradeHistory() {
+    if (!Array.isArray(state.live.tradeHistory)) state.live.tradeHistory = [];
+    return state.live.tradeHistory;
+  }
+
+  function isLiveOrderActive(o) {
+    if (o.fake || isLiveSandbox()) return false;
+    const st = String(o.executionReportStatus || o.orderState || "").toUpperCase();
+    if (!st) return true;
+    if (st.includes("FILL") && !st.includes("PARTIALLY")) return false;
+    if (st.includes("CANCEL") || st.includes("REJECT")) return false;
+    return st.includes("NEW") || st.includes("PARTIALLY") || st.includes("PENDING") || st.includes("SUBMIT");
+  }
+
+  function tradeHistoryFinrespForOrder(o) {
+    if (Number.isFinite(o.tradePnl)) return o.tradePnl;
+    const role = o.tradeRole;
+    if (role === "close_long" || role === "close_short" || role === "flip") {
+      return Number.isFinite(o.tradePnl) ? o.tradePnl : null;
+    }
+    return null;
+  }
+
+  function tradeHistoryEntryFromOrder(o, mode) {
+    const fake = mode === "sandbox" || !!o.fake;
+    const isBuy = isOrderBuy(o);
+    const status = fake
+      ? sandboxOrderStatusLabel(o)
+      : liveOrderStatusLabel(o.executionReportStatus || o.orderState);
+    const active = !fake && isLiveOrderActive(o);
+    const finresp = tradeHistoryFinrespForOrder(o);
+    return {
+      id: liveOrderRowId(o) || `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      orderId: liveOrderRowId(o),
+      ticker: o.ticker || o.sec || "—",
+      direction: o.direction,
+      isBuy,
+      lotsRequested: o.lotsRequested ?? o.lots_requested,
+      lotsExecuted: o.lotsExecuted ?? o.lots_executed ?? o.lots,
+      orderType: o.orderType,
+      price: o.price,
+      notional: o.notional,
+      fee: o.fee,
+      status,
+      active,
+      fake,
+      mode: fake ? "sandbox" : "real",
+      tradeRole: o.tradeRole || null,
+      tradePnl: o.tradePnl,
+      finresp,
+      when: o.orderDate || o.createdAt || new Date().toISOString(),
+      instrumentId: o.instrumentId,
+      market: o.market,
+      sec: o.sec,
+      revertSnap: o.revertSnap,
+      sourceOrder: o
+    };
+  }
+
+  function upsertTradeHistoryFromOrder(o, mode) {
+    if (!o) return;
+    const hist = ensureLiveTradeHistory();
+    const entry = tradeHistoryEntryFromOrder(o, mode);
+    if (!entry.id) return;
+    const idx = hist.findIndex((h) => h.id === entry.id);
+    if (idx >= 0) hist[idx] = { ...hist[idx], ...entry };
+    else hist.unshift(entry);
+    if (hist.length > 500) hist.length = 500;
+  }
+
+  function markTradeHistoryCancelled(orderId) {
+    if (!orderId) return;
+    const hist = ensureLiveTradeHistory();
+    const row = hist.find((h) => h.id === orderId);
+    if (row) {
+      row.active = false;
+      row.status = "снята";
+    }
+  }
+
+  function syncTradeHistoryFromSources() {
+    for (const o of ensureSandboxState().orders || []) upsertTradeHistoryFromOrder(o, "sandbox");
+    for (const o of state.live.orders || []) upsertTradeHistoryFromOrder(o, "real");
+  }
+
+  function tradeHistoryCloseEnabled(entry, o) {
+    if (entry.status === "снята") return false;
+    if (entry.fake) {
+      return (ensureSandboxState().orders || []).some((x) => liveOrderRowId(x) === entry.id);
+    }
+    return liveOrderCloseable(o);
+  }
+
+  function renderTradeHistoryRow(entry) {
+    const star = entry.isBuy
+      ? '<span class="trade-star trade-star-buy" title="Покупка">★</span>'
+      : '<span class="trade-star trade-star-sell" title="Продажа">☆</span>';
+    const dirCls = entry.isBuy ? "dir-buy" : "dir-sell";
+    const otype = String(entry.orderType || "").includes("LIMIT") ? "лимит" : "рынок";
+    const priceHint = Number.isFinite(entry.price) ? ` @ ${fmt(entry.price, 2)}` : "";
+    const sumHint = Number.isFinite(entry.notional) ? ` · ${fmt(entry.notional, 0)} ₽` : "";
+    const lotsReq = entry.lotsRequested ?? "—";
+    const lotsExec = entry.lotsExecuted ?? "—";
+    const when = entry.when ? new Date(entry.when).toLocaleString("ru-RU") : "—";
+    const modeLabel = entry.fake
+      ? '<span class="trade-mode-fake">фейк</span>'
+      : '<span class="trade-mode-real">реал</span>';
+    let finrespCell = "—";
+    if (Number.isFinite(entry.finresp)) {
+      const cls = entry.finresp >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
+      finrespCell = `<span class="${cls}">${entry.finresp >= 0 ? "+" : ""}${fmt(entry.finresp, 2)} ₽</span>`;
+    } else if (!entry.isBuy && entry.fake && entry.tradeRole?.startsWith("close")) {
+      finrespCell = '<span class="pos-muted">0</span>';
+    }
+    const rowCls = entry.fake ? "trade-row-fake" : "trade-row-real";
+    const activeCls = entry.active ? " trade-row-active" : "";
+    const o = entry.sourceOrder || entry;
+    const orderId = entry.id;
+    const canClose = tradeHistoryCloseEnabled(entry, o);
+    const closeLbl = closeAtMarketLabelForOrder(o);
+    const closeTitle = entry.fake
+      ? "Убрать фейк-сделку из журнала и пересчитать портфель"
+      : (liveOrderCancellable(o, false)
+        ? "Снять неисполненную заявку с биржи"
+        : "Закрыть исполненную сделку противоположной заявкой по рынку");
+    const closeBtn = orderId
+      ? `<button type="button" class="live-order-cancel-btn" data-close-order="${orderId.replace(/"/g, "&quot;")}" title="${closeTitle}"${canClose ? "" : " disabled"}>${closeLbl}</button>`
+      : "";
+    return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${modeLabel}</td><td>${when}</td><td class="live-order-col-cancel">${closeBtn}</td></tr>`;
+  }
+
+  function renderLiveOrdersPanel() {
+    const el = $("live-trading-orders");
+    const metaEl = $("live-trade-history-meta");
+    if (!el) return;
+    syncTradeHistoryFromSources();
+    const hist = ensureLiveTradeHistory().slice().sort((a, b) => {
+      if (!!a.active !== !!b.active) return a.active ? -1 : 1;
+      const ta = Date.parse(a.when || 0) || 0;
+      const tb = Date.parse(b.when || 0) || 0;
+      return tb - ta;
+    });
+    if (metaEl && isLiveMode()) {
+      const nAct = hist.filter((h) => h.active).length;
+      const nFake = hist.filter((h) => h.fake).length;
+      const nReal = hist.filter((h) => !h.fake).length;
+      metaEl.textContent = `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — P/L закрытия.`;
+    }
+    if (!hist.length) {
+      el.innerHTML = isLiveSandbox()
+        ? '<p class="live-trading-orders-empty">Сделок пока нет. Робот и ручные заявки попадут сюда после исполнения.</p>'
+        : '<p class="live-trading-orders-empty">Сделок пока нет. После «Начать торговлю» здесь — заявки и исполнения.</p>';
+      return;
+    }
+    const active = hist.filter((h) => h.active);
+    const done = hist.filter((h) => !h.active);
+    const activeBlock = active.length
+      ? `<tr class="live-trade-history-subhead"><td colspan="10">Текущие заявки (не исполнены полностью)</td></tr>${active.map(renderTradeHistoryRow).join("")}`
+      : "";
+    const doneBlock = done.length
+      ? `${active.length ? '<tr class="live-trade-history-subhead"><td colspan="10">Исполненные и завершённые</td></tr>' : ""}${done.map(renderTradeHistoryRow).join("")}`
+      : "";
+    el.innerHTML = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Режим</th><th>Время</th><th class="live-order-col-cancel">Действие</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
+  }
+
   function liveOrderCancellable(o, sandboxNewest) {
     if (isLiveSandbox()) return !!sandboxNewest && !!o.revertSnap;
     const st = String(o.executionReportStatus || o.orderState || "").toUpperCase();
@@ -2405,50 +2616,6 @@ body.calc-running .help-ftr{opacity:.75;}
     if (st.includes("FILL") && !st.includes("PARTIALLY")) return false;
     if (st.includes("CANCEL") || st.includes("REJECT") || st.includes("REJECTED")) return false;
     return st.includes("NEW") || st.includes("PARTIALLY") || st.includes("PENDING") || st.includes("SUBMIT");
-  }
-
-  function renderLiveOrdersPanel() {
-    const el = $("live-trading-orders");
-    if (!el) return;
-    const orders = isLiveSandbox()
-      ? (ensureSandboxState().orders || [])
-      : (state.live.orders || []);
-    if (!orders.length) {
-      el.innerHTML = isLiveSandbox()
-        ? '<p class="live-trading-orders-empty">Фейк-заявок пока нет. Робот и ручные заявки будут симулироваться здесь.</p>'
-        : '<p class="live-trading-orders-empty">Заявок пока нет. После «Начать торговлю» здесь появятся заявки в реальном времени.</p>';
-      return;
-    }
-    const sorted = orders.slice().sort((a, b) => {
-      const ta = Date.parse(a.orderDate || a.createdAt || 0) || 0;
-      const tb = Date.parse(b.orderDate || b.createdAt || 0) || 0;
-      return tb - ta;
-    });
-    const rows = sorted.map((o, idx) => {
-      const dir = liveOrderDirectionLabel(o.direction);
-      const dirCls = (o.direction === "ORDER_DIRECTION_BUY" || o.direction === 1) ? "dir-buy" : "dir-sell";
-      const ticker = (o.ticker || o.figi || o.instrumentUid || "—") + (isLiveSandbox() ? ' <span class="pos-fake-tag">(фейк)</span>' : "");
-      const lotsReq = o.lotsRequested ?? o.lots_requested ?? "—";
-      const lotsExec = o.lotsExecuted ?? o.lots_executed ?? "—";
-      const status = isLiveSandbox() ? sandboxOrderStatusLabel(o) : liveOrderStatusLabel(o.executionReportStatus || o.orderState);
-      const otype = (o.orderType || "").includes("LIMIT") ? "лимит" : "рынок";
-      const when = o.orderDate || o.createdAt || "";
-      const priceHint = Number.isFinite(o.price) ? ` @ ${fmt(o.price, 2)}` : "";
-      const sumHint = Number.isFinite(o.notional) ? ` · ${fmt(o.notional, 0)} ₽` : "";
-      const orderId = liveOrderRowId(o);
-      const canClose = liveOrderCloseable(o);
-      const closeLbl = closeAtMarketLabelForOrder(o);
-      const closeTitle = isLiveSandbox()
-        ? "Убрать фейк-сделку из журнала и пересчитать портфель и комиссию"
-        : (liveOrderCancellable(o, false)
-          ? "Снять неисполненную заявку с биржи"
-          : "Закрыть исполненную сделку противоположной заявкой по рынку");
-      const closeBtn = orderId
-        ? `<button type="button" class="live-order-cancel-btn" data-close-order="${orderId.replace(/"/g, "&quot;")}" title="${closeTitle}"${canClose ? "" : " disabled"}>${closeLbl}</button>`
-        : "";
-      return `<tr><td>${ticker}</td><td class="${dirCls}">${dir}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${status}</td><td>${when ? new Date(when).toLocaleString("ru-RU") : "—"}</td><td class="live-order-col-cancel">${closeBtn}</td></tr>`;
-    }).join("");
-    el.innerHTML = `<table><thead><tr><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>Время</th><th class="live-order-col-cancel">Действие</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function syncPageVersionBadge() {
@@ -2490,10 +2657,6 @@ body.calc-running .help-ftr{opacity:.75;}
       commissionLabel.textContent = sandbox
         ? `Комиссии (фейк, модель %), ${RUB_SIGN}`
         : `Комиссии уплачено (реально), ${RUB_SIGN}`;
-    }
-    const ordersHead = panel?.querySelector(".live-trading-orders-head");
-    if (ordersHead) {
-      ordersHead.textContent = sandbox ? "Заявки (фейк, симуляция)" : "Заявки в реальном времени";
     }
     if (select) select.classList.toggle("account-mode-select--live", isLive);
     if (label) label.classList.toggle("account-mode--live", isLive);
@@ -3666,7 +3829,50 @@ body.calc-running .help-ftr{opacity:.75;}
       o.tradeMatches = fill.tradeMatches ? fill.tradeMatches.map((m) => ({ ...m })) : o.tradeMatches;
       o.tradePnl = fill.tradePnl ?? o.tradePnl;
       o.matchMode = fill.matchMode || o.matchMode;
+      o.openLegIds = fill.openLegIds ? fill.openLegIds.slice() : o.openLegIds;
     }
+  }
+
+  /**
+   * Убрать из журнала фейк-заявок пары открытие↔закрытие, если лоты полностью списаны (FIFO/LIFO).
+   * Ledger остаётся append-only для пересчёта cash; чистится только sb.orders (UI).
+   */
+  function compactSandboxOrderJournal(sb) {
+    if (!Array.isArray(sb.orders) || !sb.orders.length) return;
+    if (!Array.isArray(sb.ledger) || !sb.ledger.length) return;
+
+    const openLegIds = new Set();
+    for (const legs of sb.openLegs?.values() || []) {
+      for (const leg of legs) openLegIds.add(leg.legId);
+    }
+
+    const legToOpenOrder = new Map();
+    for (const fill of sb.ledger) {
+      if (!fill.orderId) continue;
+      for (const legId of fill.openLegIds || []) {
+        if (legId != null) legToOpenOrder.set(legId, fill.orderId);
+      }
+    }
+
+    const ordersToRemove = new Set();
+
+    for (const [legId, orderId] of legToOpenOrder) {
+      if (!openLegIds.has(legId)) ordersToRemove.add(orderId);
+    }
+
+    for (const fill of sb.ledger) {
+      if (!fill.orderId) continue;
+      const role = fill.tradeRole;
+      if (role !== "close_long" && role !== "close_short" && role !== "flip") continue;
+      const matches = fill.tradeMatches || [];
+      if (!matches.length) continue;
+      const matchedClosed = matches.every((m) => m.legId != null && !openLegIds.has(m.legId));
+      const openedStillLive = (fill.openLegIds || []).some((id) => openLegIds.has(id));
+      if (matchedClosed && !openedStillLive) ordersToRemove.add(fill.orderId);
+    }
+
+    if (!ordersToRemove.size) return;
+    sb.orders = sb.orders.filter((o) => !ordersToRemove.has(o.orderId));
   }
 
   /** Восстановить ledger из старых заявок (миграция сессий без ledger). */
@@ -3726,9 +3932,11 @@ body.calc-running .help-ftr{opacity:.75;}
       fill.tradeRole = meta.role;
       fill.tradeMatches = meta.matches ? meta.matches.map((m) => ({ ...m })) : [];
       fill.tradePnl = meta.pnlTotal;
+      if (meta.legIds?.length) fill.openLegIds = meta.legIds.slice();
     }
     copySandboxReplayToState(sb, ctx);
     syncSandboxOrdersTradeMetaFromLedger(sb);
+    compactSandboxOrderJournal(sb);
   }
 
   function applySandboxLedgerFill(ctx, fill) {
@@ -3736,7 +3944,7 @@ body.calc-running .help-ftr{opacity:.75;}
     const price = +fill.price;
     const fee = +fill.fee || 0;
     if (!signedPieces || !Number.isFinite(price)) {
-      return { role: null, matches: [], pnlTotal: 0 };
+      return { role: null, matches: [], pnlTotal: 0, legIds: [] };
     }
     const notional = Math.abs(signedPieces) * price;
     if (signedPieces > 0) {
@@ -3879,13 +4087,15 @@ body.calc-running .help-ftr{opacity:.75;}
   function pushSandboxLeg(sb, key, side, pieces, price) {
     ensureSandboxOpenLegs(sb);
     if (!sb.openLegs.has(key)) sb.openLegs.set(key, []);
+    const legId = allocSandboxLegId(sb);
     sb.openLegs.get(key).push({
-      legId: allocSandboxLegId(sb),
+      legId,
       side,
       pieces,
       price,
       openedAt: new Date().toISOString()
     });
+    return legId;
   }
 
   /**
@@ -4139,7 +4349,8 @@ body.calc-running .help-ftr{opacity:.75;}
         tradePnl: fill?.tradePnl,
         matchMode: sandboxMatchMode(),
         signedPieces: isShort ? pieces : -pieces,
-        lot: openPos.lot
+        lot: openPos.lot,
+        openLegIds: fill?.openLegIds
       });
       recordLiveOrderMarker(openPos.sec || ticker, direction, "market", { lots, price });
     }
@@ -4176,9 +4387,12 @@ body.calc-running .help-ftr{opacity:.75;}
       tradePnl: trade.tradePnl,
       matchMode: trade.matchMode || sandboxMatchMode(),
       signedPieces: trade.signedPieces,
-      lot: trade.lot
+      lot: trade.lot,
+      openLegIds: trade.openLegIds ? trade.openLegIds.slice() : null
     });
     if (sb.orders.length > 200) sb.orders.length = 200;
+    compactSandboxOrderJournal(sb);
+    upsertTradeHistoryFromOrder(sb.orders[0], "sandbox");
     return orderId;
   }
 
@@ -4209,6 +4423,7 @@ body.calc-running .help-ftr{opacity:.75;}
     const isNewest = newest && liveOrderRowId(newest) === orderId;
     if (isNewest && order.revertSnap) {
       restoreSandboxSnapshot(sb, order.revertSnap);
+      markTradeHistoryCancelled(orderId);
       sb.orders.splice(idx, 1);
     } else {
       const invDir = isOrderBuy(order) ? "ORDER_DIRECTION_SELL" : "ORDER_DIRECTION_BUY";
@@ -4218,6 +4433,7 @@ body.calc-running .help-ftr{opacity:.75;}
         orderType: "market",
         skipRecord: true
       });
+      markTradeHistoryCancelled(orderId);
       sb.orders.splice(idx, 1);
     }
     await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
@@ -4234,6 +4450,7 @@ body.calc-running .help-ftr{opacity:.75;}
         orderId: order.orderId,
         orderRequestId: order.orderRequestId || order.orderId
       });
+      markTradeHistoryCancelled(liveOrderRowId(order));
       return;
     }
     const invDir = isOrderBuy(order) ? "ORDER_DIRECTION_SELL" : "ORDER_DIRECTION_BUY";
@@ -4256,7 +4473,11 @@ body.calc-running .help-ftr{opacity:.75;}
     const orders = isLiveSandbox()
       ? ensureSandboxState().orders
       : (state.live.orders || []);
-    const order = orders.find((o) => liveOrderRowId(o) === String(orderId));
+    let order = orders.find((o) => liveOrderRowId(o) === String(orderId));
+    if (!order) {
+      const hist = ensureLiveTradeHistory().find((h) => h.id === String(orderId));
+      order = hist?.sourceOrder || hist;
+    }
     if (!order) throw new Error("Заявка не найдена.");
     if (!liveOrderCloseable(order)) throw new Error("Заявку нельзя закрыть.");
     if (isLiveSandbox()) {
@@ -4310,10 +4531,10 @@ body.calc-running .help-ftr{opacity:.75;}
     const options = opts || {};
     const key = sandboxPosKey(pos.market, pos.ticker);
     const hadOpen = sb.open.has(key) && (sb.open.get(key)?.pieces || 0) > 0;
-    pushSandboxLeg(sb, key, side, pieces, price);
+    const legId = pushSandboxLeg(sb, key, side, pieces, price);
     const row = rebuildSandboxOpenFromLegs(sb, key, pos);
     if (!options.skipNotify && !hadOpen && row) notifySandboxPositionOpen(row, price, pieces);
-    return row;
+    return legId;
   }
 
   /**
@@ -4324,7 +4545,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function applySandboxSignedDelta(sb, pos, signedPieceDelta, price, opts) {
     const options = opts || {};
     const delta = Math.trunc(+signedPieceDelta || 0);
-    if (!delta) return { role: null, matches: [], pnlTotal: 0 };
+    if (!delta) return { role: null, matches: [], pnlTotal: 0, legIds: [] };
     const key = sandboxPosKey(pos.market, pos.ticker);
     migrateSandboxOpenToLegs(sb, key);
     const cur = sb.open.get(key);
@@ -4335,16 +4556,17 @@ body.calc-running .help-ftr{opacity:.75;}
     let role = null;
     let matches = [];
     let pnlTotal = 0;
+    let legIds = [];
 
     if (curSigned === 0) {
       if (delta > 0) {
-        openSandboxPosition(sb, pos, "long", delta, price, options);
+        legIds = [openSandboxPosition(sb, pos, "long", delta, price, options)];
         role = "open_long";
       } else {
-        openSandboxPosition(sb, pos, "short", -delta, price, options);
+        legIds = [openSandboxPosition(sb, pos, "short", -delta, price, options)];
         role = "open_short";
       }
-      return { role, matches, pnlTotal };
+      return { role, matches, pnlTotal, legIds };
     }
 
     const curSide = cur.side;
@@ -4358,13 +4580,13 @@ body.calc-running .help-ftr{opacity:.75;}
       matches = consumed.matches;
       pnlTotal = consumed.pnlTotal;
       role = curSide === "short" ? "close_short" : "close_long";
-      return { role, matches, pnlTotal };
+      return { role, matches, pnlTotal, legIds };
     }
 
     if (Math.sign(newSigned) === Math.sign(curSigned)) {
       if (Math.abs(newSigned) > Math.abs(curSigned)) {
         const addPieces = Math.abs(newSigned) - Math.abs(curSigned);
-        pushSandboxLeg(sb, key, curSide, addPieces, price);
+        legIds = [pushSandboxLeg(sb, key, curSide, addPieces, price)];
         rebuildSandboxOpenFromLegs(sb, key, pos);
         role = curSide === "short" ? "add_short" : "add_long";
       } else {
@@ -4378,7 +4600,7 @@ body.calc-running .help-ftr{opacity:.75;}
         pnlTotal = consumed.pnlTotal;
         role = curSide === "short" ? "close_short" : "close_long";
       }
-      return { role, matches, pnlTotal };
+      return { role, matches, pnlTotal, legIds };
     }
 
     const consumed = consumeSandboxLegs(sb, key, curSide, cur.pieces, price, pos, {
@@ -4390,9 +4612,9 @@ body.calc-running .help-ftr{opacity:.75;}
     pnlTotal = consumed.pnlTotal;
     const flipPieces = Math.abs(newSigned);
     const flipSide = newSigned > 0 ? "long" : "short";
-    openSandboxPosition(sb, pos, flipSide, flipPieces, price, { ...options, skipNotify: true });
+    legIds = [openSandboxPosition(sb, pos, flipSide, flipPieces, price, { ...options, skipNotify: true })];
     role = "flip";
-    return { role, matches, pnlTotal };
+    return { role, matches, pnlTotal, legIds };
   }
 
   /**
@@ -4484,7 +4706,8 @@ body.calc-running .help-ftr{opacity:.75;}
         tradePnl: fill?.tradePnl,
         matchMode: sandboxMatchMode(),
         signedPieces: pieceDelta,
-        lot
+        lot,
+        openLegIds: fill?.openLegIds
       });
     }
     if (!opts.skipRecord) {
@@ -5284,11 +5507,12 @@ body.calc-running .help-ftr{opacity:.75;}
   function drawLiveEquityPlaceholders() {
     const box = $("calc-chart-equity");
     if (!box) return;
+    const catalogKeys = equityCatalogLogicKeys();
     const activeKeys = selectedEquityLogicKeys();
     const totalBlock = activeKeys.length
       ? `<div class="chart-equity-total"><p class="chart-sec-title">${totalEquityTitle(activeKeys)}</p><div class="chart-mini-empty">Общий equity — ждём свечи…</div></div>`
-      : `<p class="note">Общий equity: выберите хотя бы одну логику L1…L5.</p>`;
-    const logicBlocks = LOGIC_EQUITY_KEYS.map((key) => {
+      : `<p class="note">Общий equity: выберите хотя бы одну логику в списке «Логика».</p>`;
+    const logicBlocks = catalogKeys.map((key) => {
       const selected = activeKeys.includes(key);
       const heading = logicChartHeading(key, selected);
       const absentNote = !selected
@@ -7530,6 +7754,123 @@ ${totalBlock}
 
   // === Выбор логики (calc-logic, множественный) ===
 
+  const DEFAULT_LOGIC_LINE_KEYS = [
+    "L5", "L1", "L2", "L3", "L4",
+    "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
+  ];
+
+  /** Подпись логики в списке выбора. */
+  function logicDisplayName(id) {
+    if (state.logicLabels?.[id]) return state.logicLabels[id];
+    const meta = E.BUILTIN_META.find((m) => m.id === id || m.key === id);
+    if (meta?.name) return meta.name;
+    return id;
+  }
+
+  /** Ключи каталога: дефолтные L/SMA + пользовательские U* из customLines. */
+  function ensureLogicLineKeys() {
+    if (!Array.isArray(state.logicLineKeys) || !state.logicLineKeys.length) {
+      state.logicLineKeys = DEFAULT_LOGIC_LINE_KEYS.slice();
+    }
+    const seen = new Set(state.logicLineKeys);
+    for (const k of DEFAULT_LOGIC_LINE_KEYS) {
+      if (!seen.has(k)) {
+        state.logicLineKeys.push(k);
+        seen.add(k);
+      }
+    }
+    for (const k of Object.keys(state.customLines || {})) {
+      if (!seen.has(k)) {
+        state.logicLineKeys.push(k);
+        seen.add(k);
+      }
+    }
+  }
+
+  function ensureDefaultLogicLines() {
+    for (const k of DEFAULT_LOGIC_LINE_KEYS) {
+      if (state.customLines[k] == null && E.DEFAULT_LOGIC_LINES[k] != null) {
+        state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
+      }
+    }
+    for (const k of ["sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"]) {
+      const line = state.customLines[k];
+      if (line && /SmaSpread|SmaCorridor/i.test(line) && E.DEFAULT_LOGIC_LINES[k]) {
+        state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
+      }
+    }
+  }
+
+  function logicLineText(logicId) {
+    return state.customLines?.[logicId] ?? E.DEFAULT_LOGIC_LINES?.[logicId] ?? "";
+  }
+
+  function normalizeLogicKey(raw) {
+    const s = String(raw || "").trim().replace(/\s+/g, "_");
+    if (!s) return "";
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(s)) return "";
+    return s;
+  }
+
+  function allocNextUserLogicKey() {
+    let n = 1;
+    while (state.logicLineKeys.includes(`U${n}`) || state.customLines[`U${n}`]) n += 1;
+    return `U${n}`;
+  }
+
+  function selectLogicInCalc(key) {
+    const sel = $("calc-logic");
+    if (!sel || !key) return;
+    let found = false;
+    for (const o of sel.options) {
+      if (o.value === key) {
+        o.selected = true;
+        found = true;
+      }
+    }
+    if (found) syncLogicSelectedHint();
+  }
+
+  function addUserLogicLine(lineText, srcKey) {
+    readLogicEditor();
+    const key = allocNextUserLogicKey();
+    const template = srcKey
+      ? (state.customLines[srcKey] || "")
+      : (state.customLines.L5 || E.DEFAULT_LOGIC_LINES.L5 || "");
+    state.customLines[key] = String(lineText ?? "").trim() ? String(lineText) : template;
+    if (srcKey) {
+      state.logicLabels[key] = `${logicDisplayName(srcKey)} (копия)`;
+    } else {
+      state.logicLabels[key] = key;
+    }
+    state.logicLineKeys.push(key);
+    fillLogicEditor();
+    fillLogicSelect();
+    selectLogicInCalc(key);
+    saveConfig();
+    invalidateFormChange();
+    $("extra-params")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const ta = document.querySelector(`#logic-lines textarea[data-key="${key}"]`);
+    if (ta) {
+      try { ta.focus(); } catch (_) { /* ignore */ }
+    }
+  }
+
+  function promptAddLogicLine() {
+    const line = window.prompt(
+      "Строка логики Op/Cl для новой записи.\nМожно вставить сразу или оставить пусто — отредактируете в блоке ниже (шаблон — L5).",
+      ""
+    );
+    if (line === null) return;
+    addUserLogicLine(line, null);
+  }
+
+  function copyLogicLine(srcKey) {
+    if (!srcKey) return;
+    readLogicEditor();
+    addUserLogicLine(state.customLines[srcKey] || "", srcKey);
+  }
+
   /** Функция: id выбранных логик в порядке приоритета (верх списка = первая). */
   function selectedLogicIds() {
     const sel = $("calc-logic");
@@ -7580,10 +7921,9 @@ ${totalBlock}
     if (!ids.length) {
       el.textContent = "— не выбрано (по умолчанию L5)";
     } else if (ids.length === 1) {
-      const name = E.BUILTIN_META.find((m) => m.id === ids[0])?.name || ids[0];
-      el.textContent = `Выбрана: ${name}`;
+      el.textContent = `Выбрана: ${logicDisplayName(ids[0])}`;
     } else {
-      const names = ids.map((id) => E.BUILTIN_META.find((m) => m.id === id)?.name || id);
+      const names = ids.map((id) => logicDisplayName(id));
       el.textContent = `Выбрано ${ids.length} (порядок): ${names.join(" → ")}`;
     }
     syncLogicSelectSize();
@@ -7594,15 +7934,17 @@ ${totalBlock}
     return E.resolveLogicSpecStack(selectedLogicIds(), state.customLines, p, indicators);
   }
 
-  /** Процедура: заполнить #calc-logic из BUILTIN_META, сохранить текущий выбор. */
+  /** Процедура: заполнить #calc-logic из каталога логик. */
   function fillLogicSelect() {
+    ensureLogicLineKeys();
+    ensureDefaultLogicLines();
     const sel = $("calc-logic");
     const prev = selectedLogicIds();
     sel.innerHTML = "";
-    for (const m of E.BUILTIN_META) {
+    for (const key of state.logicLineKeys) {
       const o = document.createElement("option");
-      o.value = m.id;
-      o.textContent = m.name;
+      o.value = key;
+      o.textContent = logicDisplayName(key);
       sel.appendChild(o);
     }
     const allowed = new Set([...sel.options].map((o) => o.value));
@@ -7638,14 +7980,16 @@ ${totalBlock}
     const el = $("position-sl-hint");
     if (!el) return;
     const ids = selectedLogicIds();
-    const meta = E.BUILTIN_META.find((m) => m.id === primaryLogicId());
+    const line = logicLineText(primaryLogicId());
     let text = "";
     if (ids.length > 1) {
       text = `Выбрано ${ids.length} логик: на вход проверяются по порядку сверху вниз; выход и SL/TP — у логики, открывшей позицию.`;
-    } else if (meta?.type === "sma_spread") {
-      text = "Логика «Выше/Ниже SMA» — упрощённая модель; стопы по ATR учитываются при ненулевой позиции.";
-    } else if (meta?.type === "logic_line") {
-      text = "Логики L1…L5: стопы позиции по ATR (@SL / @TP) применяются при открытой позиции.";
+    } else if (/SMA\s*\([^)]*(?:Spread|Corridor)=/i.test(line)) {
+      text = "SMA(…;Spread=…)(Trend|Anti): коридор ±K×ATR вокруг SMA; внутри — без сделок. K в строке (напр. 1ATR) или @SmaCorridor из поля «Коридор SMA».";
+    } else if (/SMA\s*\([^)]*Vol/i.test(line)) {
+      text = "SMA(…;Vol)(Ab|Bl): объём сделки ∝ |Close−SMA|; Ab — покупка выше SMA, Bl — ниже. SL/TP — @SL / @TP.";
+    } else if (line.trim()) {
+      text = "Строка Op/Cl: стопы позиции по ATR (@SL / @TP) при открытой позиции.";
     }
     el.textContent = text;
     el.hidden = !text;
@@ -7662,14 +8006,36 @@ ${totalBlock}
   }
 
   function fillLogicEditor() {
+    ensureLogicLineKeys();
+    ensureDefaultLogicLines();
     const box = $("logic-lines");
+    if (!box) return;
     box.innerHTML = "";
-    for (const key of ["L5", "L1", "L2", "L3", "L4"]) {
+    for (const key of state.logicLineKeys) {
       const wrap = document.createElement("div");
-      wrap.innerHTML = `<label>${key}</label>`;
+      wrap.className = "logic-line-row";
+      const head = document.createElement("div");
+      head.className = "logic-line-head";
+      const label = document.createElement("label");
+      label.htmlFor = `logic-ta-${key}`;
+      const title = logicDisplayName(key);
+      label.textContent = title === key ? key : `${key} — ${title}`;
+      const actions = document.createElement("div");
+      actions.className = "logic-line-actions";
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "calc-btn calc-btn-secondary logic-line-copy-btn";
+      copyBtn.dataset.copyLogic = key;
+      copyBtn.title = "Копировать строку в новую логику";
+      copyBtn.textContent = "Копировать в новую";
+      actions.appendChild(copyBtn);
+      head.appendChild(label);
+      head.appendChild(actions);
       const ta = document.createElement("textarea");
+      ta.id = `logic-ta-${key}`;
       ta.dataset.key = key;
-      ta.value = state.customLines[key] || E.DEFAULT_LOGIC_LINES[key];
+      ta.value = state.customLines[key] ?? E.DEFAULT_LOGIC_LINES[key] ?? "";
+      wrap.appendChild(head);
       wrap.appendChild(ta);
       box.appendChild(wrap);
     }
@@ -8093,7 +8459,7 @@ ${totalBlock}
     const left = 68, right = 28, top = compact ? 24 : 28, bottom = 58;
     const plotW = w - left - right;
     const plotH = h - top - bottom;
-    const priceKeys = ["close", "sma", "linregUp", "linregDn", "linregMid", "bollingerUp", "bollingerDn", "bollingerMid", "vwap"];
+    const priceKeys = ["close", "sma", "smaUpper", "smaLower", "linregUp", "linregDn", "linregMid", "bollingerUp", "bollingerDn", "bollingerMid", "vwap"];
     let vals = rows.flatMap((r) => priceKeys.map((k) => r?.[k]).filter((v) => v != null));
     if (!vals.length) vals = rows.map((r) => r?.close).filter((v) => v != null);
     if (!vals.length) return "";
@@ -8122,6 +8488,8 @@ ${totalBlock}
       `<text x="${x(i).toFixed(1)}" y="${h - 10}" text-anchor="middle" font-size="9" fill="#64748b" font-family="Consolas,monospace">${axisTime(rows[i]?.time)}</text>`).join("");
     const indLines = [
       rows[0]?.sma != null ? `<polyline fill="none" stroke="#d97706" stroke-width="1" stroke-dasharray="5 4" opacity=".85" points="${line("sma")}"/>` : "",
+      rows[0]?.smaUpper != null ? `<polyline fill="none" stroke="#f59e0b" stroke-width=".9" stroke-dasharray="2 4" opacity=".75" points="${line("smaUpper")}"/>` : "",
+      rows[0]?.smaLower != null ? `<polyline fill="none" stroke="#f59e0b" stroke-width=".9" stroke-dasharray="2 4" opacity=".75" points="${line("smaLower")}"/>` : "",
       rows[0]?.linregMid != null ? `<polyline fill="none" stroke="#7c3aed" stroke-width="1" opacity=".7" points="${line("linregMid")}"/>` : "",
       rows[0]?.linregUp != null ? `<polyline fill="none" stroke="#a78bfa" stroke-width=".9" stroke-dasharray="3 3" opacity=".65" points="${line("linregUp")}"/>` : "",
       rows[0]?.linregDn != null ? `<polyline fill="none" stroke="#a78bfa" stroke-width=".9" stroke-dasharray="3 3" opacity=".65" points="${line("linregDn")}"/>` : "",
@@ -8163,18 +8531,41 @@ ${markers}
 </svg>`;
   }
 
-  const LOGIC_EQUITY_KEYS = ["L5", "L1", "L2", "L3", "L4"];
-  const LOGIC_EQUITY_COLORS = { L5: "#047857", L1: "#2563eb", L2: "#d97706", L3: "#7c3aed", L4: "#0891b2" };
+  const LOGIC_EQUITY_COLORS = {
+    L5: "#047857",
+    L1: "#2563eb",
+    L2: "#d97706",
+    L3: "#7c3aed",
+    L4: "#0891b2",
+    sma_below: "#0d9488",
+    sma_above: "#ea580c",
+    sma_corridor_trend: "#4f46e5",
+    sma_corridor_anti: "#db2777"
+  };
+  const EQUITY_EXTRA_PALETTE = ["#64748b", "#78716c", "#71717a", "#57534e", "#0369a1", "#be123c"];
+  const EQUITY_RUN_TYPES = new Set(["logic_line", "sma_spread", "sma_corridor"]);
   const EQUITY_STOPPER_OFF = { useSl: false, useTp: false, slMult: 0, tpMult: 0, atrLen: 14, refEquity: 0 };
 
+  /** Все логики каталога для блока equity, порядок как в «Логика». */
+  function equityCatalogLogicKeys() {
+    ensureLogicLineKeys();
+    return state.logicLineKeys.slice();
+  }
+
+  function equityLogicColor(key) {
+    if (LOGIC_EQUITY_COLORS[key]) return LOGIC_EQUITY_COLORS[key];
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+    return EQUITY_EXTRA_PALETTE[Math.abs(h) % EQUITY_EXTRA_PALETTE.length];
+  }
+
   function logicEquityLabel(key) {
-    const meta = E.BUILTIN_META.find((m) => m.key === key || m.id === key);
-    return meta?.name || key;
+    return logicDisplayName(key);
   }
 
   function selectedEquityLogicKeys() {
     const selected = new Set(selectedLogicIds());
-    return LOGIC_EQUITY_KEYS.filter((key) => selected.has(key));
+    return equityCatalogLogicKeys().filter((key) => selected.has(key));
   }
 
   function totalEquityTitle(keys) {
@@ -8319,9 +8710,9 @@ ${pointDot}
     if (!times.length) return null;
     const runs = {};
     const indicators = indicatorSelection();
-    for (const key of LOGIC_EQUITY_KEYS) {
+    for (const key of equityCatalogLogicKeys()) {
       const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
-      if (!spec || spec.type !== "logic_line") continue;
+      if (!spec || spec.disabled || !EQUITY_RUN_TYPES.has(spec.type)) continue;
       const { perSec } = E.runMulti(state.packs, spec, a, b, p, vol, EQUITY_STOPPER_OFF, finrespRunOptions());
       const rows = E.buildPortfolioEquityRows(perSec, times);
       runs[key] = { rows, finresp: rows.length ? rows.at(-1).eq : 0 };
@@ -8335,6 +8726,15 @@ ${pointDot}
       time,
       eq: active.reduce((sum, key) => sum + (runs[key]?.rows[i]?.eq ?? 0), 0)
     }));
+  }
+
+  function equityWindowNote(a, b) {
+    const pack = refPack();
+    if (!pack.length || a == null || b == null) return "";
+    const n = Math.max(0, b - a + 1);
+    const t0 = pack[a]?.time ? axisTime(pack[a].time) : "—";
+    const t1 = pack[b]?.time ? axisTime(pack[b].time) : "—";
+    return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
   }
 
   function tryRefreshEquityCharts() {
@@ -8357,6 +8757,7 @@ ${pointDot}
       return;
     }
     const data = calcLogicEquityRuns(a, b);
+    const catalogKeys = equityCatalogLogicKeys();
     const activeKeys = selectedEquityLogicKeys();
     const selectedSet = new Set(activeKeys);
 
@@ -8364,9 +8765,9 @@ ${pointDot}
       syncChartBox(box, "");
       return;
     }
-    if (!LOGIC_EQUITY_KEYS.some((key) => data.runs[key]?.rows?.length)) {
+    if (!catalogKeys.some((key) => data.runs[key]?.rows?.length)) {
       syncChartBox(box, !activeKeys.length
-        ? `<p class="note">Выберите хотя бы одну логику L1…L5 для расчёта FINRESP.</p>`
+        ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для общего equity.</p>`
         : "");
       return;
     }
@@ -8379,7 +8780,7 @@ ${pointDot}
       return r;
     };
 
-    const refKey = LOGIC_EQUITY_KEYS.find((key) => runs[key]?.rows?.length);
+    const refKey = catalogKeys.find((key) => runs[key]?.rows?.length);
     const refRows = refKey ? processEquityRows(runs[refKey]?.rows || [], refKey) : [];
 
     const totalSource = activeKeys.length
@@ -8391,7 +8792,7 @@ ${pointDot}
       configMarkersForRows(totalRows)
     );
 
-    const logicBlocks = LOGIC_EQUITY_KEYS.map((key) => {
+    const logicBlocks = catalogKeys.map((key) => {
       const selected = selectedSet.has(key);
       const heading = logicChartHeading(key, selected);
       const absentNote = !selected
@@ -8409,7 +8810,7 @@ ${pointDot}
       }
       const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected };
       const fin = rows.at(-1).eq;
-      const lineColor = selected ? LOGIC_EQUITY_COLORS[key] : undefined;
+      const lineColor = selected ? equityLogicColor(key) : undefined;
       const svg = buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor);
       if (!svg) return "";
       const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
@@ -8426,7 +8827,7 @@ ${pointDot}
         totalBlock = `<div class="chart-equity-total"><p class="chart-sec-title">${totalEquityTitle(activeKeys)}</p>${totalSvg}</div>`;
       }
     } else if (!activeKeys.length) {
-      totalBlock = `<p class="note">Общий equity: выберите хотя бы одну логику L1…L5.</p>`;
+      totalBlock = `<p class="note">Общий equity: выберите хотя бы одну логику в списке «Логика».</p>`;
     }
 
     const markerNote = state.equityConfigMarkers?.length
@@ -8441,6 +8842,7 @@ ${pointDot}
 
     syncChartBox(box, `<div class="chart-equity-section">
 <p class="chart-equity-section-title">${sectionTitle}</p>
+${equityWindowNote(a, b)}
 ${liveNote}${markerNote}
 ${totalBlock}
 <div class="chart-stack">${logicBlocks.join("")}</div>
@@ -9119,6 +9521,12 @@ ${totalBlock}
     updatePositionSlHint();
     invalidateFormChange();
   });
+  $("logic-line-add")?.addEventListener("click", () => { promptAddLogicLine(); });
+  $("logic-lines")?.addEventListener("click", (ev) => {
+    const btn = ev.target?.closest?.("[data-copy-logic]");
+    if (!btn) return;
+    copyLogicLine(btn.getAttribute("data-copy-logic"));
+  });
   $("calc-logic").addEventListener("change", () => {
     updatePositionSlHint();
     syncLogicSelectedHint();
@@ -9127,7 +9535,7 @@ ${totalBlock}
   $("vol-type").addEventListener("change", () => { syncVolumeFields(); invalidateFormChange(); });
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
-  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-lr", "stopper-ref"].forEach((id) => {
+  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-lr", "param-sma-corridor", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
   });
