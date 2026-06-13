@@ -360,6 +360,9 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 .live-manual-order{margin:0 0 .75rem;border:1px solid #fecaca;border-radius:8px;background:#fffefb;}
 .live-manual-order-summary{cursor:pointer;padding:.55rem .7rem;font-size:.88rem;font-weight:700;color:#7f1d1d;list-style:none;}
 .live-manual-order-summary::-webkit-details-marker{display:none;}
+.live-panel-summary{display:flex;justify-content:space-between;align-items:center;gap:1rem;}
+.live-panel-summary-title{flex:1 1 auto;}
+.live-panel-summary .extra-params-toggle{color:#7f1d1d;font-size:.82rem;}
 .live-manual-order-body{padding:0 .7rem .7rem;}
 .live-manual-order-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem .65rem;align-items:end;margin-bottom:.55rem;}
 .live-manual-order-grid label{display:flex;flex-direction:column;gap:.2rem;font-size:.78rem;font-weight:600;color:#7f1d1d;}
@@ -547,7 +550,10 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="live-trading-stats-hint" id="live-trading-stats-hint">Портфель = деньги (свободные RUB) + стоимость открытых позиций по текущим ценам.</p>
 </div>
 <details class="live-manual-order" id="live-manual-order-panel">
-<summary class="live-manual-order-summary">Заявка</summary>
+<summary class="live-manual-order-summary live-panel-summary">
+<span class="live-panel-summary-title">Заявка</span>
+<a href="#" class="extra-params-toggle" id="live-manual-order-toggle" role="button">Развернуть</a>
+</summary>
 <div class="live-manual-order-body">
 <div class="live-manual-order-grid">
 <label>Инструмент<select id="live-manual-sec"><option value="">— выберите бумаги в калькуляторе —</option></select></label>
@@ -561,7 +567,10 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </details>
 <details class="live-order-book" id="live-order-book-panel">
-<summary class="live-manual-order-summary">Стакан</summary>
+<summary class="live-manual-order-summary live-panel-summary">
+<span class="live-panel-summary-title">Стакан</span>
+<a href="#" class="extra-params-toggle" id="live-order-book-toggle" role="button">Развернуть</a>
+</summary>
 <div class="live-order-book-body">
 <div class="live-order-book-head" id="live-order-book-head">
 <label class="live-order-book-sec-label" for="live-order-book-sec">Инструмент<select id="live-order-book-sec"><option value="">— выберите —</option></select></label>
@@ -572,7 +581,10 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </details>
 <details class="live-order-book live-positions-panel" id="live-positions-panel">
-<summary class="live-manual-order-summary">Нереализованные позиции</summary>
+<summary class="live-manual-order-summary live-panel-summary">
+<span class="live-panel-summary-title">Нереализованные позиции</span>
+<a href="#" class="extra-params-toggle" id="live-positions-toggle" role="button">Развернуть</a>
+</summary>
 <div class="live-order-book-body">
 <p class="live-order-book-meta" id="live-positions-meta">Нереализованные позиции счёта (робот и ручные заявки). ПКМ или долгое нажатие по строке — закрыть по рынку (лонг или шорт).</p>
 <div id="live-positions-table" class="live-order-book-table"><p class="live-order-book-empty">Разверните блок в режиме live.</p></div>
@@ -583,9 +595,12 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </details>
 <details class="live-order-book live-trade-history-panel" id="live-trade-history-panel">
-<summary class="live-manual-order-summary">История сделок</summary>
+<summary class="live-manual-order-summary live-panel-summary">
+<span class="live-panel-summary-title">История сделок</span>
+<a href="#" class="extra-params-toggle" id="live-trade-history-toggle" role="button">Развернуть</a>
+</summary>
 <div class="live-order-book-body">
-<p class="live-order-book-meta" id="live-trade-history-meta">Текущие заявки (исполнена / ожидает) и все сделки сессии. Фейк — зелёный фон, реал — розовый. ★ — покупка, ☆ — продажа; FINRESPΔ — результат закрытия (продажа лонга / покупка шорта).</p>
+<p class="live-order-book-meta" id="live-trade-history-meta">Журнал сессии: фейк — из симуляции; реал — исполненные операции брокера (GetOperations) и активные заявки. ★ покупка · ☆ продажа · FINRESPΔ: фейк — расчёт закрытия; реал — yield брокера на продаже.</p>
 <div id="live-trading-orders" class="live-trading-orders"><p class="live-trading-orders-empty">Разверните блок в режиме live.</p></div>
 </div>
 </details>
@@ -1347,7 +1362,8 @@ body.calc-running .help-ftr{opacity:.75;}
       obTrendCache: new Map(),
       positionsMenuIdx: null,
       manualPriceSec: "",
-      tradeHistory: []
+      tradeHistory: [],
+      brokerOperations: []
     },
     optim: {
       active: null,
@@ -2459,12 +2475,125 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   function tradeHistoryFinrespForOrder(o) {
-    if (Number.isFinite(o.tradePnl)) return o.tradePnl;
-    const role = o.tradeRole;
-    if (role === "close_long" || role === "close_short" || role === "flip") {
-      return Number.isFinite(o.tradePnl) ? o.tradePnl : null;
+    if (o.fake) {
+      const role = o.tradeRole;
+      if (role === "close_long" || role === "close_short" || role === "flip") {
+        return sandboxCloseFinrespNet(o);
+      }
+      return null;
+    }
+    if (!isOrderBuy(o)) {
+      if (Number.isFinite(o.brokerYield)) return o.brokerYield;
+      if (Number.isFinite(o.tradePnl)) return o.tradePnl;
     }
     return null;
+  }
+
+  function tbankOpTradeSide(op) {
+    const ot = String(op?.operationType || op?.type || "").toUpperCase();
+    if (!ot) return null;
+    if (ot.includes("SELL")) return "sell";
+    if (ot.includes("BUY")) return "buy";
+    return null;
+  }
+
+  function dedupeOptimisticRealTradeHistory(entry) {
+    if (!entry || entry.fake) return;
+    const hist = ensureLiveTradeHistory();
+    const t = Date.parse(entry.when || 0) || 0;
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const h = hist[i];
+      if (h.fake || String(h.id || "").startsWith("real-op-")) continue;
+      if (h.ticker !== entry.ticker || !!h.isBuy !== !!entry.isBuy) continue;
+      const ht = Date.parse(h.when || 0) || 0;
+      if (Math.abs(ht - t) < 180000) hist.splice(i, 1);
+    }
+  }
+
+  function upsertTradeHistoryFromTbankOperation(op) {
+    const side = op._histSide || tbankOpTradeSide(op);
+    if (!side) return;
+    const pieces = Math.abs(Math.trunc(+op.quantity || 0));
+    if (!pieces) return;
+    const price = Number.isFinite(op._histPrice) ? op._histPrice : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
+    const payment = moneyValueRub(op.payment);
+    const commission = Math.abs(moneyValueRub(op.commission) || 0);
+    const brokerYield = moneyValueRub(op.yield);
+    const ticker = op._histTicker || String(op.ticker || op.figi || "—").toUpperCase();
+    const lot = Math.max(1, +op._histLot || 1);
+    const lots = op._histLots ?? Math.max(1, piecesToLots(pieces, lot) || 1);
+    const isBuy = side === "buy";
+    const when = op.date || op._histDate || new Date().toISOString();
+    const entryOrder = {
+      orderId: `real-op-${op.id}`,
+      ticker,
+      sec: ticker,
+      direction: isBuy ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL",
+      lotsRequested: lots,
+      lotsExecuted: lots,
+      orderType: "ORDER_TYPE_MARKET",
+      executionReportStatus: "EXECUTION_REPORT_STATUS_FILL",
+      orderDate: when,
+      fake: false,
+      brokerOp: true,
+      price: Number.isFinite(price) ? price : null,
+      notional: Number.isFinite(payment) ? Math.abs(payment) : (Number.isFinite(price) ? pieces * price : null),
+      fee: commission,
+      brokerYield: Number.isFinite(brokerYield) ? brokerYield : null,
+      tradePnl: Number.isFinite(brokerYield) ? brokerYield : null,
+      instrumentId: op.instrumentUid || op.figi
+    };
+    upsertTradeHistoryFromOrder(entryOrder, "real");
+    dedupeOptimisticRealTradeHistory(tradeHistoryEntryFromOrder(entryOrder, "real"));
+  }
+
+  async function enrichBrokerOperationsForHistory(operations) {
+    const out = [];
+    const instCache = new Map();
+    for (const op of operations || []) {
+      const side = tbankOpTradeSide(op);
+      if (!side) continue;
+      const pieces = Math.abs(Math.trunc(+op.quantity || 0));
+      if (!pieces) continue;
+      const uid = op.instrumentUid || op.figi;
+      let meta = uid ? instCache.get(uid) : null;
+      if (uid && !meta) {
+        try {
+          meta = await tbankGetInstrumentById(uid);
+          if (meta) instCache.set(uid, meta);
+        } catch (_) { /* optional */ }
+      }
+      const lot = Math.max(1, +meta?.lot || 1);
+      const ticker = String(meta?.ticker || op.ticker || uid || "—").toUpperCase();
+      const isFuture = String(op.instrumentType || op.instrument_type || meta?.instrumentType || "").toLowerCase() === "futures";
+      op._histSide = side;
+      op._histTicker = ticker;
+      op._histLot = lot;
+      op._histLots = isFuture ? pieces : Math.max(1, piecesToLots(pieces, lot) || 1);
+      op._histPrice = moneyValueRub(op.price) || moneyValueToNumber(op.price);
+      op._histDate = op.date;
+      out.push(op);
+    }
+    return out;
+  }
+
+  async function syncRealTradeHistoryFromBroker() {
+    if (isLiveSandbox() || !state.tbank.token || !state.tbank.selectedAccountId) return;
+    const from = state.live.sessionStartedAt
+      || state.live.chartSession?.startedAt
+      || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    try {
+      const data = await tbankRequest("OperationsService/GetOperations", {
+        accountId: state.tbank.selectedAccountId,
+        from,
+        to: new Date().toISOString(),
+        state: "OPERATION_STATE_EXECUTED"
+      });
+      state.live.brokerOperations = await enrichBrokerOperationsForHistory(data.operations || []);
+      for (const op of state.live.brokerOperations) upsertTradeHistoryFromTbankOperation(op);
+    } catch (err) {
+      noteLiveTech("live-broker-ops", err.message, `account=${state.tbank.selectedAccountId || "—"}`);
+    }
   }
 
   function tradeHistoryEntryFromOrder(o, mode) {
@@ -2472,11 +2601,14 @@ body.calc-running .help-ftr{opacity:.75;}
     const isBuy = isOrderBuy(o);
     const status = fake
       ? sandboxOrderStatusLabel(o)
-      : liveOrderStatusLabel(o.executionReportStatus || o.orderState);
+      : (o.brokerOp ? "исполнена (брокер)" : liveOrderStatusLabel(o.executionReportStatus || o.orderState));
     const active = !fake && isLiveOrderActive(o);
     const finresp = tradeHistoryFinrespForOrder(o);
+    const histId = liveOrderRowId(o)
+      || (o.fillId != null ? `fill-${o.fillId}` : "")
+      || `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     return {
-      id: liveOrderRowId(o) || `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: histId,
       orderId: liveOrderRowId(o),
       ticker: o.ticker || o.sec || "—",
       direction: o.direction,
@@ -2493,6 +2625,8 @@ body.calc-running .help-ftr{opacity:.75;}
       mode: fake ? "sandbox" : "real",
       tradeRole: o.tradeRole || null,
       tradePnl: o.tradePnl,
+      brokerYield: o.brokerYield,
+      brokerOp: !!o.brokerOp,
       finresp,
       when: o.orderDate || o.createdAt || new Date().toISOString(),
       instrumentId: o.instrumentId,
@@ -2514,6 +2648,69 @@ body.calc-running .help-ftr{opacity:.75;}
     if (hist.length > 500) hist.length = 500;
   }
 
+  /** Одна строка журнала на каждое исполнение в песочнице (ledger append-only, без схлопывания). */
+  function upsertTradeHistoryFromSandboxFill(fill) {
+    if (!fill) return;
+    const signedPieces = Math.trunc(+fill.signedPieces || 0);
+    if (!signedPieces) return;
+    const lot = Math.max(1, +fill.lot || 1);
+    const lots = fill.lots ?? (fill.isFuture
+      ? Math.abs(signedPieces)
+      : Math.max(1, Math.round(Math.abs(signedPieces) / lot)));
+    const price = +fill.price;
+    const notional = Math.abs(signedPieces) * price;
+    const direction = fill.direction
+      || (signedPieces > 0 ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL");
+    upsertTradeHistoryFromOrder({
+      fillId: fill.fillId,
+      orderId: fill.orderId || (fill.fillId != null ? `fill-${fill.fillId}` : undefined),
+      ticker: fill.ticker,
+      sec: fill.sec,
+      direction,
+      lotsRequested: lots,
+      lotsExecuted: lots,
+      orderType: "ORDER_TYPE_MARKET",
+      executionReportStatus: "EXECUTION_REPORT_STATUS_FILL",
+      orderDate: fill.ts,
+      fake: true,
+      price,
+      notional,
+      fee: fill.fee,
+      instrumentId: fill.instrumentId,
+      market: fill.market,
+      tradeRole: fill.tradeRole,
+      tradeMatches: fill.tradeMatches,
+      tradePnl: fill.tradePnl,
+      matchMode: fill.matchMode,
+      signedPieces: fill.signedPieces
+    }, "sandbox");
+  }
+
+  function recordRealOrderToTradeHistory(apiResult, meta) {
+    if (!apiResult || !meta) return;
+    const lotsReq = Math.max(0, Math.floor(+(meta.lots || 0)));
+    const lotsExec = Math.max(0, Math.floor(+(apiResult.lotsExecuted ?? apiResult.lotsRequested ?? lotsReq)));
+    const lot = Math.max(1, +meta.lot || 1);
+    const price = Number.isFinite(meta.price) ? meta.price : null;
+    const notional = Number.isFinite(price) ? lotsExec * lot * price : null;
+    upsertTradeHistoryFromOrder({
+      orderId: apiResult.orderId || meta.orderId,
+      ticker: meta.ticker || meta.secForPrice,
+      sec: meta.secForPrice,
+      direction: meta.direction,
+      lotsRequested: lotsReq,
+      lotsExecuted: lotsExec,
+      orderType: meta.orderType === "limit" ? "ORDER_TYPE_LIMIT" : "ORDER_TYPE_MARKET",
+      executionReportStatus: apiResult.executionReportStatus || apiResult.orderState || "EXECUTION_REPORT_STATUS_FILL",
+      orderDate: apiResult.orderDate || apiResult.createdAt || new Date().toISOString(),
+      fake: false,
+      price,
+      notional,
+      instrumentId: meta.instrumentId,
+      market: meta.market
+    }, "real");
+  }
+
   function markTradeHistoryCancelled(orderId) {
     if (!orderId) return;
     const hist = ensureLiveTradeHistory();
@@ -2525,16 +2722,12 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   function syncTradeHistoryFromSources() {
-    for (const o of ensureSandboxState().orders || []) upsertTradeHistoryFromOrder(o, "sandbox");
-    for (const o of state.live.orders || []) upsertTradeHistoryFromOrder(o, "real");
-  }
-
-  function tradeHistoryCloseEnabled(entry, o) {
-    if (entry.status === "снята") return false;
-    if (entry.fake) {
-      return (ensureSandboxState().orders || []).some((x) => liveOrderRowId(x) === entry.id);
+    for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
+    if (isLiveSandbox()) return;
+    for (const op of state.live.brokerOperations || []) upsertTradeHistoryFromTbankOperation(op);
+    for (const o of state.live.orders || []) {
+      if (isLiveOrderActive(o)) upsertTradeHistoryFromOrder(o, "real");
     }
-    return liveOrderCloseable(o);
   }
 
   function renderTradeHistoryRow(entry) {
@@ -2555,24 +2748,10 @@ body.calc-running .help-ftr{opacity:.75;}
     if (Number.isFinite(entry.finresp)) {
       const cls = entry.finresp >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
       finrespCell = `<span class="${cls}">${entry.finresp >= 0 ? "+" : ""}${fmt(entry.finresp, 2)} ₽</span>`;
-    } else if (!entry.isBuy && entry.fake && entry.tradeRole?.startsWith("close")) {
-      finrespCell = '<span class="pos-muted">0</span>';
     }
     const rowCls = entry.fake ? "trade-row-fake" : "trade-row-real";
     const activeCls = entry.active ? " trade-row-active" : "";
-    const o = entry.sourceOrder || entry;
-    const orderId = entry.id;
-    const canClose = tradeHistoryCloseEnabled(entry, o);
-    const closeLbl = closeAtMarketLabelForOrder(o);
-    const closeTitle = entry.fake
-      ? "Убрать фейк-сделку из журнала и пересчитать портфель"
-      : (liveOrderCancellable(o, false)
-        ? "Снять неисполненную заявку с биржи"
-        : "Закрыть исполненную сделку противоположной заявкой по рынку");
-    const closeBtn = orderId
-      ? `<button type="button" class="live-order-cancel-btn" data-close-order="${orderId.replace(/"/g, "&quot;")}" title="${closeTitle}"${canClose ? "" : " disabled"}>${closeLbl}</button>`
-      : "";
-    return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${modeLabel}</td><td>${when}</td><td class="live-order-col-cancel">${closeBtn}</td></tr>`;
+    return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
   }
 
   function renderLiveOrdersPanel() {
@@ -2590,7 +2769,9 @@ body.calc-running .help-ftr{opacity:.75;}
       const nAct = hist.filter((h) => h.active).length;
       const nFake = hist.filter((h) => h.fake).length;
       const nReal = hist.filter((h) => !h.fake).length;
-      metaEl.textContent = `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — P/L закрытия.`;
+      metaEl.textContent = isLiveSandbox()
+        ? `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — P/L закрытия с комиссией (фейк).`
+        : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — на продаже yield брокера (если есть).`;
     }
     if (!hist.length) {
       el.innerHTML = isLiveSandbox()
@@ -2601,12 +2782,12 @@ body.calc-running .help-ftr{opacity:.75;}
     const active = hist.filter((h) => h.active);
     const done = hist.filter((h) => !h.active);
     const activeBlock = active.length
-      ? `<tr class="live-trade-history-subhead"><td colspan="10">Текущие заявки (не исполнены полностью)</td></tr>${active.map(renderTradeHistoryRow).join("")}`
+      ? `<tr class="live-trade-history-subhead"><td colspan="9">Текущие заявки (не исполнены полностью)</td></tr>${active.map(renderTradeHistoryRow).join("")}`
       : "";
     const doneBlock = done.length
-      ? `${active.length ? '<tr class="live-trade-history-subhead"><td colspan="10">Исполненные и завершённые</td></tr>' : ""}${done.map(renderTradeHistoryRow).join("")}`
+      ? `${active.length ? '<tr class="live-trade-history-subhead"><td colspan="9">Исполненные и завершённые</td></tr>' : ""}${done.map(renderTradeHistoryRow).join("")}`
       : "";
-    el.innerHTML = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Режим</th><th>Время</th><th class="live-order-col-cancel">Действие</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
+    el.innerHTML = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Режим</th><th>Время</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
   }
 
   function liveOrderCancellable(o, sandboxNewest) {
@@ -3649,18 +3830,6 @@ body.calc-running .help-ftr{opacity:.75;}
     renderLivePositionsPanel();
   }
 
-  /** Обнулить целевые pos робота в lastResult. */
-  function suppressLiveFinrespTargets() {
-    if (!state.lastResult?.perSec?.length) return;
-    for (const p of state.lastResult.perSec) p.pos = 0;
-  }
-
-  /** После «Закрыть все позиции» — держать цель flat, пока не возобновят торговлю. */
-  function armLiveManualFlatten() {
-    state.live.manualFlatten = true;
-    suppressLiveFinrespTargets();
-  }
-
   function clearLiveManualFlatten() {
     state.live.manualFlatten = false;
   }
@@ -4192,6 +4361,81 @@ body.calc-running .help-ftr{opacity:.75;}
     return Math.abs(+notional || 0) * (commissionPctValue() / 100);
   }
 
+  /** Исполнение-покупка в ledger, открывшее leg (для взвешивания комиссии). */
+  function sandboxOpenFillForLeg(legId) {
+    if (legId == null) return null;
+    for (const fill of ensureSandboxState().ledger || []) {
+      if (!(fill.openLegIds || []).includes(legId)) continue;
+      if (Math.trunc(+fill.signedPieces || 0) <= 0) continue;
+      return fill;
+    }
+    return null;
+  }
+
+  /**
+   * Доля комиссии покупки на закрытые штуки: fee_покупки × (продано_из_лота / куплено_в_лоте).
+   * Если продали не всё — в FINRESP попадает только пропорциональная часть комиссии покупки.
+   */
+  function sandboxWeightedBuyFeeForMatch(match) {
+    const sold = Math.max(0, Math.trunc(+match.pieces || 0));
+    if (!sold) return 0;
+    const openPrice = +match.openPrice || 0;
+    const openFill = match.legId != null ? sandboxOpenFillForLeg(match.legId) : null;
+    if (openFill) {
+      const bought = Math.abs(Math.trunc(+openFill.signedPieces || 0));
+      if (bought > 0) {
+        const openNotional = bought * (+openFill.price || openPrice);
+        const openFee = Number.isFinite(openFill.fee) ? +openFill.fee : sandboxCommissionFee(openNotional);
+        return openFee * (sold / bought);
+      }
+    }
+    return sandboxCommissionFee(openPrice * sold);
+  }
+
+  /**
+   * FINRESPΔ закрытия (фейк), по каждому списанному лоту FIFO/LIFO:
+   *   Σ (цена_прод − цена_покуп_лота) × шт_продано
+   *   − Σ комиссия_покупки_взвешенная(шт_продано)
+   *   − комиссия_продажи_полная(на весь объём закрытия)
+   */
+  function sandboxCloseFinrespNet(o) {
+    if (!o) return null;
+    const role = o.tradeRole;
+    if (role !== "close_long" && role !== "close_short" && role !== "flip") return null;
+
+    const matches = Array.isArray(o.tradeMatches) ? o.tradeMatches : [];
+    const closePrice = +o.price || 0;
+    let net = 0;
+    let closedPieces = 0;
+
+    if (matches.length) {
+      for (const m of matches) {
+        const sold = Math.max(0, Math.trunc(+m.pieces || 0));
+        if (!sold) continue;
+        const openPrice = +m.openPrice || 0;
+        const sellPx = +m.closePrice || closePrice;
+        const pricePnl = m.side === "short"
+          ? (openPrice - sellPx) * sold
+          : (sellPx - openPrice) * sold;
+        net += pricePnl - sandboxWeightedBuyFeeForMatch(m);
+        closedPieces += sold;
+      }
+    } else if (Number.isFinite(o.tradePnl)) {
+      net = o.tradePnl;
+      closedPieces = Math.abs(Math.trunc(+o.signedPieces || 0));
+    } else {
+      return null;
+    }
+
+    if (closedPieces <= 0) return null;
+
+    const closeNotional = Number.isFinite(o.notional)
+      ? Math.abs(+o.notional)
+      : closedPieces * closePrice;
+    const closeFee = Number.isFinite(o.fee) ? +o.fee : sandboxCommissionFee(closeNotional);
+    return net - closeFee;
+  }
+
   /** Функция: фейк-позиции в формате tbankPositionsByTicker для reconcile робота. */
   function sandboxPositionsByTicker() {
     const map = new Map();
@@ -4365,7 +4609,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function recordSandboxOrder(trade) {
     const sb = ensureSandboxState();
     const orderId = trade.orderId || `fake-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    sb.orders.unshift({
+    const order = {
       orderId,
       ticker: trade.ticker,
       direction: trade.direction,
@@ -4389,19 +4633,23 @@ body.calc-running .help-ftr{opacity:.75;}
       signedPieces: trade.signedPieces,
       lot: trade.lot,
       openLegIds: trade.openLegIds ? trade.openLegIds.slice() : null
-    });
+    };
+    upsertTradeHistoryFromOrder(order, "sandbox");
+    sb.orders.unshift(order);
     if (sb.orders.length > 200) sb.orders.length = 200;
     compactSandboxOrderJournal(sb);
-    upsertTradeHistoryFromOrder(sb.orders[0], "sandbox");
     return orderId;
   }
 
   function sandboxOrderStatusLabel(o) {
     const role = o.tradeRole;
     const mode = o.matchMode === "lifo" ? "LIFO" : "FIFO";
-    const pnl = Number.isFinite(o.tradePnl)
-      ? ` · P/L ${o.tradePnl >= 0 ? "+" : ""}${fmt(o.tradePnl, 0)} ₽`
-      : "";
+    const netPnl = sandboxCloseFinrespNet(o);
+    const pnl = Number.isFinite(netPnl)
+      ? ` · P/L ${netPnl >= 0 ? "+" : ""}${fmt(netPnl, 2)} ₽`
+      : (Number.isFinite(o.tradePnl)
+        ? ` · P/L ${o.tradePnl >= 0 ? "+" : ""}${fmt(o.tradePnl, 0)} ₽`
+        : "");
     const legCount = Array.isArray(o.tradeMatches) ? o.tradeMatches.length : 0;
     const legsHint = legCount > 1 ? ` · ${legCount} лота` : "";
     if (role === "open_long") return "открытие лонга";
@@ -4727,7 +4975,38 @@ body.calc-running .help-ftr{opacity:.75;}
     if (isLiveSandbox()) {
       result = await simulateSandboxOrder(instrumentId, direction, lots, secForPrice, opts);
     } else {
+      const qty = Math.max(0, Math.floor(+lots || 0));
+      const market = opts.market === "futures" ? "futures" : "shares";
+      let lot = 1;
+      let meta = null;
+      try { meta = await tbankGetInstrumentById(instrumentId); } catch (_) { /* optional */ }
+      lot = Math.max(1, +meta?.lot || 1);
+      let price = opts.limitPrice != null && opts.limitPrice !== "" ? +opts.limitPrice : NaN;
+      if (!Number.isFinite(price) || price <= 0) {
+        price = await resolveOrderPrice(instrumentId, secForPrice, market);
+      }
+      const orderType = opts.orderType === "limit" || opts.orderType === "market"
+        ? opts.orderType
+        : liveOrderTypeUi();
       result = await tbankPostOrder(instrumentId, direction, lots, secForPrice, opts);
+      if (!opts.skipRecord && result) {
+        recordRealOrderToTradeHistory(result, {
+          orderId: result.orderId,
+          instrumentId,
+          direction,
+          lots: qty,
+          secForPrice,
+          market,
+          orderType,
+          price: Number.isFinite(price) ? price : null,
+          lot,
+          ticker: String(meta?.ticker || secForPrice || "").toUpperCase()
+        });
+        try {
+          await syncRealTradeHistoryFromBroker();
+        } catch (_) { /* broker ops may lag */ }
+        renderLiveOrdersPanel();
+      }
     }
     if (!opts.skipRecord) {
       recordLiveOrderMarker(
@@ -5104,6 +5383,8 @@ body.calc-running .help-ftr{opacity:.75;}
         to: new Date().toISOString(),
         state: "OPERATION_STATE_EXECUTED"
       });
+      state.live.brokerOperations = await enrichBrokerOperationsForHistory(ops.operations || []);
+      for (const op of state.live.brokerOperations) upsertTradeHistoryFromTbankOperation(op);
       let comm = 0;
       for (const op of ops.operations || []) {
         const opCur = String(op.currency || op.paymentCurrency || "rub").toLowerCase();
@@ -5115,6 +5396,7 @@ body.calc-running .help-ftr{opacity:.75;}
       await recalcLivePortfolioMtmFromCandles();
       snapshotLiveSessionPortfolioBaseline();
       await refreshLiveOpenPositions();
+      renderLiveOrdersPanel();
     } catch (err) {
       noteLiveTech("live-portfolio", err.message, `account=${state.tbank.selectedAccountId || "—"}`);
     }
@@ -6027,7 +6309,6 @@ ${totalBlock}
         return true;
       }
       state.lastResult = result;
-      if (state.live.manualFlatten) suppressLiveFinrespTargets();
       const skipN = state.windowSkipped?.length || 0;
       state.live.lastError = skipN
         ? liveFinrespPartialMessage(result.perSec.length, skipN)
@@ -6305,7 +6586,7 @@ ${totalBlock}
       if (!pos) break;
       const key = sandboxPosKey(pos.market || (pos.isFuture ? "futures" : "shares"), pos.ticker || pos.sec);
       try {
-        const ok = await closeSandboxPositionAtMarket(pos, { skipUiRefresh: true, skipRecord: true });
+        const ok = await closeSandboxPositionAtMarket(pos, { skipUiRefresh: true });
         if (!ok) {
           failed.push(`${pos.ticker}: не удалось закрыть`);
           sb.open.delete(key);
@@ -6328,6 +6609,7 @@ ${totalBlock}
 
   async function sellAllMarketLive() {
     if (!isLiveMode() || state.live.tradingActionBusy) return;
+    clearLiveManualFlatten();
     state.live.tradingActionBusy = true;
     cancelQueuedLiveChartsRefresh();
     const sellBtn = $("live-trading-sell-all");
@@ -6335,8 +6617,8 @@ ${totalBlock}
     try {
       if (isLiveSandbox()) {
         const { sent, failed } = await closeAllSandboxPositionsLive();
-        armLiveManualFlatten();
         await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
+        renderLiveOrdersPanel();
         forceClearLivePositionsPanel();
         state.live.lastError = failed.length ? failed.join("; ") : (sent ? "" : "открытых фейк-позиций нет");
         const status = $("live-trading-status");
@@ -6407,7 +6689,6 @@ ${totalBlock}
       };
       await closeList(data.securities, false);
       await closeList(data.futures, true);
-      armLiveManualFlatten();
       forceClearLivePositionsPanel();
       const issueText = summarizeLiveReconcileIssues(skipped, failed);
       state.live.lastError = issueText;
@@ -6438,12 +6719,17 @@ ${totalBlock}
       state.live.tradingActionBusy = false;
       if (sellBtn) sellBtn.disabled = !isLiveMode() || state.uiBusy;
       try {
-        if (state.live.active && state.live.manualFlatten) await liveTradingReconcile();
+        if (state.live.active) {
+          await refreshLiveCandleStream({ silent: true });
+          await liveTradingReconcile();
+        }
         if (isLiveSandbox()) {
-          forceClearLivePositionsPanel();
-        } else if (state.live.manualFlatten) {
+          await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
+          renderLiveOrdersPanel();
+          syncSandboxPositionsTable();
+        } else {
           await refreshLiveOpenPositions({ force: true });
-          if (!state.live.openPositions?.length) forceClearLivePositionsPanel();
+          await refreshLiveOrders();
         }
       } catch (err) {
         noteLiveTech("live-close-all-finish", err.message);
@@ -9355,17 +9641,6 @@ ${totalBlock}
     });
   });
   $("live-trading-sell-all").addEventListener("click", () => { sellAllMarketLive(); });
-  $("live-trading-orders")?.addEventListener("click", (ev) => {
-    const btn = ev.target?.closest?.("[data-close-order]");
-    if (!btn || btn.disabled) return;
-    const orderId = btn.getAttribute("data-close-order");
-    if (!orderId) return;
-    btn.disabled = true;
-    closeLiveOrderAtMarket(orderId).catch((err) => {
-      state.live.lastError = err?.message || String(err);
-      syncLiveTradingUi();
-    }).finally(() => { btn.disabled = false; });
-  });
   $("live-positions-table")?.addEventListener("click", (ev) => {
     const btn = ev.target?.closest?.("[data-pos-close]");
     if (!btn || btn.disabled) return;
@@ -9618,6 +9893,10 @@ ${totalBlock}
   bindCollapsibleToggle("extra-params", "extra-params-toggle");
   bindCollapsibleToggle("tbank-settings", "tbank-settings-toggle");
   bindCollapsibleToggle("tech-info-panel", "tech-info-toggle");
+  bindCollapsibleToggle("live-manual-order-panel", "live-manual-order-toggle");
+  bindCollapsibleToggle("live-order-book-panel", "live-order-book-toggle");
+  bindCollapsibleToggle("live-positions-panel", "live-positions-toggle");
+  bindCollapsibleToggle("live-trade-history-panel", "live-trade-history-toggle");
   }
 
   try {
