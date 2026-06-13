@@ -61,6 +61,8 @@
     const normalizeSliders = (...a) => d.normalizeSliders(...a);
     const finrespRunOptions = (...a) => d.finrespRunOptions(...a);
     const bindCollapsibleToggle = (...a) => d.bindCollapsibleToggle(...a);
+    const syncCollapsibleToggleLabel = (...a) => d.syncCollapsibleToggleLabel(...a);
+    const bindLivePanelCollapsibleToggles = (...a) => d.bindLivePanelCollapsibleToggles(...a);
     const syncPageVersionBadge = (...a) => d.syncPageVersionBadge(...a);
     const liveMoexBarTimes = (...a) => d.liveMoexBarTimes(...a);
     const noteLiveReconcileToTech = (...a) => d.noteLiveReconcileToTech(...a);
@@ -788,10 +790,18 @@
     }
   }
 
+  /** Удалить фейковые записи из журнала сделок (при выходе из песочницы). */
+  function purgeSandboxTradeHistory() {
+    const hist = ensureLiveTradeHistory();
+    state.live.tradeHistory = hist.filter((h) => !h.fake && h.mode !== "sandbox");
+  }
+
   /** Синхронизация UI/state: `syncTradeHistoryFromSources`. */
   function syncTradeHistoryFromSources() {
-    for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
-    if (isLiveSandbox()) return;
+    if (isLiveSandbox()) {
+      for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
+      return;
+    }
     for (const op of state.live.brokerOperations || []) upsertTradeHistoryFromTbankOperation(op);
     for (const o of state.live.orders || []) {
       if (isLiveOrderActive(o)) upsertTradeHistoryFromOrder(o, "real");
@@ -949,6 +959,7 @@
     renderLiveOrdersPanel();
     renderLivePositionsPanel();
     syncLiveManualOrderUi();
+    if (isLive) bindLivePanelCollapsibleToggles();
   }
 
   /** Остановка периодического опроса: `stopLiveTradingPoll`. */
@@ -1117,6 +1128,52 @@
     if (q == null) return NaN;
     if (typeof q === "number") return q;
     return (+q.units || 0) + (+q.nano || 0) / 1e9;
+  }
+
+  /** Тип цены PostOrder: пункты (фьючерсы/облигации) или валюта (акции/ETF). */
+  function tbankOrderPriceType(meta, marketHint) {
+    const kind = String(tbankInstField(meta, "instrumentType", "instrument_type", "instrumentKind") || "").toLowerCase();
+    if (kind.includes("future") || kind.includes("bond") || marketHint === "futures") {
+      return "PRICE_TYPE_POINT";
+    }
+    return "PRICE_TYPE_CURRENCY";
+  }
+
+  /** ORDER_TYPE для PostOrder: на MOEX акции — «лучшая цена», не чистая рыночная. */
+  function tbankPostOrderTypeEnum(orderType, market) {
+    if (orderType === "limit") return "ORDER_TYPE_LIMIT";
+    return market === "futures" ? "ORDER_TYPE_MARKET" : "ORDER_TYPE_BESTPRICE";
+  }
+
+  /** Ошибки PostOrder, при которых пробуем лимит по последней цене. */
+  function isTbankPostOrderRetryAsLimitError(err) {
+    const msg = String(err?.message || err || "");
+    return /frozen price|Zamorozhennaya czena ne sootvetstvuet|only limit order is allowed|30068|price_type is invalid|30104/i.test(msg);
+  }
+
+  /** Запись lastPostOrder при ошибке HTTP PostOrder. */
+  function noteTbankPostOrderFailure(secForPrice, instrumentId, direction, qty, orderType, market, message, reqSummary) {
+    state.live.lastPostOrder = {
+      at: new Date().toISOString(),
+      sec: secForPrice,
+      instrumentId,
+      direction,
+      lots: qty,
+      orderType,
+      market,
+      status: "HTTP_ERROR",
+      message: message || "",
+      ok: false
+    };
+    noteLiveTech("live-tbank-post-reject", secForPrice || instrumentId, `${message || "—"} | ${reqSummary}`);
+  }
+
+  /** Округление лимитной цены до minPriceIncrement инструмента T-Bank. */
+  function tbankRoundPriceToIncrement(price, meta) {
+    if (!Number.isFinite(price)) return price;
+    const mpi = quotationToNumber(meta?.minPriceIncrement ?? meta?.min_price_increment);
+    if (!Number.isFinite(mpi) || mpi <= 0) return price;
+    return Math.round(price / mpi) * mpi;
   }
 
   /** Проверка булева условия: `isLiveSessionOpenPosition`. */
@@ -1499,6 +1556,7 @@
     const price = row.curPrice;
     const panel = $("live-manual-order-panel");
     if (panel) panel.open = true;
+    syncCollapsibleToggleLabel("live-manual-order-panel", "live-manual-order-toggle");
     syncLiveManualOrderUi();
     const manualSel = $("live-manual-sec");
     fillLiveTradingInstrumentSelects();
@@ -1709,10 +1767,27 @@
     };
   }
 
-  /** T-Bank FindInstrument или локальная заглушка в песочнице без расшифрованного токена. */
+  /** T-Bank FindInstrument или локальная заглушка в песочнице (без T-Bank / при ошибке API). */
   async function resolveLiveInstrumentMeta(sec, market) {
-    if (isLiveSandbox() && !state.tbank.token) {
-      return sandboxInstrumentMeta(sec, market);
+    if (isLiveSandbox()) {
+      if (!state.tbank.token) return sandboxInstrumentMeta(sec, market);
+      try {
+        const ti = await tbankFindInstrument(sec, market);
+        if (!ti) return sandboxInstrumentMeta(sec, market);
+        const instrumentId = ti.uid || ti.figi;
+        return {
+          ti,
+          instrumentId,
+          lot: Math.max(1, +ti.lot || 1),
+          ticker: String(ti.ticker || sec).toUpperCase(),
+          market: market === "futures" ? "futures" : "shares",
+          classCode: tbankInstField(ti, "classCode", "class_code") || "",
+          instrumentName: tbankInstField(ti, "name") || ""
+        };
+      } catch (err) {
+        noteLiveTech("live-sandbox-meta", err.message, `${market}:${sec}`);
+        return sandboxInstrumentMeta(sec, market);
+      }
     }
     const ti = await tbankFindInstrument(sec, market);
     if (!ti) return null;
@@ -3203,13 +3278,15 @@
       }
     }
     if (!opts.skipRecord) {
-      recordLiveOrderMarker(
-        secForPrice,
-        direction,
-        opts.orderType || liveOrderTypeUi(),
-        { lots, price: opts.limitPrice }
-      );
-      queueLiveChartsRefresh();
+      if (result || isLiveSandbox()) {
+        recordLiveOrderMarker(
+          secForPrice,
+          direction,
+          opts.orderType || liveOrderTypeUi(),
+          { lots, price: opts.limitPrice }
+        );
+        queueLiveChartsRefresh();
+      }
     }
     return result;
   }
@@ -3289,8 +3366,27 @@
     noteLiveTech("live-sandbox", "enabled", `start=${sb.startPortfolio}`);
   }
 
+  /** Сброс baseline позиций для фильтра «только сессия» после смены песочница ↔ реал. */
+  async function resetLiveSessionPositionBaseline() {
+    if (!state.live.active) return;
+    try {
+      if (isLiveSandbox()) {
+        state.live.sessionPositionBaseline = sandboxPositionsByTicker();
+      } else if (state.tbank.token && state.tbank.selectedAccountId
+        && (await ensureTbankTokenUnlocked({ interactive: false, openUi: false }))) {
+        state.live.sessionPositionBaseline = await tbankPositionsByTicker();
+      } else {
+        state.live.sessionPositionBaseline = null;
+      }
+    } catch (err) {
+      state.live.sessionPositionBaseline = isLiveSandbox() ? sandboxPositionsByTicker() : null;
+      noteLiveTech("live-session-baseline", err.message);
+    }
+  }
+
   /** Процедура (async): выключить песочницу — очистить фейк, вернуть реальный портфель T-Bank. */
   async function disableLiveSandbox() {
+    purgeSandboxTradeHistory();
     const sb = ensureSandboxState();
     sb.startPortfolio = null;
     sb.cash = null;
@@ -3305,9 +3401,22 @@
     sb.nextFillId = 0;
     sb.closed.length = 0;
     sb.orders.length = 0;
-    await refreshLivePortfolioStats();
-    await refreshLiveOpenPositions();
-    await refreshLiveOrders();
+    state.live.sandboxPositionsValue = null;
+    state.live.openPositions = [];
+    if (state.tbank.token && state.tbank.selectedAccountId) {
+      await refreshLivePortfolioStats();
+      await refreshLiveOpenPositions();
+      await refreshLiveOrders();
+    } else {
+      state.live.freeCashRub = null;
+      state.live.commissionPaid = null;
+      if (Number.isFinite(state.live.realPortfolioValue)) {
+        state.live.portfolioValue = state.live.realPortfolioValue;
+      }
+      renderLivePortfolioStats();
+      renderLivePositionsPanel();
+      renderLiveOrdersPanel();
+    }
     noteLiveTech("live-sandbox", "disabled");
   }
 
@@ -3318,10 +3427,56 @@
     if (on) {
       await enableLiveSandbox();
       resetSandboxStopperWatch();
-    } else await disableLiveSandbox();
+      state.live.lastError = "";
+      if (state.live.active) {
+        await resetLiveSessionPositionBaseline();
+        await updateSandboxPortfolioDisplay();
+        try {
+          await liveTradingReconcile();
+        } catch (err) {
+          state.live.lastError = err.message;
+        }
+      }
+    } else {
+      await disableLiveSandbox();
+      if (state.live.active) {
+        const unlocked = await ensureTbankTokenUnlocked({ interactive: true, openUi: true });
+        if (unlocked) {
+          if (!state.tbank.selectedAccountId) await loadTbankAccounts();
+          await resetLiveSessionPositionBaseline();
+          await refreshLivePortfolioStats();
+          await refreshLiveOrders();
+          startLiveStatsPoll();
+          state.live.lastError = "";
+          try {
+            await liveTradingReconcile();
+          } catch (err) {
+            state.live.lastError = err.message;
+          }
+        } else {
+          state.live.lastError = "Реальная торговля: расшифруйте токен T-Bank (пароль в настройках счёта).";
+        }
+      }
+    }
     saveConfig();
     syncLiveTradingUi();
     refreshLiveChartsUi();
+  }
+
+  /** Запись причины, по которой reconcile не запустился или не отправил заявки. */
+  function noteLiveReconcileAbort(reason, detail) {
+    state.live.lastReconcileAbort = {
+      at: new Date().toISOString(),
+      reason: String(reason || "—"),
+      detail: detail || ""
+    };
+    noteLiveTech("live-reconcile-abort", reason, detail);
+  }
+
+  /** Проверка ответа PostOrder: отклонённая заявка — ошибка. */
+  function tbankPostOrderRejected(data) {
+    const st = String(data?.executionReportStatus || data?.execution_report_status || "").toUpperCase();
+    return st.includes("REJECT");
   }
 
   /** POST OrdersService/PostOrder — рыночная или лимитная заявка T-Bank. */
@@ -3329,31 +3484,86 @@
     const opts = options || {};
     const qty = Math.max(0, Math.floor(+lots || 0));
     if (!instrumentId || qty <= 0) return null;
-    const orderId = (crypto.randomUUID && crypto.randomUUID()) || `ml-${Date.now()}`;
+    const market = opts.market === "futures" ? "futures" : "shares";
     const orderType = opts.orderType === "limit" || opts.orderType === "market"
       ? opts.orderType
       : liveOrderTypeUi();
-    const body = {
-      accountId: state.tbank.selectedAccountId,
-      instrumentId,
-      quantity: String(qty),
-      direction,
-      orderId,
-      confirmMarginTrade: true
-    };
-    if (orderType === "limit") {
-      let price = opts.limitPrice != null && opts.limitPrice !== "" ? +opts.limitPrice : NaN;
-      if (!Number.isFinite(price) || price <= 0) {
-        const mkt = opts.market === "futures" ? "futures" : "shares";
-        price = await resolveOrderPrice(instrumentId, secForPrice, mkt);
+    let meta = null;
+    try { meta = await tbankGetInstrumentById(instrumentId); } catch (_) { /* optional */ }
+    const priceType = tbankOrderPriceType(meta, market);
+
+    /** Сборка тела PostOrder и отправка (limit или market/bestprice). */
+    async function sendPostOrder(effectiveType, limitPriceOverride) {
+      const orderId = (crypto.randomUUID && crypto.randomUUID()) || `ml-${Date.now()}`;
+      const body = {
+        accountId: state.tbank.selectedAccountId,
+        instrumentId,
+        quantity: String(qty),
+        direction,
+        orderId,
+        confirmMarginTrade: true,
+        orderType: tbankPostOrderTypeEnum(effectiveType, market),
+        priceType
+      };
+      if (effectiveType === "limit") {
+        let price = limitPriceOverride != null && limitPriceOverride !== "" ? +limitPriceOverride : NaN;
+        if (!Number.isFinite(price) || price <= 0) {
+          price = opts.limitPrice != null && opts.limitPrice !== "" ? +opts.limitPrice : NaN;
+        }
+        if (!Number.isFinite(price) || price <= 0) {
+          price = await resolveOrderPrice(instrumentId, secForPrice, market);
+        }
+        if (!Number.isFinite(price) || price <= 0) {
+          throw new Error(`Нет цены для лимитной заявки (${secForPrice || instrumentId}).`);
+        }
+        price = tbankRoundPriceToIncrement(price, meta);
+        body.price = quotationFromNumber(price);
       }
-      if (!price) throw new Error(`Нет цены для лимитной заявки (${secForPrice || instrumentId}).`);
-      body.orderType = "ORDER_TYPE_LIMIT";
-      body.price = quotationFromNumber(price);
-    } else {
-      body.orderType = "ORDER_TYPE_MARKET";
+      const reqSummary = `type=${body.orderType} qty=${qty} dir=${direction} priceType=${body.priceType} market=${market}${body.price ? ` price=${quotationToNumber(body.price)}` : ""}`;
+      noteLiveTech("live-tbank-post-req", secForPrice || instrumentId, reqSummary);
+      let data;
+      try {
+        data = await tbankRequest("OrdersService/PostOrder", body);
+      } catch (err) {
+        noteTbankPostOrderFailure(secForPrice, instrumentId, direction, qty, effectiveType, market, err.message, reqSummary);
+        throw err;
+      }
+      const status = data?.executionReportStatus || data?.execution_report_status || "—";
+      state.live.lastPostOrder = {
+        at: new Date().toISOString(),
+        sec: secForPrice,
+        instrumentId,
+        direction,
+        lots: qty,
+        orderType: effectiveType,
+        market,
+        status,
+        message: data?.message || "",
+        orderId: data?.orderId || data?.order_id || orderId,
+        lotsExecuted: data?.lotsExecuted ?? data?.lots_executed,
+        ok: !tbankPostOrderRejected(data)
+      };
+      if (tbankPostOrderRejected(data)) {
+        const msg = data?.message || status || "Заявка отклонена биржей";
+        noteLiveTech("live-tbank-post-reject", secForPrice || instrumentId, `${msg} | ${reqSummary}`);
+        throw new Error(msg);
+      }
+      noteLiveTech("live-tbank-post-ok", secForPrice || instrumentId, `status=${status} exec=${state.live.lastPostOrder.lotsExecuted ?? "—"} | ${reqSummary}`);
+      return data;
     }
-    return tbankRequest("OrdersService/PostOrder", body);
+
+    try {
+      return await sendPostOrder(orderType);
+    } catch (err) {
+      if (orderType !== "limit" && isTbankPostOrderRetryAsLimitError(err)) {
+        const fallbackPrice = await resolveOrderPrice(instrumentId, secForPrice, market);
+        if (Number.isFinite(fallbackPrice) && fallbackPrice > 0) {
+          noteLiveTech("live-tbank-post-retry", secForPrice || instrumentId, `limit @ ${fmt(fallbackPrice, 4)} после: ${err.message}`);
+          return await sendPostOrder("limit", fallbackPrice);
+        }
+      }
+      throw err;
+    }
   }
 
   /** Разбор строки/времени/ключа: `parseLiveManualInstrumentKey`. */
@@ -3409,6 +3619,7 @@
     if (!Number.isFinite(price) || price <= 0) return;
     const panel = $("live-manual-order-panel");
     if (panel) panel.open = true;
+    syncCollapsibleToggleLabel("live-manual-order-panel", "live-manual-order-toggle");
     syncLiveManualOrderUi();
     const manualSel = $("live-manual-sec");
     if (manualSel && obKey) manualSel.value = obKey;
@@ -3955,7 +4166,9 @@
   /** Live-торговля: `liveChartSessionNote`. */
   function liveChartSessionNote() {
     const t = formatMoexBarTime(liveSessionStartTime()) || "—";
-    const modeHint = isLiveSandbox() ? "Зелёная область — песочница." : "Розовая область — реальная торговля.";
+    const modeHint = isLiveSandbox()
+      ? "Зелёная область — песочница. Equity — модель FINRESP."
+      : "Розовая область — реальная торговля. Графики equity/FINRESP — модель по сигналам; портфель и журнал — только после исполнения заявок T-Bank.";
     return `Live-сессия с ${t}: графики с момента выбора «Реальная торговля». ${modeHint} Синяя линия — покупка, оранжевая — продажа; SL/TP — красная/зелёная.`;
   }
 
@@ -4615,15 +4828,55 @@ ${totalBlock}
 
   /** Сверка позиций/заявок с брокером (T-Bank) или локальным ledger песочницы. */
   async function liveTradingReconcile() {
-    if (!state.live.active || state.live.reconcileBusy || state.live.tradingActionBusy) return;
+    if (!state.live.active) {
+      noteLiveReconcileAbort("торговля не активна", `active=${!!state.live.active}`);
+      return;
+    }
+    if (state.live.reconcileBusy) {
+      noteLiveReconcileAbort("reconcile уже выполняется", "reconcileBusy=true");
+      return;
+    }
+    if (state.live.tradingActionBusy) {
+      noteLiveReconcileAbort("другая операция", "tradingActionBusy=true");
+      return;
+    }
+    const sandbox = isLiveSandbox();
+    if (!sandbox) {
+      if (!(await ensureTbankTokenUnlocked({ interactive: false, openUi: false }))) {
+        state.live.lastError = "Токен T-Bank не расшифрован — заявки на биржу не отправляются.";
+        noteLiveReconcileAbort("токен не расшифрован", "ensureTbankTokenUnlocked=false");
+        syncLiveTradingUi();
+        return;
+      }
+      if (!state.tbank.selectedAccountId) {
+        state.live.lastError = "Счёт T-Bank не выбран — заявки не отправляются.";
+        noteLiveReconcileAbort("нет счёта T-Bank", `accounts=${state.tbank.accounts?.length ?? 0}`);
+        syncLiveTradingUi();
+        return;
+      }
+    }
     const targets = liveReconcileTargets();
-    if (!targets.length) return;
+    state.live.lastReconcileTargetRows = (targets || []).map((p) => ({
+      sec: p.sec,
+      pos: +p.pos || 0,
+      finresp: p.finresp,
+      market: selectedInstruments().find((i) => String(i.sec).toUpperCase() === String(p.sec || "").toUpperCase())?.market || "shares"
+    }));
+    if (!targets.length) {
+      const n = state.lastResult?.perSec?.length ?? 0;
+      noteLiveReconcileAbort("нет целей reconcile", `lastResult.perSec=${n} manualFlatten=${!!state.live.manualFlatten}`);
+      return;
+    }
     state.live.reconcileBusy = true;
     const skipped = [];
     const failed = [];
+    const targetDetails = [];
     let placed = 0;
+    let aligned = 0;
     try {
-      const actual = isLiveSandbox() ? sandboxPositionsByTicker() : await tbankPositionsByTicker();
+      const actual = sandbox ? sandboxPositionsByTicker() : await tbankPositionsByTicker();
+      const brokerKeys = [...actual.keys()].join(",") || "—";
+      noteLiveTech("live-reconcile-start", `targets=${targets.length} sandbox=${sandbox}`, `brokerPos=${brokerKeys}`);
       for (const p of targets) {
         const secU = String(p.sec || "").toUpperCase();
         const instMeta = selectedInstruments().find((i) => String(i.sec).toUpperCase() === secU);
@@ -4633,10 +4886,12 @@ ${totalBlock}
           im = await resolveLiveInstrumentMeta(p.sec, market);
         } catch (err) {
           failed.push(liveIssueEntry(p.sec, p.sec, { message: err.message, market }));
+          targetDetails.push({ sec: p.sec, action: "fail-meta", error: err.message });
           continue;
         }
         if (!im) {
           skipped.push(liveIssueEntry(p.sec, p.sec, { reason: "не найден в T-Bank", market }));
+          targetDetails.push({ sec: p.sec, action: "skip-no-instrument", market });
           continue;
         }
         const { ti, instrumentId, lot, ticker, classCode, instrumentName } = im;
@@ -4644,10 +4899,19 @@ ${totalBlock}
         const cur = actual.get(ticker);
         const currentPieces = cur ? +cur.pieces : 0;
         const delta = targetPieces - currentPieces;
-        if (Math.abs(delta) < lot * 0.45) continue;
+        if (Math.abs(delta) < lot * 0.45) {
+          aligned += 1;
+          targetDetails.push({
+            sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, action: "aligned"
+          });
+          continue;
+        }
         const lots = piecesToLots(delta, lot);
         const direction = delta > 0 ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL";
-        if (!isLiveSandbox()) {
+        targetDetails.push({
+          sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, lots, direction, action: "order"
+        });
+        if (!sandbox) {
           const tradable = await tbankValidateTradable(instrumentId, ti);
           if (!tradable.ok) {
             skipped.push(liveIssueEntry(ticker, p.sec, {
@@ -4678,7 +4942,12 @@ ${totalBlock}
           continue;
         }
         try {
-          await postLiveOrder(instrumentId, direction, lots, p.sec, { market, tradeSource: "robot" });
+          noteLiveTech("live-post-order", `${ticker} ${direction} ${lots} lot`, `sec=${p.sec} uid=${instrumentId} market=${market} robot=market`);
+          const ord = await postLiveOrder(instrumentId, direction, lots, p.sec, { market, tradeSource: "robot", orderType: "market" });
+          if (!ord && !sandbox) {
+            failed.push(liveIssueEntry(ticker, p.sec, { message: "PostOrder вернул пустой ответ", instrumentId, direction, lots, market }));
+            continue;
+          }
           placed += 1;
         } catch (err) {
           failed.push(liveIssueEntry(ticker, p.sec, {
@@ -4694,13 +4963,21 @@ ${totalBlock}
         }
       }
       const issueText = summarizeLiveReconcileIssues(skipped, failed);
-      state.live.lastError = issueText;
+      if (issueText) state.live.lastError = issueText;
+      else if (placed > 0) state.live.lastError = "";
+      else if (aligned === targets.length && !skipped.length && !failed.length) {
+        state.live.lastError = "";
+        noteLiveTech("live-reconcile-aligned", `все ${aligned} инстр. уже на целевой позиции`, "заявки не нужны");
+      }
       noteLiveReconcileToTech({
         at: new Date().toISOString(),
         placed,
+        aligned,
         skipped,
         failed,
-        targetCount: targets.length
+        targetCount: targets.length,
+        targetDetails,
+        sandbox
       });
       await refreshLiveOrders();
       await refreshLivePortfolioStats();
@@ -4709,10 +4986,13 @@ ${totalBlock}
       noteLiveReconcileToTech({
         at: new Date().toISOString(),
         placed: 0,
+        aligned: 0,
         skipped: [],
         failed: [],
         targetCount: targets.length,
-        fatal: err.message
+        targetDetails,
+        fatal: err.message,
+        sandbox
       });
     } finally {
       state.live.reconcileBusy = false;
@@ -4741,7 +5021,13 @@ ${totalBlock}
       }
       if (state.live.candleRefreshBusy || (state.live.active && state.live.reconcileBusy) || state.live.tradingActionBusy) return;
       refreshLiveCandleStream({ silent: true })
-        .then((ok) => { if (ok && state.live.active) return liveTradingReconcile(); })
+        .then((ok) => {
+          if (!ok) {
+            noteLiveTech("live-tick-skip-reconcile", "refreshLiveCandleStream=false", `lastError=${state.live.lastError || "—"}`);
+            return;
+          }
+          if (state.live.active) return liveTradingReconcile();
+        })
         .catch((err) => {
           state.live.lastError = err.message;
           syncLiveTradingUi();
@@ -4948,7 +5234,11 @@ ${totalBlock}
             continue;
           }
           try {
-            await postLiveOrder(instrumentId, direction, lots, ticker, { tradeSource: "sell-all" });
+            await postLiveOrder(instrumentId, direction, lots, ticker, {
+              tradeSource: "sell-all",
+              orderType: "market",
+              market: isFuture ? "futures" : "shares"
+            });
             sent += 1;
             await refreshLiveOpenPositions({ force: true });
           } catch (err) {
@@ -5141,7 +5431,12 @@ ${totalBlock}
         }
         if (!res.ok) {
           const msg = data.message || data.error || data.raw || `${res.status} ${res.statusText}`;
-          throw new Error(msg);
+          const ru = /frozen price does not match order type|Zamorozhennaya czena ne sootvetstvuet tipu zayavki/i.test(msg)
+            ? "Замороженная цена не соответствует типу заявки (priceType/ORDER_TYPE). Робот повторит лимитом по последней цене."
+            : /only limit order is allowed/i.test(msg)
+              ? "Сейчас доступны только лимитные заявки — робот повторит лимитом по последней цене."
+              : msg;
+          throw new Error(ru);
         }
         if (hostId !== firstHost) {
           setTbankHostId(hostId);
@@ -5248,6 +5543,7 @@ ${totalBlock}
   function openTbankPassphraseUi(hint) {
     const details = $("tbank-settings");
     if (details) details.open = true;
+    syncCollapsibleToggleLabel("tbank-settings", "tbank-settings-toggle");
     const pp = $("tbank-passphrase");
     if (pp) {
       try { pp.focus({ preventScroll: false }); } catch (_) { pp.focus(); }
@@ -5406,6 +5702,7 @@ ${totalBlock}
     $("calc-status").textContent = msg;
     setTbankStatus(msg, true);
     $("tbank-settings").open = true;
+    syncCollapsibleToggleLabel("tbank-settings", "tbank-settings-toggle");
     return false;
   }
   /** Подпрограмма `handleAccountModeUserChange`. */

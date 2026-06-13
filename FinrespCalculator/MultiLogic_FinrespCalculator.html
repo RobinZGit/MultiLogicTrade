@@ -119,8 +119,9 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 .extra-params-head::-webkit-details-marker{display:none;}
 .extra-params-head::marker{content:"";}
 .extra-params-title{font-size:1.18rem;font-weight:700;color:var(--text);letter-spacing:-.01em;}
-.extra-params-toggle{font-size:.9rem;font-weight:600;flex-shrink:0;text-decoration:none;}
+.extra-params-toggle{font-size:.9rem;font-weight:600;flex-shrink:0;text-decoration:none;color:inherit;}
 .extra-params-toggle:hover{text-decoration:underline;}
+button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cursor:pointer;line-height:inherit;}
 .extra-section{margin:1rem 0 .5rem;font-size:.95rem;font-weight:600;color:#374151;border-bottom:1px solid var(--border);padding-bottom:.3rem;}
 .extra-section:first-of-type{margin-top:.5rem;}
 .extra-section-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--border);}
@@ -514,7 +515,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <button type="button" class="live-trading-btn live-trading-btn-sell" id="live-trading-sell-all" title="Закрыть все открытые позиции по рынку (лонг — продажа, шорт — покупка)">Закрыть все позиции</button>
 </div>
 <div class="live-trading-controls">
-<label for="live-order-type">Тип заявки</label>
+<label for="live-order-type" title="Для ручной заявки. Робот всегда выставляет рыночные заявки.">Тип заявки</label>
 <select id="live-order-type">
 <option value="market" selected>Рыночная</option>
 <option value="limit">Лимитная</option>
@@ -539,7 +540,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <details class="live-manual-order" id="live-manual-order-panel">
 <summary class="live-manual-order-summary live-panel-summary">
 <span class="live-panel-summary-title">Заявка</span>
-<a href="#" class="extra-params-toggle" id="live-manual-order-toggle" role="button">Развернуть</a>
+<button type="button" class="extra-params-toggle" id="live-manual-order-toggle" aria-expanded="false">Развернуть</button>
 </summary>
 <div class="live-manual-order-body">
 <div class="live-manual-order-grid">
@@ -556,7 +557,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <details class="live-order-book" id="live-order-book-panel">
 <summary class="live-manual-order-summary live-panel-summary">
 <span class="live-panel-summary-title">Стакан</span>
-<a href="#" class="extra-params-toggle" id="live-order-book-toggle" role="button">Развернуть</a>
+<button type="button" class="extra-params-toggle" id="live-order-book-toggle" aria-expanded="false">Развернуть</button>
 </summary>
 <div class="live-order-book-body">
 <div class="live-order-book-head" id="live-order-book-head">
@@ -570,7 +571,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <details class="live-order-book live-positions-panel" id="live-positions-panel">
 <summary class="live-manual-order-summary live-panel-summary">
 <span class="live-panel-summary-title">Нереализованные позиции</span>
-<a href="#" class="extra-params-toggle" id="live-positions-toggle" role="button">Развернуть</a>
+<button type="button" class="extra-params-toggle" id="live-positions-toggle" aria-expanded="false">Развернуть</button>
 </summary>
 <div class="live-order-book-body">
 <p class="live-order-book-meta" id="live-positions-meta">Нереализованные позиции счёта (робот и ручные заявки). ПКМ или долгое нажатие по строке — закрыть по рынку (лонг или шорт).</p>
@@ -584,7 +585,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <details class="live-order-book live-trade-history-panel" id="live-trade-history-panel">
 <summary class="live-manual-order-summary live-panel-summary">
 <span class="live-panel-summary-title">История сделок</span>
-<a href="#" class="extra-params-toggle" id="live-trade-history-toggle" role="button">Развернуть</a>
+<button type="button" class="extra-params-toggle" id="live-trade-history-toggle" aria-expanded="false">Развернуть</button>
 </summary>
 <div class="live-order-book-body">
 <p class="live-order-book-meta" id="live-trade-history-meta">Журнал сессии: фейк — симуляция; реал — операции брокера. ★/☆ · FINRESPΔ · колонка «Источник» — логика робота, ручная заявка, закрытие позиции и т.п.</p>
@@ -918,7 +919,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-delete-logic-no-notify";
+  const CALC_PAGE_VERSION = "2026-06-13-live-collapse-labels";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1011,8 +1012,19 @@ body.calc-running .help-ftr{opacity:.75;}
       calcState.live.apiForbiddenInstruments = forbidden;
     }
     techLog.lastEvent = "live-reconcile";
+    const mode = report.sandbox ? "sandbox" : "real";
+    pushTechLogLine(`${at} live-reconcile-summary: mode=${mode} placed=${report.placed ?? 0} aligned=${report.aligned ?? 0} skipped=${report.skipped?.length ?? 0} failed=${report.failed?.length ?? 0} targets=${report.targetCount ?? "—"}`);
     if (report.placed > 0) {
       pushTechLogLine(`${at} live-reconcile: placed=${report.placed} targets=${report.targetCount ?? "—"}`);
+    }
+    for (const td of report.targetDetails || []) {
+      if (td.action === "aligned") {
+        pushTechLogLine(`${at} live-target-aligned: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lot=${td.lot}`);
+      } else if (td.action === "order") {
+        pushTechLogLine(`${at} live-target-order: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lots=${td.lots} dir=${td.direction || "—"}`);
+      } else {
+        pushTechLogLine(`${at} live-target-${td.action || "info"}: ${td.sec || "?"} ${td.error || td.market || ""}`);
+      }
     }
     if (forbidden.length) {
       pushTechLogLine(`${at} live-api-forbidden-count: ${forbidden.length} tickers=${forbidden.map(liveForbiddenLabel).join(",")}`);
@@ -1036,6 +1048,49 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     if (report.fatal) pushTechLogLine(`${at} live-reconcile-fatal: ${report.fatal}`);
     updateTechInfo();
+  }
+
+  /** Синхронизация подписи «Развернуть» / «Свернуть» у сворачиваемого блока. */
+  function syncCollapsibleToggleLabel(detailsId, toggleId) {
+    const details = typeof detailsId === "string" ? $(detailsId) : detailsId;
+    const toggle = typeof toggleId === "string" ? $(toggleId) : toggleId;
+    if (!details || !toggle) return;
+    const open = details.open;
+    toggle.textContent = open ? "Свернуть" : "Развернуть";
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  /** Привязка ссылки «Развернуть» / «Свернуть» к `<details>`. */
+  function bindCollapsibleToggle(detailsId, toggleId) {
+    const details = typeof detailsId === "string" ? $(detailsId) : detailsId;
+    const toggle = typeof toggleId === "string" ? $(toggleId) : toggleId;
+    if (!details || !toggle) return;
+    const bindKey = `${details.id || detailsId}:${toggle.id || toggleId}`;
+    bindCollapsibleToggle._bound = bindCollapsibleToggle._bound || new Set();
+    if (bindCollapsibleToggle._bound.has(bindKey)) {
+      syncCollapsibleToggleLabel(details, toggle);
+      return;
+    }
+    bindCollapsibleToggle._bound.add(bindKey);
+    /** Синхронизация UI/state: `syncLabel`. */
+    function syncLabel() {
+      syncCollapsibleToggleLabel(details, toggle);
+    }
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      details.open = !details.open;
+    });
+    details.addEventListener("toggle", syncLabel);
+    syncLabel();
+  }
+
+  /** Привязка сворачиваемых блоков live-панели (повторный вызов безопасен). */
+  function bindLivePanelCollapsibleToggles() {
+    bindCollapsibleToggle("live-manual-order-panel", "live-manual-order-toggle");
+    bindCollapsibleToggle("live-order-book-panel", "live-order-book-toggle");
+    bindCollapsibleToggle("live-positions-panel", "live-positions-toggle");
+    bindCollapsibleToggle("live-trade-history-panel", "live-trade-history-toggle");
   }
 
   /** Построение структуры данных: `buildTechInfoText`. */
@@ -1113,7 +1168,11 @@ body.calc-running .help-ftr{opacity:.75;}
           `liveOrderType=${$("live-order-type")?.value || "—"}`,
           `liveObTrendConfirm=${!!$("live-ob-trend-confirm")?.checked}`,
           `liveSandboxMode=${!!$("live-sandbox-mode")?.checked}`,
-          `logicUsesObTrend=${E?.logicUsesObTrend ? E.logicUsesObTrend(activeLogicLineRaw()) : "—"}`,
+          `livePollTimer=${!!lv.pollTimer}`,
+          `liveHasLastResult=${!!calcState.lastResult?.perSec?.length}`,
+          `liveLastResultPos=${(calcState.lastResult?.perSec || []).slice(0, 12).map((p) => `${p.sec}:${+(p.pos || 0)}`).join(",") || "—"}`,
+          `liveTradeHistory=${(lv.tradeHistory || []).length} real=${(lv.tradeHistory || []).filter((h) => !h.fake).length} fake=${(lv.tradeHistory || []).filter((h) => h.fake).length}`,
+          `logicUsesObTrend=${(() => { try { return E?.logicUsesObTrend && typeof activeLogicLineRaw === "function" ? E.logicUsesObTrend(activeLogicLineRaw()) : "—"; } catch (_) { return "—"; } })()}`,
           `liveOrdersCount=${lv.orders?.length ?? 0}`,
           `liveOpenPositionsCount=${lv.openPositions?.length ?? 0}`,
           `livePortfolioValue=${Number.isFinite(lv.portfolioValue) ? lv.portfolioValue : "—"}`,
@@ -1126,10 +1185,24 @@ body.calc-running .help-ftr{opacity:.75;}
           lines.push(
             `liveReconcileAt=${r.at || "—"}`,
             `liveReconcilePlaced=${r.placed ?? 0}`,
+            `liveReconcileAligned=${r.aligned ?? 0}`,
             `liveReconcileSkipped=${r.skipped?.length ?? 0}`,
             `liveReconcileFailed=${r.failed?.length ?? 0}`,
-            `liveReconcileTargets=${r.targetCount ?? "—"}`
+            `liveReconcileTargets=${r.targetCount ?? "—"}`,
+            `liveReconcileMode=${r.sandbox ? "sandbox" : "real"}`
           );
+          if (r.targetDetails?.length) {
+            lines.push("liveReconcile.targetDetails:");
+            for (const td of r.targetDetails) {
+              if (td.action === "aligned") {
+                lines.push(`  ${td.sec}: aligned target=${td.target} broker=${td.current} delta=${td.delta}`);
+              } else if (td.action === "order") {
+                lines.push(`  ${td.sec}: ORDER target=${td.target} broker=${td.current} delta=${td.delta} lots=${td.lots} ${td.direction || ""}`);
+              } else {
+                lines.push(`  ${td.sec}: ${td.action} ${td.error || ""}`);
+              }
+            }
+          }
           if (r.skipped?.length) {
             lines.push("liveReconcile.skipped:");
             for (const s of r.skipped) {
@@ -1147,6 +1220,26 @@ body.calc-running .help-ftr{opacity:.75;}
                 : "";
               lines.push(`  ${liveIssueLine(f)}${extra}`);
             }
+          }
+        }
+        const abort = lv.lastReconcileAbort;
+        if (abort) {
+          lines.push(`liveReconcileAbortAt=${abort.at}`, `liveReconcileAbortReason=${abort.reason}`, `liveReconcileAbortDetail=${abort.detail || "—"}`);
+        }
+        const lpo = lv.lastPostOrder;
+        if (lpo) {
+          lines.push(
+            `liveLastPostOrderAt=${lpo.at}`,
+            `liveLastPostOrder=${lpo.sec} ${lpo.direction} lots=${lpo.lots} type=${lpo.orderType} status=${lpo.status} ok=${lpo.ok}`,
+            `liveLastPostOrderMsg=${lpo.message || "—"}`,
+            `liveLastPostOrderUid=${lpo.instrumentId || "—"}`
+          );
+        }
+        const tr = lv.lastReconcileTargetRows;
+        if (tr?.length) {
+          lines.push("liveReconcileTargetRows:");
+          for (const row of tr) {
+            lines.push(`  ${row.sec} pos=${row.pos} market=${row.market || "—"}`);
           }
         }
         const forbidden = lv.apiForbiddenInstruments?.length
@@ -2121,6 +2214,8 @@ body.calc-running .help-ftr{opacity:.75;}
     get normalizeSliders() { return normalizeSliders; },
     get finrespRunOptions() { return finrespRunOptions; },
     get bindCollapsibleToggle() { return bindCollapsibleToggle; },
+    get syncCollapsibleToggleLabel() { return syncCollapsibleToggleLabel; },
+    get bindLivePanelCollapsibleToggles() { return bindLivePanelCollapsibleToggles; },
     get syncPageVersionBadge() { return syncPageVersionBadge; },
     get liveMoexBarTimes() { return liveMoexBarTimes; },
     noteLiveReconcileToTech, liveIssueLine, mergeLiveForbiddenIssues,
@@ -5145,31 +5240,10 @@ ${totalBlock}
     saveWindowAnchor();
     invalidateFormChange();
   });
-  /** Подпрограмма `bindCollapsibleToggle`. */
-  function bindCollapsibleToggle(detailsId, toggleId) {
-    const details = $(detailsId);
-    const toggle = $(toggleId);
-    if (!details || !toggle) return;
-    /** Синхронизация UI/state: `syncLabel`. */
-    function syncLabel() {
-      toggle.textContent = details.open ? "Свернуть" : "Развернуть";
-    }
-    toggle.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      details.open = !details.open;
-      syncLabel();
-    });
-    details.addEventListener("toggle", syncLabel);
-    syncLabel();
-  }
   bindCollapsibleToggle("extra-params", "extra-params-toggle");
   bindCollapsibleToggle("tbank-settings", "tbank-settings-toggle");
   bindCollapsibleToggle("tech-info-panel", "tech-info-toggle");
-  bindCollapsibleToggle("live-manual-order-panel", "live-manual-order-toggle");
-  bindCollapsibleToggle("live-order-book-panel", "live-order-book-toggle");
-  bindCollapsibleToggle("live-positions-panel", "live-positions-toggle");
-  bindCollapsibleToggle("live-trade-history-panel", "live-trade-history-toggle");
+  bindLivePanelCollapsibleToggles();
   }
 
   try {
