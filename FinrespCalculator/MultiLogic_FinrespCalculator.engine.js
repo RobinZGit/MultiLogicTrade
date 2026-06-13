@@ -1628,6 +1628,40 @@
     return sum / length;
   }
 
+  /** Live / мониторинг: срабатывание портфельного SL/TP на последней точке equityHistory. */
+  function checkPortfolioStopperTrigger(equityHistory, cfg, referenceEquity) {
+    const stopper = { ...DEFAULT_STOPPER, ...cfg };
+    if ((!stopper.useSl && !stopper.useTp) || !equityHistory?.length) return null;
+    const idx = equityHistory.length - 1;
+    const totalEq = equityHistory[idx].equity;
+    if (!Number.isFinite(totalEq)) return null;
+    let ref = referenceEquity;
+    if (ref == null || !Number.isFinite(ref)) ref = equityHistory[0]?.equity;
+    if (!Number.isFinite(ref)) return null;
+    const atrLen = Math.max(1, stopper.atrLen || DEFAULT_STOPPER.atrLen);
+    if (idx < atrLen) return null;
+    const atr = portfolioEquityAtr(equityHistory, idx, atrLen);
+    if (atr == null || atr <= 0) return null;
+    let kind = null;
+    let triggerLevel = ref;
+    if (stopper.useSl && stopper.slMult > 0 && totalEq <= ref - stopper.slMult * atr) {
+      kind = "sl";
+      triggerLevel = ref - stopper.slMult * atr;
+    } else if (stopper.useTp && stopper.tpMult > 0 && totalEq >= ref + stopper.tpMult * atr) {
+      kind = "tp";
+      triggerLevel = ref + stopper.tpMult * atr;
+    }
+    if (!kind) return null;
+    return {
+      kind,
+      time: equityHistory[idx].time,
+      equity: totalEq,
+      referenceEquity: ref,
+      atr,
+      triggerLevel
+    };
+  }
+
   function recomputePerSecTotals(perSecItem) {
     const last = perSecItem.rows.at(-1);
     perSecItem.finresp = last?.eq ?? 0;
@@ -2928,6 +2962,8 @@
     runMulti,
     runMultiAsync,
     buildPortfolioEquityRows,
+    portfolioEquityAtr,
+    checkPortfolioStopperTrigger,
     loadMany,
     loadManyBatched,
     loadManyDetailed,

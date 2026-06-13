@@ -265,6 +265,23 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 .live-trading-btn-start.live-trading-toggle--active{background:#450a0a;box-shadow:inset 0 0 0 2px #fecaca,0 3px 10px rgba(69,10,10,.35);}
 .live-trading-btn-sell{background:#fff;color:#991b1b;border:3px solid #991b1b;box-shadow:0 2px 8px rgba(153,27,27,.12);}
 .live-trading-btn-sell:hover{background:#fef2f2;}
+.live-trading-btn-secondary{padding:.45rem .65rem;min-height:2.35rem;flex:0 0 auto;font-size:1rem;background:#fff;color:#991b1b;border:2px solid #991b1b;border-radius:8px;box-shadow:none;}
+.live-trading-btn-secondary:hover{background:#fef2f2;}
+.live-trading-panel--sandbox .live-trading-btn-secondary{border-color:#166534;color:#166534;}
+.live-trading-panel--sandbox .live-trading-btn-secondary:hover{background:#ecfdf5;}
+.live-notify-stopper-label{font-size:.82rem;font-weight:600;color:#7f1d1d;display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap;}
+.live-trading-panel--sandbox .live-notify-stopper-label{color:#166534;}
+.live-notify-permission-hint{font-size:.72rem;color:#9f1239;max-width:10rem;line-height:1.25;}
+.live-trading-panel--sandbox .live-notify-permission-hint{color:#166534;}
+.live-notify-toast{margin:.35rem 0 .65rem;padding:.55rem .75rem;border-radius:8px;border:2px solid #166534;background:#ecfdf5;color:#14532d;font-size:.84rem;line-height:1.35;box-shadow:0 2px 8px rgba(22,101,52,.15);}
+.live-notify-toast b{display:block;font-size:.88rem;margin-bottom:.15rem;}
+.live-notify-toast[hidden]{display:none!important;}
+.tbank-passphrase-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.45);}
+.tbank-passphrase-modal[hidden]{display:none!important;}
+.tbank-passphrase-modal-box{background:#fff;border:2px solid #991b1b;border-radius:10px;padding:1rem 1.15rem;max-width:22rem;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+.tbank-passphrase-modal-box p{margin:0 0 .65rem;font-size:.92rem;font-weight:600;color:#374151;line-height:1.35;}
+.tbank-passphrase-modal-box input{width:100%;padding:.45rem .55rem;border:1px solid #cbd5e1;border-radius:6px;font-size:.95rem;margin-bottom:.65rem;}
+.tbank-passphrase-modal-actions{display:flex;gap:.5rem;justify-content:flex-end;}
 .live-trading-orders-wrap{border-top:2px solid #fecaca;padding-top:.65rem;}
 .live-trading-orders-head{font-size:.84rem;font-weight:700;color:#7f1d1d;margin-bottom:.4rem;}
 .live-trading-orders{max-height:12rem;overflow:auto;font-size:.8rem;}
@@ -478,7 +495,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="live-trading-toolbar">
 <div class="live-trading-actions">
 <button type="button" class="live-trading-btn live-trading-btn-start" id="live-trading-toggle">Начать торговлю</button>
-<button type="button" class="live-trading-btn live-trading-btn-sell" id="live-trading-sell-all" title="Закрыть все открытые позиции по рынку (лонг — продажа, шорт — покупка)">Закрыть всё</button>
+<button type="button" class="live-trading-btn live-trading-btn-sell" id="live-trading-sell-all" title="Закрыть все открытые позиции по рынку (лонг — продажа, шорт — покупка)">Закрыть все позиции</button>
 </div>
 <div class="live-trading-controls">
 <label for="live-order-type">Тип заявки</label>
@@ -492,8 +509,16 @@ body.calc-running .help-ftr{opacity:.75;}
 <option value="tbank">Только T-Bank</option>
 <option value="moex">Только MOEX ISS</option>
 </select>
+<span class="live-notify-stopper-wrap" id="live-notify-stopper-wrap" hidden>
+<label class="live-notify-stopper-label" for="live-notify-stopper" title="Песочница (фейк): SL/TP портфеля и открытие/закрытие позиций">
+<input type="checkbox" id="live-notify-stopper" checked> Уведомления
+</label>
+<button type="button" class="live-trading-btn live-trading-btn-secondary" id="live-notify-permission" title="Разрешить уведомления в браузере">🔔</button>
+<span class="live-notify-permission-hint" id="live-notify-permission-hint" hidden></span>
+</span>
 </div>
 </div>
+<div class="live-notify-toast" id="live-notify-toast" hidden role="status" aria-live="polite"></div>
 <div class="live-trading-stats">
 <div class="live-trading-stat"><b id="live-portfolio-label" title="Свободные деньги + открытые позиции по текущим ценам свечей">Портфель всего, ₽</b><span id="live-portfolio-value">—</span></div>
 <div class="live-trading-stat live-trading-stat-free-cash" id="live-free-cash-stat" title="RUB на счёте, не вложенные в бумаги: старт − комиссии − покупки + выручка от продаж">
@@ -529,9 +554,9 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </details>
 <details class="live-order-book live-positions-panel" id="live-positions-panel">
-<summary class="live-manual-order-summary">Позиции</summary>
+<summary class="live-manual-order-summary">Нереализованные позиции</summary>
 <div class="live-order-book-body">
-<p class="live-order-book-meta" id="live-positions-meta">Открытые позиции счёта (робот и ручные заявки). ПКМ или долгое нажатие по строке — закрыть позицию (лонг или шорт).</p>
+<p class="live-order-book-meta" id="live-positions-meta">Нереализованные позиции счёта (робот и ручные заявки). ПКМ или долгое нажатие по строке — закрыть по рынку (лонг или шорт).</p>
 <div id="live-positions-table" class="live-order-book-table"><p class="live-order-book-empty">Разверните блок в режиме live.</p></div>
 <div id="live-positions-menu" class="live-positions-menu" hidden>
 <button type="button" data-action="market" id="live-pos-menu-market">Закрыть по рынку</button>
@@ -643,6 +668,16 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. Лимит позиции: Max positions × лот.</p>
 <p class="note">Комиссия: <strong>Commission, %</strong> от суммы каждой сделки (|цена × объём|); удерживается при покупке и продаже. FINRESP и % годовых в блоке выше уже <strong>с учётом комиссии</strong>.</p>
+
+<p class="extra-section">Учёт открытых лотов (песочница)</p>
+<div class="calc-grid">
+<div class="calc-field"><label for="live-sandbox-match-mode" title="Как закрытие списывает ранее открытые нереализованные пакеты (legs)">Списание при закрытии</label>
+<select id="live-sandbox-match-mode">
+<option value="fifo" selected>FIFO — сначала старые лоты</option>
+<option value="lifo">LIFO — сначала последние</option>
+</select></div>
+</div>
+<p class="note">Только для режима «Песочница (фейк)». По умолчанию FIFO (как <code>averagePositionPriceFifo</code> у T-Bank). Cash, открытые legs и фин. результат пересчитываются из журнала исполнений (ledger) — один источник правды, без расхождения агрегатов.</p>
 
 <p class="extra-section">Устойчивость расчёта</p>
 <label class="indicator-toggle" for="random-price-shift" style="max-width:36rem;margin:.35rem 0 .55rem">
@@ -757,6 +792,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <div class="real-account-actions">
 <button class="calc-btn calc-btn-secondary" type="button" id="tbank-save-token">Зашифровать и сохранить</button>
+<button class="calc-btn calc-btn-secondary" type="button" id="tbank-unlock-token">Расшифровать и подключить</button>
 </div>
 <p class="calc-status" id="tbank-status">Фиктивный кошелёк работает как раньше. Для T-Bank сохраните токен, затем выберите режим сверху: калькулятор спросит пароль, расшифрует токен, загрузит счёт и возьмёт депозит.</p>
 </details>
@@ -777,6 +813,16 @@ body.calc-running .help-ftr{opacity:.75;}
 </main>
 </div>
 <footer class="help-ftr">MultiLogic FINRESP · MultiLogicTrade</footer>
+<div class="tbank-passphrase-modal" id="tbank-passphrase-modal" hidden role="dialog" aria-modal="true" aria-labelledby="tbank-passphrase-modal-title">
+<div class="tbank-passphrase-modal-box">
+<p id="tbank-passphrase-modal-title">Введите пароль для расшифровки локального токена T-Bank</p>
+<input type="password" id="tbank-passphrase-modal-input" autocomplete="current-password" placeholder="Пароль шифрования">
+<div class="tbank-passphrase-modal-actions">
+<button type="button" class="calc-btn calc-btn-secondary" id="tbank-passphrase-modal-cancel">Отмена</button>
+<button type="button" class="calc-btn" id="tbank-passphrase-modal-ok">OK</button>
+</div>
+</div>
+</div>
 <script id="ml-finresp-preboot">
 (function () {
   "use strict";
@@ -799,7 +845,11 @@ body.calc-running .help-ftr{opacity:.75;}
   }
   function onModeChange() {
     syncLivePanelFromMode();
-    if (typeof window.__mlSyncAccountMode === "function") {
+    if (typeof window.__mlOnAccountModeUserChange === "function") {
+      window.__mlOnAccountModeUserChange().catch(function (e) {
+        setTechPre("account-mode change error:\n" + (e && e.message ? e.message : e));
+      });
+    } else if (typeof window.__mlSyncAccountMode === "function") {
       try { window.__mlSyncAccountMode(); } catch (e) {
         setTechPre("preboot + syncAccountModeUi error:\n" + (e && e.message ? e.message : e));
       }
@@ -832,7 +882,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-candle-delay-alert";
+  const CALC_PAGE_VERSION = "2026-06-13-tbank-passphrase-modal";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -996,6 +1046,7 @@ body.calc-running .help-ftr{opacity:.75;}
         `accountMode=${calcState.accountMode || "paper"}`,
         `tbankTokenStored=${(() => { try { return !!localStorage.getItem("multilogic.finresp.tbank.token.v1"); } catch (_) { return false; } })()}`,
         `tbankTokenUnlocked=${!!calcState.tbank?.token}`,
+        `pageOrigin=${location.origin || location.protocol}`,
         `tbankAccounts=${calcState.tbank?.accounts?.length ?? 0}`,
         `tbankAccountSelected=${calcState.tbank?.selectedAccountId ? "yes" : "no"}`,
         `tbankDepositLoaded=${!!calcState.tbank?.depositLoaded}`,
@@ -1161,19 +1212,8 @@ body.calc-running .help-ftr{opacity:.75;}
     } catch (_) { /* ignore */ }
   }
 
-  function onAccountModeBootstrapChange() {
-    bootstrapLiveTradingPanelVisibility();
-    if (typeof window.__mlSyncAccountMode === "function") {
-      try { window.__mlSyncAccountMode(); } catch (err) {
-        noteTechError(`syncAccountModeUi: ${err?.message || err}`);
-      }
-    }
-  }
-
   bootstrapRestoreAccountModeFromStorage();
   bootstrapLiveTradingPanelVisibility();
-  document.getElementById("account-mode")?.addEventListener("change", onAccountModeBootstrapChange);
-  document.getElementById("live-sandbox-mode")?.addEventListener("change", onAccountModeBootstrapChange);
 
   let calcState = null;
   const E = window.MultiLogicFinrespEngine;
@@ -1238,6 +1278,7 @@ body.calc-running .help-ftr{opacity:.75;}
       tradingStatusCache: new Map(),
       reconcileBusy: false,
       tradingActionBusy: false,
+      manualFlatten: false,
       candleRefreshBusy: false,
       lastCandleRefreshAt: null,
       lastCandleBarTime: null,
@@ -1421,13 +1462,15 @@ body.calc-running .help-ftr{opacity:.75;}
           sec: $("live-order-book-sec")?.value || ""
         },
         obTrendConfirm: !!$("live-ob-trend-confirm")?.checked,
-        sandboxMode: !!$("live-sandbox-mode")?.checked
+        sandboxMode: !!$("live-sandbox-mode")?.checked,
+        notifySandboxStopper: $("live-notify-stopper")?.checked !== false
       },
       params: {
         sl: $("param-sl")?.value || "",
         tp: $("param-tp")?.value || "",
         atrSl: $("param-atr-sl")?.value || "",
-        lr: $("param-lr")?.value || ""
+        lr: $("param-lr")?.value || "",
+        sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
       stopper: {
         slMult: $("stopper-sl-mult")?.value || "",
@@ -1486,6 +1529,13 @@ body.calc-running .help-ftr{opacity:.75;}
       }
       if ($("live-sandbox-mode")) {
         $("live-sandbox-mode").checked = !!cfg.live?.sandboxMode;
+      }
+      if ($("live-notify-stopper")) {
+        $("live-notify-stopper").checked = cfg.live?.notifySandboxStopper !== false;
+      }
+      if ($("live-sandbox-match-mode")) {
+        const mm = cfg.params?.sandboxMatchMode || cfg.live?.sandboxMatchMode;
+        $("live-sandbox-match-mode").value = mm === "lifo" ? "lifo" : "fifo";
       }
       setValueIfExists("live-manual-direction", cfg.live?.manual?.direction);
       setValueIfExists("live-manual-order-type", cfg.live?.manual?.orderType);
@@ -1752,6 +1802,234 @@ body.calc-running .help-ftr{opacity:.75;}
     el.classList.toggle("live-fin-negative", neg);
     el.classList.toggle("live-fin-positive", pos);
     el.style.color = neg ? "#b91c1c" : (pos ? "#047857" : "");
+  }
+
+  /** Браузерные уведомления — только live + песочница (фейк). */
+  function liveSandboxNotifyActive() {
+    return isLiveMode() && isLiveSandbox() && $("live-notify-stopper")?.checked !== false;
+  }
+
+  function showLiveInPageToast(title, body, ms) {
+    const el = $("live-notify-toast");
+    if (!el) return;
+    el.innerHTML = `<b>${title}</b><span>${body}</span>`;
+    el.hidden = false;
+    clearTimeout(showLiveInPageToast._timer);
+    showLiveInPageToast._timer = setTimeout(() => { el.hidden = true; }, ms || 12000);
+  }
+
+  function sendSandboxTestNotification() {
+    if (!liveSandboxNotifyActive()) {
+      showLiveInPageToast(
+        "MultiLogic — тест",
+        "Включите «Уведомления» и режим песочницы (фейк)."
+      );
+      return;
+    }
+    const ok = showSandboxWebNotification(
+      "MultiLogic — уведомления включены",
+      "Тест: так будет выглядеть сообщение при открытии/закрытии позиции.",
+      `multilogic-sandbox-test-${Date.now()}`,
+      { requireInteraction: false, skipInPage: true }
+    );
+    if (!ok) {
+      showLiveInPageToast(
+        "MultiLogic — нужно разрешение",
+        "Нажмите 🔔 и выберите «Разрешить» в браузере. Windows: Параметры → Уведомления → Chrome/Edge."
+      );
+    }
+  }
+
+  function showSandboxWebNotification(title, body, tag, opts) {
+    if (!liveSandboxNotifyActive()) return false;
+    const options = opts || {};
+    if (!options.skipInPage) showLiveInPageToast(title, body);
+    if (!("Notification" in window)) return false;
+    if (Notification.permission !== "granted") return false;
+    if (IS_FILE_PROTOCOL) {
+      noteLiveTech("sandbox-notify", "file:// — системные уведомления могут не работать; показан баннер на странице.");
+      return false;
+    }
+    try {
+      new Notification(title, {
+        body,
+        tag: tag || `multilogic-sandbox-${Date.now()}`,
+        requireInteraction: !!options.requireInteraction
+      });
+      return true;
+    } catch (err) {
+      noteLiveTech("sandbox-notify", err.message);
+      return false;
+    }
+  }
+
+  function sandboxPositionLotsLabel(pos, pieces) {
+    const p = Math.abs(+pieces || +pos.pieces || 0);
+    if (!p) return "0";
+    const lots = pos.isFuture ? p : piecesToLots(p, pos.lot);
+    return String(lots);
+  }
+
+  function notifySandboxPositionOpen(pos, price, pieces) {
+    if (!pos) return;
+    const sideLabel = pos.side === "short" ? "шорт" : "лонг";
+    const lots = sandboxPositionLotsLabel(pos, pieces);
+    const ticker = pos.ticker || pos.sec || "?";
+    showSandboxWebNotification(
+      `MultiLogic — открыта позиция · ${ticker}`,
+      `${ticker} · ${sideLabel} · ${lots} лот · ${fmt(price, 2)} ₽`,
+      `multilogic-sandbox-open-${ticker}-${Date.now()}`,
+      { requireInteraction: false }
+    );
+    noteLiveTech("sandbox-pos-open", ticker, `${sideLabel} ${lots} lot @ ${fmt(price, 2)}`);
+  }
+
+  function notifySandboxPositionClose(pos, closePieces, closePrice, pnl) {
+    if (!pos) return;
+    const sideLabel = pos.side === "short" ? "шорт" : "лонг";
+    const lots = sandboxPositionLotsLabel(pos, closePieces);
+    const ticker = pos.ticker || pos.sec || "?";
+    const pnlText = Number.isFinite(pnl)
+      ? ` · P/L ${pnl >= 0 ? "+" : ""}${fmt(pnl, 0)} ₽`
+      : "";
+    showSandboxWebNotification(
+      `MultiLogic — закрыта позиция · ${ticker}`,
+      `${ticker} · ${sideLabel} · ${lots} лот · ${fmt(closePrice, 2)} ₽${pnlText}`,
+      `multilogic-sandbox-close-${ticker}-${Date.now()}`,
+      { requireInteraction: false }
+    );
+    noteLiveTech("sandbox-pos-close", ticker, `${sideLabel} ${lots} lot @ ${fmt(closePrice, 2)}${pnlText}`);
+  }
+
+  function syncLiveNotifyStopperUi() {
+    const wrap = $("live-notify-stopper-wrap");
+    const sandboxLive = isLiveMode() && isLiveSandbox();
+    if (wrap) wrap.hidden = !sandboxLive;
+    const hint = $("live-notify-permission-hint");
+    if (!hint || !sandboxLive) {
+      if (hint) hint.hidden = true;
+      return;
+    }
+    if (!("Notification" in window)) {
+      hint.textContent = "Нет Web Notifications";
+      hint.hidden = false;
+      return;
+    }
+    if (Notification.permission === "granted") {
+      hint.textContent = "Уведомления ✓";
+      hint.hidden = false;
+    } else if (Notification.permission === "denied") {
+      hint.textContent = "Заблокировано в браузере";
+      hint.hidden = false;
+    } else {
+      hint.textContent = "Нажмите 🔔";
+      hint.hidden = !liveSandboxNotifyActive();
+    }
+  }
+
+  async function ensureLiveNotifyPermission() {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") {
+      syncLiveNotifyStopperUi();
+      return true;
+    }
+    if (Notification.permission === "denied") return false;
+    const r = await Notification.requestPermission();
+    syncLiveNotifyStopperUi();
+    return r === "granted";
+  }
+
+  async function onLiveNotifyPermissionClick() {
+    const granted = await ensureLiveNotifyPermission();
+    if (granted) sendSandboxTestNotification();
+    else if (Notification.permission === "denied") {
+      showLiveInPageToast(
+        "Уведомления заблокированы",
+        "Разрешите сайту в настройках браузера (значок замка в адресной строке → Уведомления)."
+      );
+    } else {
+      showLiveInPageToast("Разрешение не получено", "Нажмите 🔔 снова и выберите «Разрешить».");
+    }
+  }
+
+  function resetSandboxStopperWatch() {
+    const cs = state.live.chartSession;
+    if (!cs) return;
+    cs.sandboxStopperWatch = {
+      referenceEquity: null,
+      equityHistory: [],
+      lastBarTime: null,
+      lastNotifyKey: null
+    };
+  }
+
+  function ensureSandboxStopperWatch() {
+    if (!state.live.chartSession) return null;
+    if (!state.live.chartSession.sandboxStopperWatch) resetSandboxStopperWatch();
+    return state.live.chartSession.sandboxStopperWatch;
+  }
+
+  function portfolioStopperReferenceForWatch(cfg, watch) {
+    if (cfg.refEquity > 0) return cfg.refEquity;
+    if (watch.referenceEquity != null && Number.isFinite(watch.referenceEquity)) return watch.referenceEquity;
+    return null;
+  }
+
+  function showSandboxStopperNotification(hit) {
+    if (!hit) return;
+    const isSl = hit.kind === "sl";
+    const title = isSl
+      ? "MultiLogic — портфельный stop-loss (песочница)"
+      : "MultiLogic — портфельный take-profit (песочница)";
+    const body =
+      `${isSl ? "Stop-loss" : "Take-profit"} · портфель ${fmt(hit.equity, 0)} ₽`
+      + ` · база ${fmt(hit.referenceEquity, 0)} ₽`
+      + ` · порог ${fmt(hit.triggerLevel, 0)} ₽`
+      + ` · ATR ${fmt(hit.atr, 0)} ₽`;
+    showSandboxWebNotification(title, body, `multilogic-sandbox-portfolio-${hit.kind}`, {
+      requireInteraction: isSl
+    });
+    noteLiveTech(
+      "sandbox-stopper-notify",
+      `${hit.kind} @ ${hit.time || "—"}`,
+      `eq=${fmt(hit.equity, 0)} ref=${fmt(hit.referenceEquity, 0)}`
+    );
+  }
+
+  function checkSandboxPortfolioStopperNotify() {
+    if (!liveSandboxNotifyActive()) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const cfg = stopperConfig();
+    if (!cfg.useSl && !cfg.useTp) return;
+    const pv = state.live.portfolioValue;
+    if (!Number.isFinite(pv)) return;
+    const watch = ensureSandboxStopperWatch();
+    if (!watch) return;
+
+    const time = state.live.lastCandleBarTime || new Date().toISOString();
+    if (watch.lastBarTime === time && watch.equityHistory.length) {
+      watch.equityHistory[watch.equityHistory.length - 1].equity = pv;
+    } else {
+      watch.equityHistory.push({ equity: pv, time });
+      watch.lastBarTime = time;
+      if (watch.equityHistory.length > 400) watch.equityHistory.shift();
+    }
+
+    let ref = portfolioStopperReferenceForWatch(cfg, watch);
+    if (ref == null && watch.equityHistory.length >= 1) {
+      ref = watch.equityHistory[0].equity;
+      watch.referenceEquity = ref;
+    }
+
+    const hit = E.checkPortfolioStopperTrigger(watch.equityHistory, cfg, ref);
+    if (!hit) return;
+
+    const notifyKey = `${hit.kind}:${hit.time}:${Math.round(hit.equity)}`;
+    if (watch.lastNotifyKey === notifyKey) return;
+    watch.lastNotifyKey = notifyKey;
+
+    showSandboxStopperNotification(hit);
+    watch.referenceEquity = hit.equity;
   }
 
   /** Сумма только в рублях (T-Bank MoneyValue); иное — NaN. */
@@ -2152,7 +2430,7 @@ body.calc-running .help-ftr{opacity:.75;}
       const ticker = (o.ticker || o.figi || o.instrumentUid || "—") + (isLiveSandbox() ? ' <span class="pos-fake-tag">(фейк)</span>' : "");
       const lotsReq = o.lotsRequested ?? o.lots_requested ?? "—";
       const lotsExec = o.lotsExecuted ?? o.lots_executed ?? "—";
-      const status = isLiveSandbox() ? "исполнена (фейк)" : liveOrderStatusLabel(o.executionReportStatus || o.orderState);
+      const status = isLiveSandbox() ? sandboxOrderStatusLabel(o) : liveOrderStatusLabel(o.executionReportStatus || o.orderState);
       const otype = (o.orderType || "").includes("LIMIT") ? "лимит" : "рынок";
       const when = o.orderDate || o.createdAt || "";
       const priceHint = Number.isFinite(o.price) ? ` @ ${fmt(o.price, 2)}` : "";
@@ -2226,7 +2504,7 @@ body.calc-running .help-ftr{opacity:.75;}
       toggle.disabled = !isLive || state.uiBusy;
     }
     const sellAll = $("live-trading-sell-all");
-    if (sellAll) sellAll.disabled = !isLive || state.uiBusy;
+    if (sellAll) sellAll.disabled = !isLive || state.uiBusy || state.live.tradingActionBusy;
     syncPageVersionBadge();
     const status = $("live-trading-status");
     if (status) {
@@ -2255,6 +2533,7 @@ body.calc-running .help-ftr{opacity:.75;}
       }       else status.textContent = sandbox ? "остановлена · песочница (фейк)" : "остановлена";
     }
     syncLiveCandleDelayUi(isLive);
+    syncLiveNotifyStopperUi();
     renderLivePortfolioStats();
     syncLeverageDisplay();
     renderLiveOrdersPanel();
@@ -2436,6 +2715,29 @@ body.calc-running .help-ftr{opacity:.75;}
     return portById;
   }
 
+  /** Вклад позиции в портфель, ₽: лонг +, шорт − (не вся стоимость портфеля). */
+  function positionExposureRub(pos) {
+    if (!pos) return NaN;
+    const px = pos.curPrice ?? pos.avgPrice;
+    if (!Number.isFinite(px)) return NaN;
+    const pieces = Math.abs(+pos.pieces || 0);
+    if (!pieces) return 0;
+    const sign = pos.side === "short" ? -1 : 1;
+    return sign * pieces * px;
+  }
+
+  /** Ненулевой остаток на счёте (T-Bank balance или фейk pieces). */
+  function isLiveOpenPositionBalance(pieces, lotSize) {
+    const p = Math.abs(+pieces || 0);
+    if (p <= 0) return false;
+    const lot = Math.max(1, +lotSize || 1);
+    return p >= lot * 0.45;
+  }
+
+  function filterLiveOpenPositionRows(rows) {
+    return (rows || []).filter((r) => isLiveOpenPositionBalance(r.pieces, r.lot));
+  }
+
   /** Строки открытых поз T-Bank; sessionOnly — только изменения с начала live-сессии (для таблицы). */
   async function buildTbankPositionRows(portData, posData, options) {
     const opts = options || {};
@@ -2445,13 +2747,15 @@ body.calc-running .help-ftr{opacity:.75;}
     const ingest = async (items, isFuture) => {
       for (const p of items || []) {
         const pieces = +p.balance || 0;
-        if (!pieces) continue;
+        let lot = Math.max(1, +p.lot || 1);
+        if (!isLiveOpenPositionBalance(pieces, lot)) continue;
         const instrumentId = p.instrumentUid || p.figi;
         let meta = null;
         try {
           meta = await tbankGetInstrumentById(instrumentId);
         } catch (_) { /* keep partial row */ }
-        const lot = Math.max(1, +meta?.lot || +p.lot || 1);
+        if (meta?.lot) lot = Math.max(1, +meta.lot);
+        if (!isLiveOpenPositionBalance(pieces, lot)) continue;
         const ticker = String(meta?.ticker || p.ticker || instrumentId).toUpperCase();
         if (sessionOnly && !isLiveSessionOpenPosition(ticker, pieces, lot)) continue;
         const port = portById.get(instrumentId);
@@ -2459,9 +2763,9 @@ body.calc-running .help-ftr{opacity:.75;}
         const curPrice = moneyValueToNumber(port?.currentPrice);
         const pnl = quotationToNumber(port?.expectedYield);
         const lots = isFuture ? Math.abs(Math.round(pieces)) : piecesToLots(pieces, lot);
-        const side = isFuture ? (pieces > 0 ? "long" : "short") : "long";
+        const side = pieces > 0 ? "long" : "short";
         const absPieces = Math.abs(pieces);
-        const sum = Number.isFinite(curPrice) ? absPieces * curPrice : NaN;
+        const sum = positionExposureRub({ side, pieces: absPieces, curPrice, avgPrice: curPrice });
         const market = isFuture ? "futures" : "shares";
         rows.push({
           ticker,
@@ -2556,20 +2860,22 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!tableEl) return;
     if (!isLiveMode()) {
       tableEl.innerHTML = '<p class="live-order-book-empty">Доступно в режиме live.</p>';
-      if (metaEl) metaEl.textContent = "Открытые позиции счёта (робот и ручные заявки). Закрытые не показываются.";
+      if (metaEl) metaEl.textContent = "Нереализованные позиции счёта. Закрытые (реализованные) не показываются.";
       return;
     }
     if (isLiveSandbox()) {
       const sb = ensureSandboxState();
       if (metaEl) {
-        metaEl.textContent = "Только открытые фейк-позиции (лонг и шорт). ПКМ или кнопка — закрыть по рынку.";
+        metaEl.textContent = "Нереализованные фейк-позиции. Закрытые из списка убираются. «Сумма, ₽» — вклад в портфель, не «Портфель всего».";
       }
-      const openRows = [...sb.open.values()];
+      const openRows = filterLiveOpenPositionRows([...sb.open.values()]);
       if (!openRows.length) {
         state.live.openPositions = [];
-        tableEl.innerHTML = '<p class="live-order-book-empty">Открытых фейк-позиций нет.</p>';
+        tableEl.textContent = "";
+        tableEl.innerHTML = '<p class="live-order-book-empty">Нереализованных фейк-позиций нет.</p>';
         return;
       }
+      let totalExp = 0;
       let openIdx = 0;
       const openBody = openRows.map((r) => {
         const idx = openIdx++;
@@ -2579,7 +2885,8 @@ body.calc-running .help-ftr{opacity:.75;}
           ? (r.avgPrice - (r.curPrice ?? r.avgPrice)) * r.pieces
           : ((r.curPrice ?? r.avgPrice) - r.avgPrice) * r.pieces;
         const pnlCls = pnl > 0 ? "pos-pnl-pos" : (pnl < 0 ? "pos-pnl-neg" : "");
-        const sum = Number.isFinite(r.curPrice) ? r.pieces * r.curPrice : NaN;
+        const sum = positionExposureRub(r);
+        if (Number.isFinite(sum)) totalExp += sum;
         const signedLots = signedSandboxLots(r);
         const closeLbl = closeAtMarketLabelForPosition(r);
         const closeBtn = `<button type="button" class="live-order-cancel-btn" data-pos-close="${idx}" title="Закрыть фейк-позицию по рынку">${closeLbl}</button>`;
@@ -2594,24 +2901,31 @@ body.calc-running .help-ftr{opacity:.75;}
           <td class="live-order-col-cancel">${closeBtn}</td>
         </tr>`;
       }).join("");
+      const foot = Number.isFinite(totalExp)
+        ? `<tfoot><tr><th colspan="5">Итого нереализованные</th><th>${fmt(totalExp, 0)}</th><th colspan="2"></th></tr></tfoot>`
+        : "";
       state.live.openPositions = openRows;
+      tableEl.textContent = "";
       tableEl.innerHTML = `<table class="live-ob-grid"><thead><tr>
-        <th>Тикер</th><th>Сторона</th><th>Лоты</th><th>Ср. цена</th><th>Тек. цена</th><th>Сумма, ₽</th><th>P/L, ₽</th><th class="live-order-col-cancel">Действие</th>
-      </tr></thead><tbody>${openBody}</tbody></table>`;
+        <th>Тикер</th><th>Сторона</th><th>Лоты</th><th>Ср. цена</th><th>Тек. цена</th><th title="Вклад в портфель, ₽">Сумма, ₽</th><th>P/L, ₽</th><th class="live-order-col-cancel">Действие</th>
+      </tr></thead><tbody>${openBody}</tbody>${foot}</table>`;
       return;
     }
     if (state.live.positionsError) {
       if (metaEl) metaEl.textContent = `Ошибка: ${state.live.positionsError}`;
-    } else if (state.live.positionsUpdatedAt) {
-      const ts = new Date(state.live.positionsUpdatedAt).toLocaleTimeString("ru-RU", {
-        hour: "2-digit", minute: "2-digit", second: "2-digit"
-      });
-      const sessHint = " · все открытые на счёте";
-      if (metaEl) metaEl.textContent = `Обновлено ${ts}${sessHint}`;
+    } else if (metaEl) {
+      if (state.live.positionsUpdatedAt) {
+        const ts = new Date(state.live.positionsUpdatedAt).toLocaleTimeString("ru-RU", {
+          hour: "2-digit", minute: "2-digit", second: "2-digit"
+        });
+        metaEl.textContent = `Обновлено ${ts} · нереализованные остатки на счёте T-Bank`;
+      } else {
+        metaEl.textContent = "Нереализованные остатки на счёте T-Bank. Реализованные (закрытые) не показываются.";
+      }
     }
-    const rows = state.live.openPositions || [];
+    const rows = filterLiveOpenPositionRows(state.live.openPositions || []);
     if (!rows.length) {
-      tableEl.innerHTML = '<p class="live-order-book-empty">Открытых позиций нет.</p>';
+      tableEl.innerHTML = '<p class="live-order-book-empty">Нереализованных позиций нет.</p>';
       return;
     }
     let totalSum = 0;
@@ -2636,9 +2950,10 @@ body.calc-running .help-ftr{opacity:.75;}
       </tr>`;
     }).join("");
     const foot = (Number.isFinite(totalSum) || Number.isFinite(totalPnl))
-      ? `<tfoot><tr><th colspan="5">Итого</th><th>${Number.isFinite(totalSum) ? fmt(totalSum, 0) : "—"}</th>`
+      ? `<tfoot><tr><th colspan="5">Итого нереализованные</th><th>${Number.isFinite(totalSum) ? fmt(totalSum, 0) : "—"}</th>`
         + `<th class="${totalPnl >= 0 ? "pos-pnl-pos" : "pos-pnl-neg"}">${Number.isFinite(totalPnl) ? `${totalPnl >= 0 ? "+" : ""}${fmt(totalPnl, 0)}` : "—"}</th><th></th></tr></tfoot>`
       : "";
+    tableEl.textContent = "";
     tableEl.innerHTML = `<table class="live-ob-grid"><thead><tr>
       <th>Тикер</th><th>Сторона</th><th>Лоты</th><th>Ср. цена</th><th>Тек. цена</th><th>Сумма, ₽</th><th>P/L, ₽</th><th class="live-order-col-cancel">Действие</th>
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
@@ -2715,23 +3030,22 @@ body.calc-running .help-ftr{opacity:.75;}
       if (metaEl) metaEl.textContent = `Закрытие ${row.ticker}: ${sideLabel}, ${lots} лот по рынку…`;
       if (sandbox) {
         await closeSandboxPositionAtMarket(row);
+        await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
+        syncSandboxPositionsTable();
+        renderLiveOrdersPanel();
       } else {
         await postLiveOrder(instrumentId, direction, lots, sec, { orderType: "market", market: row.market });
+        await refreshLiveOpenPositions({ force: true });
+        await new Promise((r) => setTimeout(r, 900));
+        await refreshLiveOpenPositions({ force: true });
+        await refreshLiveOrders();
+        await refreshLivePortfolioStats();
       }
       const okText = sandbox
         ? `Фейк-позиция закрыта по рынку: ${row.ticker}, ${sideLabel}, ${lots} лот.`
         : `Закрыто по рынку: ${row.ticker}, ${sideLabel}, ${lots} лот.`;
       noteLiveTech("live-pos-close", okText, `uid=${instrumentId}`);
       state.live.lastError = "";
-      if (sandbox) {
-        await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
-        syncSandboxPositionsTable();
-        renderLiveOrdersPanel();
-      } else {
-        await refreshLiveOpenPositions();
-        await refreshLiveOrders();
-        await refreshLivePortfolioStats();
-      }
       syncLiveTradingUi();
     } catch (err) {
       const msg = err?.message || String(err);
@@ -2820,7 +3134,9 @@ body.calc-running .help-ftr{opacity:.75;}
     state.live.positionsTimer = null;
   }
 
-  async function refreshLiveOpenPositions() {
+  async function refreshLiveOpenPositions(opts) {
+    const options = opts || {};
+    if (state.live.tradingActionBusy && !options.force) return;
     if (!isLiveMode()) {
       state.live.openPositions = [];
       state.live.positionsError = "";
@@ -2851,7 +3167,7 @@ body.calc-running .help-ftr{opacity:.75;}
         tbankRequest("OperationsService/GetPositions", { accountId })
       ]);
       const rows = await buildTbankPositionRows(portData, posData, { sessionOnly: false });
-      state.live.openPositions = rows;
+      state.live.openPositions = filterLiveOpenPositionRows(rows);
       state.live.positionsUpdatedAt = Date.now();
     } catch (err) {
       state.live.openPositions = [];
@@ -3166,14 +3482,40 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   function syncSandboxPositionsTable() {
-    state.live.openPositions = [...ensureSandboxState().open.values()];
+    state.live.openPositions = filterLiveOpenPositionRows([...ensureSandboxState().open.values()]);
     renderLivePositionsPanel();
   }
 
-  /** Обнулить целевые pos робота — после «Закрыть всё» не открывать снова на следующей сверке. */
+  /** Обнулить целевые pos робота в lastResult. */
   function suppressLiveFinrespTargets() {
     if (!state.lastResult?.perSec?.length) return;
     for (const p of state.lastResult.perSec) p.pos = 0;
+  }
+
+  /** После «Закрыть все позиции» — держать цель flat, пока не возобновят торговлю. */
+  function armLiveManualFlatten() {
+    state.live.manualFlatten = true;
+    suppressLiveFinrespTargets();
+  }
+
+  function clearLiveManualFlatten() {
+    state.live.manualFlatten = false;
+  }
+
+  /** Принудительно показать пустой список позиций (без ожидания опроса брокера). */
+  function forceClearLivePositionsPanel() {
+    state.live.openPositions = [];
+    const tableEl = $("live-positions-table");
+    const metaEl = $("live-positions-meta");
+    if (!tableEl || !isLiveMode()) return;
+    tableEl.textContent = "";
+    const emptyMsg = isLiveSandbox()
+      ? "Нереализованных фейк-позиций нет."
+      : "Нереализованных позиций нет.";
+    tableEl.innerHTML = `<p class="live-order-book-empty">${emptyMsg}</p>`;
+    if (metaEl && isLiveSandbox()) {
+      metaEl.textContent = "Нереализованные фейк-позиции. «Сумма, ₽» — вклад в портфель (лонг +, шорт −), не «Портфель всего».";
+    }
   }
 
   let liveChartsRefreshTimer = null;
@@ -3251,7 +3593,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return isLiveMode() && !!$("live-sandbox-mode")?.checked;
   }
 
-  /** Функция: объект state.live.sandbox (Map открытых, массивы closed/orders). */
+  /** Функция: объект state.live.sandbox (Map открытых, массивы closed/orders, ledger). */
   function ensureSandboxState() {
     if (!state.live.sandbox) {
       state.live.sandbox = {
@@ -3260,14 +3602,366 @@ body.calc-running .help-ftr{opacity:.75;}
         cashDelta: 0,
         commissionTotal: 0,
         open: new Map(),
+        openLegs: new Map(),
+        nextLegId: 0,
+        ledger: [],
+        nextFillId: 0,
         closed: [],
         orders: []
       };
     }
     if (!(state.live.sandbox.open instanceof Map)) state.live.sandbox.open = new Map();
+    if (!(state.live.sandbox.openLegs instanceof Map)) state.live.sandbox.openLegs = new Map();
+    if (!Number.isFinite(state.live.sandbox.nextLegId)) state.live.sandbox.nextLegId = 0;
+    if (!Array.isArray(state.live.sandbox.ledger)) state.live.sandbox.ledger = [];
+    if (!Number.isFinite(state.live.sandbox.nextFillId)) state.live.sandbox.nextFillId = 0;
     if (!Array.isArray(state.live.sandbox.closed)) state.live.sandbox.closed = [];
     if (!Array.isArray(state.live.sandbox.orders)) state.live.sandbox.orders = [];
     return state.live.sandbox;
+  }
+
+  function ensureSandboxLedger(sb) {
+    if (!Array.isArray(sb.ledger)) sb.ledger = [];
+    if (!Number.isFinite(sb.nextFillId)) sb.nextFillId = 0;
+  }
+
+  /** FIFO или LIFO при списании закрытия на ранее открытые лоты (по умолчанию FIFO). */
+  function sandboxMatchMode() {
+    return $("live-sandbox-match-mode")?.value === "lifo" ? "lifo" : "fifo";
+  }
+
+  function createSandboxReplayCtx(sb) {
+    return {
+      startPortfolio: sb.startPortfolio,
+      cash: sb.startPortfolio,
+      cashDelta: 0,
+      commissionTotal: 0,
+      open: new Map(),
+      openLegs: new Map(),
+      nextLegId: 0,
+      closed: []
+    };
+  }
+
+  function copySandboxReplayToState(sb, ctx) {
+    sb.cash = ctx.cash;
+    sb.cashDelta = ctx.cash - sb.startPortfolio;
+    sb.commissionTotal = ctx.commissionTotal;
+    sb.open = ctx.open;
+    sb.openLegs = ctx.openLegs;
+    sb.nextLegId = ctx.nextLegId;
+    sb.closed.length = 0;
+    sb.closed.push(...ctx.closed);
+  }
+
+  function syncSandboxOrdersTradeMetaFromLedger(sb) {
+    const byOrder = new Map();
+    for (const fill of sb.ledger || []) {
+      if (fill.orderId) byOrder.set(fill.orderId, fill);
+    }
+    for (const o of sb.orders || []) {
+      const fill = byOrder.get(o.orderId);
+      if (!fill) continue;
+      o.tradeRole = fill.tradeRole || o.tradeRole;
+      o.tradeMatches = fill.tradeMatches ? fill.tradeMatches.map((m) => ({ ...m })) : o.tradeMatches;
+      o.tradePnl = fill.tradePnl ?? o.tradePnl;
+      o.matchMode = fill.matchMode || o.matchMode;
+    }
+  }
+
+  /** Восстановить ledger из старых заявок (миграция сессий без ledger). */
+  function migrateSandboxLedgerFromLegacy(sb) {
+    ensureSandboxLedger(sb);
+    if (sb.ledger.length || !(sb.orders || []).length) return;
+    const sorted = sb.orders.slice().sort(
+      (a, b) => (Date.parse(a.orderDate || 0) || 0) - (Date.parse(b.orderDate || 0) || 0)
+    );
+    for (const o of sorted) {
+      if (!o.fake) continue;
+      const market = o.market === "futures" ? "futures" : "shares";
+      const ticker = String(o.ticker || o.sec || "").toUpperCase();
+      const lots = Math.max(1, Math.floor(+(o.lotsExecuted ?? o.lotsRequested ?? 1)));
+      const lot = Math.max(1, +o.lot || (market === "futures" ? 1 : 10));
+      const isFuture = market === "futures";
+      const isBuy = isOrderBuy(o);
+      const signedPieces = Number.isFinite(o.signedPieces)
+        ? Math.trunc(o.signedPieces)
+        : (isFuture ? (isBuy ? lots : -lots) : (isBuy ? lots * lot : -(lots * lot)));
+      sb.nextFillId = (sb.nextFillId || 0) + 1;
+      sb.ledger.push({
+        fillId: sb.nextFillId,
+        orderId: o.orderId,
+        ts: o.orderDate || new Date().toISOString(),
+        key: sandboxPosKey(market, ticker),
+        ticker,
+        sec: o.sec || ticker,
+        market,
+        instrumentId: o.instrumentId,
+        lot,
+        isFuture,
+        signedPieces,
+        price: +o.price,
+        fee: +o.fee || 0,
+        matchMode: o.matchMode || sandboxMatchMode(),
+        direction: o.direction,
+        lots,
+        tradeRole: o.tradeRole,
+        tradeMatches: o.tradeMatches,
+        tradePnl: o.tradePnl
+      });
+    }
+  }
+
+  /** Полный пересчёт cash / openLegs / closed из append-only журнала исполнений. */
+  function rebuildSandboxFromLedger(sb) {
+    ensureSandboxLedger(sb);
+    if (!Number.isFinite(sb.startPortfolio)) return;
+    if (!sb.ledger.length) {
+      migrateSandboxLedgerFromLegacy(sb);
+      if (!sb.ledger.length) return;
+    }
+    const ctx = createSandboxReplayCtx(sb);
+    for (const fill of sb.ledger) {
+      const meta = applySandboxLedgerFill(ctx, fill);
+      fill.tradeRole = meta.role;
+      fill.tradeMatches = meta.matches ? meta.matches.map((m) => ({ ...m })) : [];
+      fill.tradePnl = meta.pnlTotal;
+    }
+    copySandboxReplayToState(sb, ctx);
+    syncSandboxOrdersTradeMetaFromLedger(sb);
+  }
+
+  function applySandboxLedgerFill(ctx, fill) {
+    const signedPieces = Math.trunc(+fill.signedPieces || 0);
+    const price = +fill.price;
+    const fee = +fill.fee || 0;
+    if (!signedPieces || !Number.isFinite(price)) {
+      return { role: null, matches: [], pnlTotal: 0 };
+    }
+    const notional = Math.abs(signedPieces) * price;
+    if (signedPieces > 0) {
+      ctx.cash -= notional + fee;
+    } else {
+      ctx.cash += notional - fee;
+    }
+    ctx.commissionTotal += fee;
+    const posMeta = {
+      ticker: fill.ticker,
+      sec: fill.sec,
+      market: fill.market,
+      instrumentId: fill.instrumentId,
+      lot: fill.lot,
+      isFuture: fill.isFuture
+    };
+    return applySandboxSignedDelta(ctx, posMeta, signedPieces, price, {
+      matchMode: fill.matchMode || sandboxMatchMode(),
+      skipNotify: true
+    });
+  }
+
+  function appendSandboxFill(sb, fillData) {
+    ensureSandboxLedger(sb);
+    sb.nextFillId = (sb.nextFillId || 0) + 1;
+    const fill = {
+      fillId: sb.nextFillId,
+      ts: fillData.ts || new Date().toISOString(),
+      matchMode: fillData.matchMode || sandboxMatchMode(),
+      ...fillData
+    };
+    sb.ledger.push(fill);
+    if (sb.ledger.length > 500) sb.ledger.splice(0, sb.ledger.length - 500);
+    return fill;
+  }
+
+  function sandboxNotifyForFillTrade(fill, posMeta) {
+    if (!fill?.tradeRole) return;
+    const role = fill.tradeRole;
+    const price = +fill.price;
+    if (role === "open_long" || role === "open_short") {
+      const pieces = Math.abs(Math.trunc(+fill.signedPieces || 0));
+      notifySandboxPositionOpen(
+        { ...posMeta, side: role === "open_short" ? "short" : "long" },
+        price,
+        pieces
+      );
+      return;
+    }
+    if (role === "close_long" || role === "close_short" || role === "flip") {
+      const closedPieces = Array.isArray(fill.tradeMatches) && fill.tradeMatches.length
+        ? fill.tradeMatches.reduce((s, m) => s + (+m.pieces || 0), 0)
+        : Math.abs(Math.trunc(+fill.signedPieces || 0));
+      notifySandboxPositionClose(
+        { ...posMeta, side: role === "close_short" ? "short" : "long" },
+        closedPieces,
+        price,
+        fill.tradePnl
+      );
+    }
+  }
+
+  function ensureSandboxOpenLegs(sb) {
+    if (!(sb.openLegs instanceof Map)) sb.openLegs = new Map();
+    if (!Number.isFinite(sb.nextLegId)) sb.nextLegId = 0;
+  }
+
+  function allocSandboxLegId(sb) {
+    ensureSandboxOpenLegs(sb);
+    sb.nextLegId = (sb.nextLegId || 0) + 1;
+    return sb.nextLegId;
+  }
+
+  function snapshotSandboxOpenLegs(openLegsMap) {
+    const out = {};
+    for (const [k, legs] of (openLegsMap || new Map()).entries()) {
+      out[k] = (legs || []).map((leg) => ({ ...leg }));
+    }
+    return out;
+  }
+
+  /** Миграция: одна агрегированная позиция → один leg (старые сессии без openLegs). */
+  function migrateSandboxOpenToLegs(sb, key) {
+    ensureSandboxOpenLegs(sb);
+    const pool = sb.openLegs.get(key);
+    if (pool && pool.length) return;
+    const cur = sb.open.get(key);
+    if (!cur || cur.pieces <= 0) return;
+    sb.openLegs.set(key, [{
+      legId: allocSandboxLegId(sb),
+      side: cur.side,
+      pieces: cur.pieces,
+      price: cur.avgPrice,
+      openedAt: cur.openedAt || new Date().toISOString()
+    }]);
+  }
+
+  function rebuildSandboxOpenFromLegs(sb, key, posMeta) {
+    ensureSandboxOpenLegs(sb);
+    const pool = sb.openLegs.get(key) || [];
+    if (!pool.length) {
+      sb.open.delete(key);
+      sb.openLegs.delete(key);
+      return null;
+    }
+    const side = pool[0].side;
+    let pieces = 0;
+    let costSum = 0;
+    let oldestOpen = pool[0].openedAt;
+    for (const leg of pool) {
+      pieces += leg.pieces;
+      costSum += leg.pieces * leg.price;
+      if (leg.openedAt && (!oldestOpen || leg.openedAt < oldestOpen)) oldestOpen = leg.openedAt;
+    }
+    if (pieces <= 0) {
+      sb.open.delete(key);
+      sb.openLegs.delete(key);
+      return null;
+    }
+    const prev = sb.open.get(key);
+    const row = {
+      ticker: posMeta.ticker,
+      sec: posMeta.sec,
+      market: posMeta.market,
+      instrumentId: posMeta.instrumentId,
+      lot: posMeta.lot,
+      isFuture: posMeta.isFuture,
+      side,
+      pieces,
+      lots: posMeta.isFuture ? pieces : piecesToLots(pieces, posMeta.lot),
+      avgPrice: costSum / pieces,
+      curPrice: prev?.curPrice ?? costSum / pieces,
+      openedAt: oldestOpen || new Date().toISOString(),
+      fake: true
+    };
+    sb.open.set(key, row);
+    return row;
+  }
+
+  function pushSandboxLeg(sb, key, side, pieces, price) {
+    ensureSandboxOpenLegs(sb);
+    if (!sb.openLegs.has(key)) sb.openLegs.set(key, []);
+    sb.openLegs.get(key).push({
+      legId: allocSandboxLegId(sb),
+      side,
+      pieces,
+      price,
+      openedAt: new Date().toISOString()
+    });
+  }
+
+  /**
+   * Списать piecesToClose штук с открытых legs (FIFO/LIFO).
+   * @returns {{ matches, pnlTotal, remaining }}
+   */
+  function consumeSandboxLegs(sb, key, closeSide, piecesToClose, closePrice, posMeta, opts) {
+    const options = opts || {};
+    ensureSandboxOpenLegs(sb);
+    migrateSandboxOpenToLegs(sb, key);
+    const pool = sb.openLegs.get(key) || [];
+    const matchMode = options.matchMode || sandboxMatchMode();
+    let remaining = Math.trunc(+piecesToClose || 0);
+    const matches = [];
+    let pnlTotal = 0;
+
+    while (remaining > 0 && pool.length) {
+      const idx = matchMode === "lifo" ? pool.length - 1 : 0;
+      const leg = pool[idx];
+      if (leg.side !== closeSide) break;
+      const take = Math.min(remaining, leg.pieces);
+      const legPnl = closeSide === "short"
+        ? (leg.price - closePrice) * take
+        : (closePrice - leg.price) * take;
+      matches.push({
+        legId: leg.legId,
+        side: leg.side,
+        pieces: take,
+        openPrice: leg.price,
+        closePrice,
+        pnl: legPnl,
+        openedAt: leg.openedAt,
+        matchMode
+      });
+      pnlTotal += legPnl;
+      remaining -= take;
+      if (take >= leg.pieces) pool.splice(idx, 1);
+      else leg.pieces -= take;
+    }
+
+    if (!pool.length) sb.openLegs.delete(key);
+
+    const closedPieces = Math.trunc(+piecesToClose || 0) - remaining;
+    if (closedPieces > 0 && !options.skipClosedJournal) {
+      const journalPos = sb.open.get(key) || {
+        ticker: posMeta.ticker,
+        sec: posMeta.sec,
+        market: posMeta.market,
+        side: closeSide,
+        lot: posMeta.lot,
+        isFuture: posMeta.isFuture,
+        instrumentId: posMeta.instrumentId,
+        avgPrice: matches[0]?.openPrice ?? closePrice
+      };
+      pushSandboxClosed(sb, journalPos, closedPieces, closePrice, {
+        matches,
+        pnlTotal,
+        matchMode,
+        skipNotify: options.skipNotify
+      });
+    } else if (closedPieces > 0 && !options.skipNotify) {
+      const notifyPos = sb.open.get(key) || {
+        ticker: posMeta.ticker,
+        sec: posMeta.sec,
+        market: posMeta.market,
+        side: closeSide,
+        lot: posMeta.lot,
+        isFuture: posMeta.isFuture,
+        instrumentId: posMeta.instrumentId,
+        avgPrice: matches[0]?.openPrice ?? closePrice
+      };
+      notifySandboxPositionClose(notifyPos, closedPieces, closePrice, pnlTotal);
+    }
+
+    rebuildSandboxOpenFromLegs(sb, key, posMeta);
+    return { matches, pnlTotal, remaining };
   }
 
   /** Функция: ключ позиции в Map песочницы (market:ticker). */
@@ -3324,6 +4018,13 @@ body.calc-running .help-ftr{opacity:.75;}
       cashDelta: sb.cashDelta,
       commissionTotal: sb.commissionTotal,
       open: snapshotSandboxOpen(sb.open),
+      openLegs: snapshotSandboxOpenLegs(sb.openLegs),
+      nextLegId: sb.nextLegId || 0,
+      ledger: (sb.ledger || []).map((f) => ({
+        ...f,
+        tradeMatches: f.tradeMatches ? f.tradeMatches.map((m) => ({ ...m })) : null
+      })),
+      nextFillId: sb.nextFillId || 0,
       closed: (sb.closed || []).map((c) => ({ ...c }))
     };
   }
@@ -3335,8 +4036,22 @@ body.calc-running .help-ftr{opacity:.75;}
     sb.commissionTotal = snap.commissionTotal;
     sb.open.clear();
     for (const [k, v] of Object.entries(snap.open || {})) sb.open.set(k, { ...v });
+    ensureSandboxOpenLegs(sb);
+    sb.openLegs.clear();
+    for (const [k, legs] of Object.entries(snap.openLegs || {})) {
+      sb.openLegs.set(k, (legs || []).map((leg) => ({ ...leg })));
+    }
+    sb.nextLegId = snap.nextLegId || 0;
+    ensureSandboxLedger(sb);
+    sb.ledger.length = 0;
+    sb.ledger.push(...(snap.ledger || []).map((f) => ({
+      ...f,
+      tradeMatches: f.tradeMatches ? f.tradeMatches.map((m) => ({ ...m })) : null
+    })));
+    sb.nextFillId = snap.nextFillId || 0;
     sb.closed.length = 0;
     sb.closed.push(...(snap.closed || []));
+    if (sb.ledger.length) rebuildSandboxFromLedger(sb);
   }
 
   /** Процедура (async): закрыть фейк-позицию целиком по точному числу штук (без переворота в шорт). */
@@ -3367,18 +4082,39 @@ body.calc-running .help-ftr{opacity:.75;}
     const notional = pieces * price;
     const fee = sandboxCommissionFee(notional);
     const lots = openPos.isFuture ? pieces : positionClosingLots(openPos, pieces);
+    const orderId = options.skipRecord
+      ? null
+      : (`fake-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    let fill = null;
 
     try {
-      if (isShort) {
-        sb.cash -= notional + fee;
-        sb.cashDelta -= notional + fee;
-      } else {
-        sb.cash += notional - fee;
-        sb.cashDelta += notional - fee;
+      const pieceDelta = isShort ? pieces : -pieces;
+      fill = appendSandboxFill(sb, {
+        orderId,
+        key,
+        ticker,
+        sec: openPos.sec || ticker,
+        market,
+        instrumentId: openPos.instrumentId,
+        lot: openPos.lot,
+        isFuture: openPos.isFuture,
+        signedPieces: pieceDelta,
+        price,
+        fee,
+        direction,
+        lots
+      });
+      rebuildSandboxFromLedger(sb);
+      if (!options.skipNotify) {
+        sandboxNotifyForFillTrade(fill, {
+          ticker,
+          sec: openPos.sec || ticker,
+          market,
+          instrumentId: openPos.instrumentId,
+          lot: openPos.lot,
+          isFuture: openPos.isFuture
+        });
       }
-      sb.commissionTotal += fee;
-      pushSandboxClosed(openPos, pieces, price);
-      sb.open.delete(key);
     } catch (err) {
       restoreSandboxSnapshot(sb, revertSnap);
       throw err;
@@ -3386,6 +4122,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
     if (!options.skipRecord) {
       recordSandboxOrder({
+        orderId,
         ticker,
         direction,
         lots,
@@ -3396,7 +4133,13 @@ body.calc-running .help-ftr{opacity:.75;}
         instrumentId: openPos.instrumentId,
         market,
         sec: openPos.sec || ticker,
-        revertSnap
+        revertSnap,
+        tradeRole: fill?.tradeRole,
+        tradeMatches: fill?.tradeMatches,
+        tradePnl: fill?.tradePnl,
+        matchMode: sandboxMatchMode(),
+        signedPieces: isShort ? pieces : -pieces,
+        lot: openPos.lot
       });
       recordLiveOrderMarker(openPos.sec || ticker, direction, "market", { lots, price });
     }
@@ -3427,10 +4170,34 @@ body.calc-running .help-ftr{opacity:.75;}
       instrumentId: trade.instrumentId,
       market: trade.market,
       sec: trade.sec,
-      revertSnap: trade.revertSnap
+      revertSnap: trade.revertSnap,
+      tradeRole: trade.tradeRole || null,
+      tradeMatches: trade.tradeMatches ? trade.tradeMatches.map((m) => ({ ...m })) : null,
+      tradePnl: trade.tradePnl,
+      matchMode: trade.matchMode || sandboxMatchMode(),
+      signedPieces: trade.signedPieces,
+      lot: trade.lot
     });
     if (sb.orders.length > 200) sb.orders.length = 200;
     return orderId;
+  }
+
+  function sandboxOrderStatusLabel(o) {
+    const role = o.tradeRole;
+    const mode = o.matchMode === "lifo" ? "LIFO" : "FIFO";
+    const pnl = Number.isFinite(o.tradePnl)
+      ? ` · P/L ${o.tradePnl >= 0 ? "+" : ""}${fmt(o.tradePnl, 0)} ₽`
+      : "";
+    const legCount = Array.isArray(o.tradeMatches) ? o.tradeMatches.length : 0;
+    const legsHint = legCount > 1 ? ` · ${legCount} лота` : "";
+    if (role === "open_long") return "открытие лонга";
+    if (role === "add_long") return "докупка лонга";
+    if (role === "close_long") return `закрытие лонга (${mode})${legsHint}${pnl}`;
+    if (role === "open_short") return "открытие шорта";
+    if (role === "add_short") return "докупка шорта";
+    if (role === "close_short") return `закрытие шорта (${mode})${legsHint}${pnl}`;
+    if (role === "flip") return `переворот (${mode})${pnl}`;
+    return "исполнена (фейк)";
   }
 
   async function closeSandboxOrderAtMarket(order) {
@@ -3506,12 +4273,15 @@ body.calc-running .help-ftr{opacity:.75;}
     noteLiveTech("live-close-order", "ok", String(orderId));
   }
 
-  /** Процедура: перенести закрытый объём в sb.closed с расчётом P/L. */
-  function pushSandboxClosed(pos, closePieces, closePrice) {
-    const sb = ensureSandboxState();
-    const pnl = pos.side === "short"
-      ? (pos.avgPrice - closePrice) * closePieces
-      : (closePrice - pos.avgPrice) * closePieces;
+  /** Процедура: перенести закрытый объём в sb.closed с расчётом P/L (журнал, не таблица открытых). */
+  function pushSandboxClosed(sb, pos, closePieces, closePrice, opts) {
+    const options = opts || {};
+    const matches = options.matches;
+    const pnl = Number.isFinite(options.pnlTotal)
+      ? options.pnlTotal
+      : (pos.side === "short"
+        ? (pos.avgPrice - closePrice) * closePieces
+        : (closePrice - pos.avgPrice) * closePieces);
     sb.closed.unshift({
       ticker: pos.ticker,
       sec: pos.sec,
@@ -3528,56 +4298,101 @@ body.calc-running .help-ftr{opacity:.75;}
       closedAt: new Date().toISOString(),
       isFuture: pos.isFuture,
       instrumentId: pos.instrumentId,
-      fake: true
+      fake: true,
+      matchMode: options.matchMode || sandboxMatchMode(),
+      matches: matches ? matches.map((m) => ({ ...m })) : null
     });
     if (sb.closed.length > 200) sb.closed.length = 200;
+    if (!options.skipNotify) notifySandboxPositionClose(pos, closePieces, closePrice, pnl);
+  }
+
+  function openSandboxPosition(sb, pos, side, pieces, price, opts) {
+    const options = opts || {};
+    const key = sandboxPosKey(pos.market, pos.ticker);
+    const hadOpen = sb.open.has(key) && (sb.open.get(key)?.pieces || 0) > 0;
+    pushSandboxLeg(sb, key, side, pieces, price);
+    const row = rebuildSandboxOpenFromLegs(sb, key, pos);
+    if (!options.skipNotify && !hadOpen && row) notifySandboxPositionOpen(row, price, pieces);
+    return row;
   }
 
   /**
-   * Процедура: изменить открытую фейк-позицию на signedDelta лотов/штук по price
-   * (открытие, усреднение, частичное закрытие, переворот).
+   * Процедура: изменить открытую фейк-позицию на signedPieceDelta штук (+ лонг / − шорт).
+   * Закрытие списывает ранее открытые legs по FIFO или LIFO.
+   * @returns {{ role, matches, pnlTotal }}
    */
-  function applySandboxSignedDelta(pos, signedDelta, price) {
-    const sb = ensureSandboxState();
+  function applySandboxSignedDelta(sb, pos, signedPieceDelta, price, opts) {
+    const options = opts || {};
+    const delta = Math.trunc(+signedPieceDelta || 0);
+    if (!delta) return { role: null, matches: [], pnlTotal: 0 };
     const key = sandboxPosKey(pos.market, pos.ticker);
+    migrateSandboxOpenToLegs(sb, key);
     const cur = sb.open.get(key);
-    if (!cur) {
-      const side = signedDelta > 0 ? "long" : "short";
-      const pieces = Math.abs(signedDelta);
-      sb.open.set(key, {
-        ticker: pos.ticker,
-        sec: pos.sec,
-        market: pos.market,
-        instrumentId: pos.instrumentId,
-        lot: pos.lot,
-        isFuture: pos.isFuture,
-        side,
-        pieces,
-        lots: pos.isFuture ? pieces : piecesToLots(pieces, pos.lot),
-        avgPrice: price,
-        curPrice: price,
-        openedAt: new Date().toISOString(),
-        fake: true
+    const matchMode = options.matchMode || sandboxMatchMode();
+
+    const curSigned = cur ? (cur.side === "short" ? -cur.pieces : cur.pieces) : 0;
+    const newSigned = curSigned + delta;
+    let role = null;
+    let matches = [];
+    let pnlTotal = 0;
+
+    if (curSigned === 0) {
+      if (delta > 0) {
+        openSandboxPosition(sb, pos, "long", delta, price, options);
+        role = "open_long";
+      } else {
+        openSandboxPosition(sb, pos, "short", -delta, price, options);
+        role = "open_short";
+      }
+      return { role, matches, pnlTotal };
+    }
+
+    const curSide = cur.side;
+
+    if (newSigned === 0) {
+      const consumed = consumeSandboxLegs(sb, key, curSide, cur.pieces, price, pos, {
+        ...options,
+        matchMode,
+        skipNotify: options.skipNotify
       });
-      return;
+      matches = consumed.matches;
+      pnlTotal = consumed.pnlTotal;
+      role = curSide === "short" ? "close_short" : "close_long";
+      return { role, matches, pnlTotal };
     }
-    if (cur.side === pos.side) {
-      const newPieces = cur.pieces + Math.abs(signedDelta);
-      cur.avgPrice = (cur.avgPrice * cur.pieces + price * Math.abs(signedDelta)) / newPieces;
-      cur.pieces = newPieces;
-      cur.lots = cur.isFuture ? newPieces : piecesToLots(newPieces, cur.lot);
-      cur.curPrice = price;
-      return;
+
+    if (Math.sign(newSigned) === Math.sign(curSigned)) {
+      if (Math.abs(newSigned) > Math.abs(curSigned)) {
+        const addPieces = Math.abs(newSigned) - Math.abs(curSigned);
+        pushSandboxLeg(sb, key, curSide, addPieces, price);
+        rebuildSandboxOpenFromLegs(sb, key, pos);
+        role = curSide === "short" ? "add_short" : "add_long";
+      } else {
+        const closePieces = cur.pieces - Math.abs(newSigned);
+        const consumed = consumeSandboxLegs(sb, key, curSide, closePieces, price, pos, {
+          ...options,
+          matchMode,
+          skipNotify: options.skipNotify
+        });
+        matches = consumed.matches;
+        pnlTotal = consumed.pnlTotal;
+        role = curSide === "short" ? "close_short" : "close_long";
+      }
+      return { role, matches, pnlTotal };
     }
-    const closePieces = Math.min(cur.pieces, Math.abs(signedDelta));
-    pushSandboxClosed(cur, closePieces, price);
-    cur.pieces -= closePieces;
-    if (cur.pieces <= 0) sb.open.delete(key);
-    else cur.lots = cur.isFuture ? cur.pieces : piecesToLots(cur.pieces, cur.lot);
-    const remainder = Math.abs(signedDelta) - closePieces;
-    if (remainder > 0) {
-      applySandboxSignedDelta({ ...pos, side: signedDelta > 0 ? "long" : "short" }, signedDelta > 0 ? remainder : -remainder, price);
-    }
+
+    const consumed = consumeSandboxLegs(sb, key, curSide, cur.pieces, price, pos, {
+      ...options,
+      matchMode,
+      skipNotify: options.skipNotify
+    });
+    matches = consumed.matches;
+    pnlTotal = consumed.pnlTotal;
+    const flipPieces = Math.abs(newSigned);
+    const flipSide = newSigned > 0 ? "long" : "short";
+    openSandboxPosition(sb, pos, flipSide, flipPieces, price, { ...options, skipNotify: true });
+    role = "flip";
+    return { role, matches, pnlTotal };
   }
 
   /**
@@ -3622,37 +4437,55 @@ body.calc-running .help-ftr{opacity:.75;}
     const notional = Math.abs(pieceDelta) * price;
     const fee = sandboxCommissionFee(notional);
     const posMeta = { ticker, sec: secForPrice || ticker, market, instrumentId, lot, isFuture };
-    const tradePieces = Math.abs(pieceDelta);
+    const orderId = opts.skipRecord
+      ? null
+      : (`fake-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    let fill = null;
 
     try {
-      if (isBuy) {
-        sb.cash -= notional + fee;
-        sb.cashDelta -= notional + fee;
-        applySandboxSignedDelta({ ...posMeta, side: "long" }, tradePieces, price);
-      } else {
-        sb.cash += notional - fee;
-        sb.cashDelta += notional - fee;
-        applySandboxSignedDelta({ ...posMeta, side: "short" }, tradePieces, price);
-      }
-      sb.commissionTotal += fee;
+      fill = appendSandboxFill(sb, {
+        orderId,
+        key: sandboxPosKey(market, ticker),
+        ticker,
+        sec: secForPrice || ticker,
+        market,
+        instrumentId,
+        lot,
+        isFuture,
+        signedPieces: pieceDelta,
+        price,
+        fee,
+        direction,
+        lots: qty
+      });
+      rebuildSandboxFromLedger(sb);
+      if (!opts.skipRecord && !opts.skipNotify) sandboxNotifyForFillTrade(fill, posMeta);
     } catch (err) {
       restoreSandboxSnapshot(sb, revertSnap);
       throw err;
     }
 
-    const orderId = opts.skipRecord ? null : recordSandboxOrder({
-      ticker,
-      direction,
-      lots: qty,
-      orderType,
-      price,
-      notional,
-      fee,
-      instrumentId,
-      market,
-      sec: secForPrice || ticker,
-      revertSnap
-    });
+    if (!opts.skipRecord) {
+      recordSandboxOrder({
+        orderId,
+        ticker,
+        direction,
+        lots: qty,
+        orderType,
+        price,
+        notional,
+        fee,
+        instrumentId,
+        market,
+        sec: secForPrice || ticker,
+        revertSnap,
+        tradeRole: fill?.tradeRole,
+        tradeMatches: fill?.tradeMatches,
+        tradePnl: fill?.tradePnl,
+        matchMode: sandboxMatchMode(),
+        signedPieces: pieceDelta,
+        lot
+      });
     if (!opts.skipRecord) {
       await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
       renderLiveOrdersPanel();
@@ -3693,6 +4526,7 @@ body.calc-running .help-ftr{opacity:.75;}
       sb.startPortfolio = state.live.realPortfolioValue ?? state.live.portfolioValue ?? (+$("vol-deposit")?.value || 0);
     }
     ensureSandboxCash(sb);
+    if (sb.ledger?.length) rebuildSandboxFromLedger(sb);
     let mtm = 0;
     for (const pos of sb.open.values()) {
       let cur = sandboxLocalPrice(pos);
@@ -3715,8 +4549,9 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Процедура (async): включить песочницу — зафиксировать startPortfolio, очистить фейк-состояние. */
   async function enableLiveSandbox() {
-    if (!(await ensureTbankTokenUnlocked()) && state.tbank.token) {
-      /* deposit/portfolio may load later */
+    const hasStored = !!safeStorageGet(TBANK_TOKEN_STORE_KEY);
+    if (hasStored && !state.tbank.token) {
+      await ensureTbankTokenUnlocked({ interactive: false, openUi: false });
     }
     try {
       const portfolio = state.tbank.selectedAccountId
@@ -3737,11 +4572,20 @@ body.calc-running .help-ftr{opacity:.75;}
     sb.cashDelta = 0;
     sb.commissionTotal = 0;
     sb.open.clear();
+    ensureSandboxOpenLegs(sb);
+    sb.openLegs.clear();
+    sb.nextLegId = 0;
+    ensureSandboxLedger(sb);
+    sb.ledger.length = 0;
+    sb.nextFillId = 0;
     sb.closed.length = 0;
     sb.orders.length = 0;
     state.live.portfolioValue = sb.startPortfolio;
     state.live.commissionPaid = 0;
-    if (state.live.chartSession) state.live.chartSession.portfolioBaseline = sb.startPortfolio;
+    if (state.live.chartSession) {
+      state.live.chartSession.portfolioBaseline = sb.startPortfolio;
+      resetSandboxStopperWatch();
+    }
     await updateSandboxPortfolioDisplay();
     renderLiveOrdersPanel();
     renderLivePositionsPanel();
@@ -3756,6 +4600,12 @@ body.calc-running .help-ftr{opacity:.75;}
     sb.cashDelta = 0;
     sb.commissionTotal = 0;
     sb.open.clear();
+    ensureSandboxOpenLegs(sb);
+    sb.openLegs.clear();
+    sb.nextLegId = 0;
+    ensureSandboxLedger(sb);
+    sb.ledger.length = 0;
+    sb.nextFillId = 0;
     sb.closed.length = 0;
     sb.orders.length = 0;
     await refreshLivePortfolioStats();
@@ -3768,8 +4618,13 @@ body.calc-running .help-ftr{opacity:.75;}
   async function onLiveSandboxToggle() {
     const on = !!$("live-sandbox-mode")?.checked;
     if (state.live.active) recordLiveModeRegionSwitch();
-    if (on) await enableLiveSandbox();
-    else await disableLiveSandbox();
+    if (on) {
+      await enableLiveSandbox();
+      resetSandboxStopperWatch();
+      if (liveSandboxNotifyActive()) {
+        await ensureLiveNotifyPermission();
+      }
+    } else await disableLiveSandbox();
     saveConfig();
     syncLiveTradingUi();
     refreshLiveChartsUi();
@@ -3996,6 +4851,7 @@ body.calc-running .help-ftr{opacity:.75;}
         cp.style.color = isLiveSandbox() ? "#15803d" : "#b91c1c";
       }
     }
+    checkSandboxPortfolioStopperNotify();
   }
 
   async function refreshLivePortfolioStats() {
@@ -4013,7 +4869,9 @@ body.calc-running .help-ftr{opacity:.75;}
       ]);
       state.live.realPortfolioValue = moneyValueRub(portfolio.totalAmountPortfolio);
       state.live.freeCashRub = rubFreeCashFromTbankPositions(positions);
-      state.live.portfolioPositions = await buildTbankPositionRows(portfolio, positions, { sessionOnly: false });
+      state.live.portfolioPositions = filterLiveOpenPositionRows(
+        await buildTbankPositionRows(portfolio, positions, { sessionOnly: false })
+      );
       const from = state.live.sessionStartedAt
         || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
       const ops = await tbankRequest("OperationsService/GetOperations", {
@@ -4089,7 +4947,9 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   function liveReconcileTargets() {
-    return state.lastResult?.perSec || [];
+    const rows = state.lastResult?.perSec || [];
+    if (!state.live.manualFlatten) return rows;
+    return rows.map((p) => ({ ...p, pos: 0 }));
   }
 
   function isLiveObTrendGateEnabled() {
@@ -4146,6 +5006,33 @@ body.calc-running .help-ftr{opacity:.75;}
     return map[String(tf)] || 3600000;
   }
 
+  /** Сколько инструментов имеют хотя бы одну свечу в state.packs. */
+  function liveCandlePackCount(packs) {
+    let n = 0;
+    for (const pack of packs || []) {
+      if (pack?.length) n += 1;
+    }
+    return n;
+  }
+
+  function liveHasAnyCandles() {
+    return liveCandlePackCount(state.packs) > 0;
+  }
+
+  /** Не ругаться на «нет свечей» первый TF после старта live-сессии. */
+  function liveCandleDelayGraceUntilMs() {
+    const cs = state.live.chartSession;
+    if (!cs?.startedAt) return 0;
+    const tf = $("calc-tf")?.value || "60";
+    const t0 = new Date(cs.startedAt).getTime();
+    return Number.isFinite(t0) ? t0 + tfDurationMs(tf) : 0;
+  }
+
+  function inLiveCandleGracePeriod(nowMs) {
+    const until = liveCandleDelayGraceUntilMs();
+    return until > 0 && (nowMs ?? Date.now()) < until;
+  }
+
   /** Задержка live-свечей: >2×TF по времени бара или >2 мин без успешного опроса. */
   function assessLiveCandleDelay() {
     const tf = $("calc-tf")?.value || "60";
@@ -4156,6 +5043,8 @@ body.calc-running .help-ftr{opacity:.75;}
     const liveOn = isLiveMode() && (state.live.active || state.live.chartSession);
     if (!liveOn) return { stale: false, message: "" };
 
+    const hasCandles = liveHasAnyCandles();
+    const inGrace = inLiveCandleGracePeriod(now);
     const refreshMs = state.live.lastCandleRefreshAt
       ? new Date(state.live.lastCandleRefreshAt).getTime()
       : NaN;
@@ -4165,14 +5054,15 @@ body.calc-running .help-ftr{opacity:.75;}
     const barLagMs = Number.isFinite(barMs) ? now - barMs : Infinity;
     const src = state.live.candleSource === "tbank" ? "T-Bank" : (state.live.candleSource === "cache" ? "кэш" : "MOEX");
 
-    if (!state.packs?.length) {
-      if (pollGapMs > maxPollGapMs || state.live.active) {
-        return {
-          stale: true,
-          message: `Задержка: нет свечей (${src}). Проверьте токен, источник и выбранные тикеры.`
-        };
+    if (!hasCandles) {
+      if (inGrace) return { stale: false, message: "" };
+      if (pollGapMs <= maxPollGapMs && state.live.candleRefreshBusy) {
+        return { stale: false, message: "" };
       }
-      return { stale: false, message: "" };
+      return {
+        stale: true,
+        message: `Задержка: нет свечей (${src}). Проверьте токен, источник и выбранные тикеры.`
+      };
     }
 
     if (pollGapMs > maxPollGapMs) {
@@ -4462,6 +5352,7 @@ ${totalBlock}
     const annHint = $("calc-ann-hint");
     if (annHint) annHint.textContent = "Live-сессия: FINRESP и графики с нуля с момента выбора «Реальная торговля».";
     state.lastResult = null;
+    if (isLiveSandbox()) resetSandboxStopperWatch();
     refreshLiveChartsUi();
     startLiveModePoll();
     return true;
@@ -4794,6 +5685,7 @@ ${totalBlock}
     state.live.lastCandleRefreshAt = new Date().toISOString();
     state.live.lastCandleBarTime = barTimes.calcEnd || barTimes.freshest || null;
     state.live.lastCandleBarTimeFresh = barTimes.freshest || null;
+    if (liveHasAnyCandles()) syncLiveCandleDelayUi(isLiveMode());
   }
 
   /** file:// / без MOEX: только IndexedDB (без fetch MOEX). */
@@ -4910,11 +5802,12 @@ ${totalBlock}
         return true;
       }
       state.lastResult = result;
+      if (state.live.manualFlatten) suppressLiveFinrespTargets();
       const skipN = state.windowSkipped?.length || 0;
       state.live.lastError = skipN
         ? liveFinrespPartialMessage(result.perSec.length, skipN)
         : "";
-      applyResult(result, { redrawCharts: true, liveSession: true, silent: !!opts.silent });
+      applyResult(state.lastResult, { redrawCharts: true, liveSession: true, silent: !!opts.silent });
       syncLiveTradingUi();
       return true;
     } catch (err) {
@@ -5124,9 +6017,10 @@ ${totalBlock}
       syncLiveTradingUi();
       return;
     }
+    clearLiveManualFlatten();
     state.live.lastError = "";
     syncLiveTradingUi();
-    if (!(await ensureTbankTokenUnlocked())) {
+    if (!(await ensureTbankTokenUnlocked({ interactive: true, openUi: true })) {
       state.live.lastError = "нужен токен и пароль";
       syncLiveTradingUi();
       return;
@@ -5176,6 +6070,36 @@ ${totalBlock}
     }
   }
 
+  async function closeAllSandboxPositionsLive() {
+    const sb = ensureSandboxState();
+    let sent = 0;
+    const failed = [];
+    while (sb.open.size > 0) {
+      const pos = sb.open.values().next().value;
+      if (!pos) break;
+      const key = sandboxPosKey(pos.market || (pos.isFuture ? "futures" : "shares"), pos.ticker || pos.sec);
+      try {
+        const ok = await closeSandboxPositionAtMarket(pos, { skipUiRefresh: true, skipRecord: true });
+        if (!ok) {
+          failed.push(`${pos.ticker}: не удалось закрыть`);
+          sb.open.delete(key);
+          continue;
+        }
+        sent += 1;
+        renderSandboxPortfolioQuick();
+        syncSandboxPositionsTable();
+        await yieldToUi();
+      } catch (err) {
+        failed.push(`${pos.ticker}: ${err.message}`);
+        sb.open.delete(key);
+      }
+    }
+    sb.open.clear();
+    state.live.openPositions = [];
+    forceClearLivePositionsPanel();
+    return { sent, failed };
+  }
+
   async function sellAllMarketLive() {
     if (!isLiveMode() || state.live.tradingActionBusy) return;
     state.live.tradingActionBusy = true;
@@ -5184,22 +6108,10 @@ ${totalBlock}
     if (sellBtn) sellBtn.disabled = true;
     try {
       if (isLiveSandbox()) {
-        const sb = ensureSandboxState();
-        let sent = 0;
-        const failed = [];
-        for (const pos of [...sb.open.values()]) {
-          try {
-            if (await closeSandboxPositionAtMarket(pos, { skipUiRefresh: true })) sent += 1;
-          } catch (err) {
-            failed.push(`${pos.ticker}: ${err.message}`);
-          }
-          renderSandboxPortfolioQuick();
-          syncSandboxPositionsTable();
-        }
-        suppressLiveFinrespTargets();
+        const { sent, failed } = await closeAllSandboxPositionsLive();
+        armLiveManualFlatten();
         await updateSandboxPortfolioDisplay({ skipCharts: true, fetchPrices: false });
-        renderLiveOrdersPanel();
-        syncSandboxPositionsTable();
+        forceClearLivePositionsPanel();
         state.live.lastError = failed.length ? failed.join("; ") : (sent ? "" : "открытых фейк-позиций нет");
         const status = $("live-trading-status");
         if (status) {
@@ -5255,7 +6167,7 @@ ${totalBlock}
           try {
             await postLiveOrder(instrumentId, direction, lots, ticker);
             sent += 1;
-            await refreshLiveOpenPositions();
+            await refreshLiveOpenPositions({ force: true });
           } catch (err) {
             failed.push(liveIssueEntry(ticker, ticker, {
               message: err.message,
@@ -5269,7 +6181,8 @@ ${totalBlock}
       };
       await closeList(data.securities, false);
       await closeList(data.futures, true);
-      suppressLiveFinrespTargets();
+      armLiveManualFlatten();
+      forceClearLivePositionsPanel();
       const issueText = summarizeLiveReconcileIssues(skipped, failed);
       state.live.lastError = issueText;
       noteLiveReconcileToTech({
@@ -5286,10 +6199,11 @@ ${totalBlock}
       }
       await refreshLiveOrders();
       await refreshLivePortfolioStats();
-      await refreshLiveOpenPositions();
+      await refreshLiveOpenPositions({ force: true });
       await new Promise((r) => setTimeout(r, 1200));
-      await refreshLiveOpenPositions();
+      await refreshLiveOpenPositions({ force: true });
       await refreshLivePortfolioStats();
+      if (!state.live.openPositions?.length) forceClearLivePositionsPanel();
     } catch (err) {
       state.live.lastError = err.message;
       setTbankStatus(`Ошибка закрытия по рынку: ${err.message}`, true);
@@ -5297,6 +6211,17 @@ ${totalBlock}
     } finally {
       state.live.tradingActionBusy = false;
       if (sellBtn) sellBtn.disabled = !isLiveMode() || state.uiBusy;
+      try {
+        if (state.live.active && state.live.manualFlatten) await liveTradingReconcile();
+        if (isLiveSandbox()) {
+          forceClearLivePositionsPanel();
+        } else if (state.live.manualFlatten) {
+          await refreshLiveOpenPositions({ force: true });
+          if (!state.live.openPositions?.length) forceClearLivePositionsPanel();
+        }
+      } catch (err) {
+        noteLiveTech("live-close-all-finish", err.message);
+      }
       syncLiveTradingUi();
     }
   }
@@ -5314,17 +6239,34 @@ ${totalBlock}
         : "";
     }
     if (isLive) {
-      setTbankStatus(
-        state.tbank.depositLoaded
-          ? `Режим реальной торговли. Счёт подключён, депозит: ${fmt(+deposit.value || 0, 0)} ₽.`
-          : "Режим реальной торговли. Введите пароль — калькулятор расшифрует токен и подключит тот же счёт T-Bank."
-      );
+      const stored = !!safeStorageGet(TBANK_TOKEN_STORE_KEY);
+      const unlocked = !!state.tbank.token;
+      if (stored && !unlocked) {
+        setTbankStatus(
+          "Режим реальной торговли. Токен сохранён локально — введите пароль в «Реальный счёт T-Bank» и нажмите «Расшифровать и подключить».",
+          true
+        );
+      } else {
+        setTbankStatus(
+          state.tbank.depositLoaded
+            ? `Режим реальной торговли. Счёт подключён, депозит: ${fmt(+deposit.value || 0, 0)} ₽.`
+            : "Режим реальной торговли. Введите пароль — калькулятор расшифрует токен и подключит тот же счёт T-Bank."
+        );
+      }
     } else if (isTbank) {
-      setTbankStatus(
-        state.tbank.depositLoaded
-          ? `Режим T-Bank активен. Депозит взят со счёта: ${fmt(+deposit.value || 0, 0)} ₽.`
-          : "Режим T-Bank активен. Введите пароль: калькулятор расшифрует токен, загрузит счёт и возьмёт депозит автоматически."
-      );
+      const stored = !!safeStorageGet(TBANK_TOKEN_STORE_KEY);
+      if (stored && !state.tbank.token) {
+        setTbankStatus(
+          "Режим T-Bank активен. Токен сохранён — введите пароль в блоке «Реальный счёт T-Bank» и нажмите «Расшифровать и подключить».",
+          true
+        );
+      } else {
+        setTbankStatus(
+          state.tbank.depositLoaded
+            ? `Режим T-Bank активен. Депозит взят со счёта: ${fmt(+deposit.value || 0, 0)} ₽.`
+            : "Режим T-Bank активен. Введите пароль: калькулятор расшифрует токен, загрузит счёт и возьмёт депозит автоматически."
+        );
+      }
     } else {
       setTbankStatus("Фиктивный кошелёк активен. Поле депозита работает вручную, как раньше.");
     }
@@ -5441,21 +6383,87 @@ ${totalBlock}
     }
   }
 
-  function getTbankPassphrase() {
-    let passphrase = $("tbank-passphrase").value;
-    if (!passphrase) {
-      passphrase = window.prompt("Введите пароль для расшифровки локального токена T-Bank") || "";
+  function getTbankPassphrase(opts) {
+    const options = opts || {};
+    return ($("tbank-passphrase")?.value || "").trim() || "";
+  }
+
+  let tbankPassphraseModalResolve = null;
+
+  function closeTbankPassphraseModal(value) {
+    const modal = $("tbank-passphrase-modal");
+    if (modal) modal.hidden = true;
+    if (tbankPassphraseModalResolve) {
+      const resolve = tbankPassphraseModalResolve;
+      tbankPassphraseModalResolve = null;
+      resolve(value || "");
     }
-    if (passphrase && !$("tbank-passphrase").value) $("tbank-passphrase").value = passphrase;
+  }
+
+  function showTbankPassphraseModal(title) {
+    return new Promise((resolve) => {
+      const modal = $("tbank-passphrase-modal");
+      const input = $("tbank-passphrase-modal-input");
+      if (!modal || !input) {
+        resolve(window.prompt(title || "Введите пароль для расшифровки локального токена T-Bank") || "");
+        return;
+      }
+      const titleEl = $("tbank-passphrase-modal-title");
+      if (titleEl && title) titleEl.textContent = title;
+      tbankPassphraseModalResolve = resolve;
+      modal.hidden = false;
+      input.value = "";
+      setTimeout(() => { try { input.focus(); } catch (_) { /* ignore */ } }, 0);
+    });
+  }
+
+  /** Запрос пароля: поле на странице → модальное окно (file://) → window.prompt. */
+  async function requestTbankPassphrase(opts) {
+    const options = opts || {};
+    let passphrase = getTbankPassphrase();
+    if (passphrase) return passphrase;
+    if (!options.allowPrompt) return "";
+    const promptTitle = "Введите пароль для расшифровки локального токена T-Bank";
+    if (IS_FILE_PROTOCOL || options.useModal) {
+      passphrase = await showTbankPassphraseModal(promptTitle);
+    } else {
+      passphrase = window.prompt(promptTitle) || "";
+    }
+    if (passphrase && $("tbank-passphrase")) $("tbank-passphrase").value = passphrase;
     return passphrase;
   }
 
-  async function ensureTbankTokenUnlocked() {
+  function openTbankPassphraseUi(hint) {
+    const details = $("tbank-settings");
+    if (details) details.open = true;
+    const pp = $("tbank-passphrase");
+    if (pp) {
+      try { pp.focus({ preventScroll: false }); } catch (_) { pp.focus(); }
+    }
+    if (hint) setTbankStatus(hint, true);
+  }
+
+  async function ensureTbankTokenUnlocked(opts) {
+    const options = opts || {};
     if (state.tbank.token) return true;
     const payload = safeStorageGet(TBANK_TOKEN_STORE_KEY);
-    const passphrase = getTbankPassphrase();
-    if (!payload) { setTbankStatus("Локально сохранённого токена нет.", true); return false; }
-    if (!passphrase) { setTbankStatus("Введите пароль локального шифрования.", true); return false; }
+    if (!payload) {
+      setTbankStatus("Локально сохранённого токена нет. Сохраните токен в блоке «Реальный счёт T-Bank».", true);
+      if (options.openUi !== false) openTbankPassphraseUi();
+      return false;
+    }
+    const passphrase = await requestTbankPassphrase({
+      allowPrompt: !!options.interactive,
+      useModal: !!options.interactive || IS_FILE_PROTOCOL
+    });
+    if (!passphrase) {
+      const hint = options.interactive
+        ? "Введите пароль в поле ниже или отмените запрос в диалоге."
+        : "Токен сохранён локально — введите пароль в поле «Пароль для шифрования/расшифровки» и нажмите «Расшифровать и подключить» (или смените режим счёта ещё раз).";
+      setTbankStatus(hint, true);
+      if (options.openUi !== false) openTbankPassphraseUi(hint);
+      return false;
+    }
     try {
       state.tbank.token = await decryptTbankToken(payload, passphrase);
       state.tbank.depositLoaded = false;
@@ -5466,8 +6474,17 @@ ${totalBlock}
       state.tbank.token = null;
       setTbankStatus(`Не удалось расшифровать токен: ${err.message}`, true);
       noteTechError(`tbank-unlock-token: ${err.message}`);
+      if (options.openUi !== false) openTbankPassphraseUi();
       return false;
     }
+  }
+
+  async function unlockTbankTokenInteractive() {
+    openTbankPassphraseUi();
+    if (!(await ensureTbankTokenUnlocked({ interactive: true, openUi: true }))) return false;
+    await connectTbankAndLoadDeposit({ interactive: true });
+    if (isLiveMode()) await connectTbankForLive();
+    return true;
   }
 
   async function loadTbankAccounts() {
@@ -5515,9 +6532,13 @@ ${totalBlock}
     }
   }
 
-  async function connectTbankAndLoadDeposit() {
+  async function connectTbankAndLoadDeposit(opts) {
+    const options = opts && typeof opts === "object" ? opts : { interactive: !!opts };
     if (!isTbankBackedMode()) return;
-    if (!(await ensureTbankTokenUnlocked())) return;
+    if (!(await ensureTbankTokenUnlocked({
+      interactive: !!options.interactive,
+      openUi: options.openUi !== false
+    }))) return;
     if (!state.tbank.accounts.length) {
       await loadTbankAccounts();
       return;
@@ -7879,20 +8900,22 @@ ${totalBlock}
     }
   }
 
-  function bindUiEvents() {
-  if (bindUiEvents._done) return;
-  bindUiEvents._done = true;
-  $("account-mode")?.addEventListener("change", () => {
-    if ($("account-mode").value !== "live" && state.live.active) stopLiveTradingOnModeChange();
+  async function handleAccountModeUserChange() {
+    if ($("account-mode")?.value !== "live" && state.live.active) stopLiveTradingOnModeChange();
     syncAccountModeUi();
     saveConfig();
     if (state.accountMode === "tbank" || state.accountMode === "live") {
-      connectTbankAndLoadDeposit();
-      if (state.accountMode === "live") connectTbankForLive();
+      await connectTbankAndLoadDeposit({ interactive: true, openUi: true });
+      if (state.accountMode === "live") await connectTbankForLive();
       return;
     }
     if (state.packs.length && (!isTbankBackedMode() || state.tbank.depositLoaded)) invalidateFinrespResult();
-  });
+  }
+
+  function bindUiEvents() {
+  if (bindUiEvents._done) return;
+  bindUiEvents._done = true;
+  window.__mlOnAccountModeUserChange = handleAccountModeUserChange;
   $("calc-run")?.addEventListener("click", run);
   $("calc-progress-stop")?.addEventListener("click", () => { requestStopRun(); });
   $("calc-select-positive")?.addEventListener("click", selectNonNegativeFinrespInstruments);
@@ -7908,6 +8931,21 @@ ${totalBlock}
       state.live.lastError = err.message;
       syncLiveTradingUi();
       noteLiveTech("live-sandbox-toggle", err.message);
+    });
+  });
+  $("live-notify-stopper")?.addEventListener("change", () => {
+    saveConfig();
+    syncLiveNotifyStopperUi();
+    if ($("live-notify-stopper")?.checked) {
+      ensureLiveNotifyPermission().catch(() => {});
+    }
+  });
+  $("live-sandbox-match-mode")?.addEventListener("change", () => {
+    saveConfig();
+  });
+  $("live-notify-permission")?.addEventListener("click", () => {
+    onLiveNotifyPermissionClick().catch((err) => {
+      noteLiveTech("live-notify-permission", err?.message || String(err));
     });
   });
   $("live-trading-sell-all").addEventListener("click", () => { sellAllMarketLive(); });
@@ -7985,6 +9023,30 @@ ${totalBlock}
   document.addEventListener("scroll", () => hideLivePositionsMenu(), true);
   $("live-order-book-table")?.addEventListener("dblclick", onLiveOrderBookPriceDblClick);
   $("tbank-save-token").addEventListener("click", () => { saveConfig(); saveTbankToken(); });
+  $("tbank-unlock-token")?.addEventListener("click", () => {
+    unlockTbankTokenInteractive().catch((err) => {
+      setTbankStatus(`Ошибка подключения: ${err.message}`, true);
+      noteTechError(`tbank-unlock: ${err.message}`);
+    });
+  });
+  $("tbank-passphrase-modal-ok")?.addEventListener("click", () => {
+    closeTbankPassphraseModal($("tbank-passphrase-modal-input")?.value || "");
+  });
+  $("tbank-passphrase-modal-cancel")?.addEventListener("click", () => {
+    closeTbankPassphraseModal("");
+  });
+  $("tbank-passphrase-modal-input")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      closeTbankPassphraseModal($("tbank-passphrase-modal-input")?.value || "");
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      closeTbankPassphraseModal("");
+    }
+  });
+  $("tbank-passphrase-modal")?.addEventListener("click", (ev) => {
+    if (ev.target?.id === "tbank-passphrase-modal") closeTbankPassphraseModal("");
+  });
   $("cache-save-file").addEventListener("click", saveCacheToFile);
   $("cache-load-file").addEventListener("click", () => $("cache-file-input").click());
   $("cache-file-input").addEventListener("change", async (ev) => {
@@ -8167,7 +9229,13 @@ ${totalBlock}
     initCandleCache();
     applyUiLocks();
     syncAccountModeUi();
-    if (isTbankBackedMode()) connectTbankAndLoadDeposit();
+    if (isTbankBackedMode()) {
+      const stored = !!safeStorageGet(TBANK_TOKEN_STORE_KEY);
+      connectTbankAndLoadDeposit({
+        interactive: stored && !state.tbank.token,
+        openUi: true
+      });
+    }
     if (isLiveMode()) {
       refreshLiveManualLimitPrice({ force: true }).catch(() => {});
       if ($("live-sandbox-mode")?.checked) {
@@ -8193,6 +9261,7 @@ ${totalBlock}
     updateTechInfo("init-fail");
   }
   window.__mlSyncAccountMode = () => syncAccountModeUi();
+  window.__mlOnAccountModeUserChange = handleAccountModeUserChange;
   window.__mlFinrespVersion = CALC_PAGE_VERSION;
   bootstrapLiveTradingPanelVisibility();
 })();
