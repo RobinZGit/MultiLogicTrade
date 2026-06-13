@@ -787,6 +787,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-import" title="Загрузить каталог логик из JSON-файла">Импорт всех</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-restore-defaults" title="Сбросить каталог к встроенным логикам из кода">Восстановить логики по умолчанию</button>
 </div>
 <input type="file" id="logic-catalog-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
 <input type="file" id="logic-line-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
@@ -923,7 +924,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-live-handlers-fix";
+  const CALC_PAGE_VERSION = "2026-06-13-logic-restore-defaults";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1401,6 +1402,7 @@ body.calc-running .help-ftr{opacity:.75;}
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
+    logicSelectionCleared: false,
     anchorStartTime: null,
     anchorEndTime: null,
     hasWindow: false,
@@ -1597,6 +1599,30 @@ body.calc-running .help-ftr{opacity:.75;}
     return out;
   }
 
+  /** Скрытые (удалённые из каталога) ключи логик. */
+  function hiddenLogicKeySet() {
+    if (!Array.isArray(state.hiddenLogicKeys)) state.hiddenLogicKeys = [];
+    return new Set(state.hiddenLogicKeys);
+  }
+
+  /** Убрать скрытые логики из каталога и state (не восстанавливать при reload). */
+  function purgeHiddenLogicsFromState() {
+    const hidden = hiddenLogicKeySet();
+    if (!hidden.size) return;
+    state.logicLineKeys = (state.logicLineKeys || []).filter((k) => !hidden.has(k));
+    for (const k of hidden) {
+      delete state.customLines[k];
+      delete state.logicLabels[k];
+    }
+  }
+
+  /** logicLines для localStorage — без скрытых ключей. */
+  function visibleLogicLinesConfig() {
+    const out = logicLinesConfig();
+    for (const k of hiddenLogicKeySet()) delete out[k];
+    return out;
+  }
+
   /** Сериализация state в localStorage config. */
   function collectConfig() {
     return {
@@ -1651,9 +1677,10 @@ body.calc-running .help-ftr{opacity:.75;}
         futures: $("prefix-futures")?.value || ""
       },
       indicators: selectedIndicatorKeys(),
-      logicLines: logicLinesConfig(),
-      logicLineKeys: state.logicLineKeys.slice(),
+      logicLines: visibleLogicLinesConfig(),
+      logicLineKeys: state.logicLineKeys.filter((k) => !hiddenLogicKeySet().has(k)),
       hiddenLogicKeys: (state.hiddenLogicKeys || []).slice(),
+      logicCatalogVersion: 2,
       logicLabels: { ...state.logicLabels },
       randomPriceShift: !!$("random-price-shift")?.checked
     };
@@ -1681,9 +1708,10 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("calc-tf", cfg.timeframe);
       setValueIfExists("calc-from", cfg.from);
       setValueIfExists("calc-till", cfg.till);
-      state.restoredLogicIds = Array.isArray(cfg.logics) && cfg.logics.length
+      state.restoredLogicIds = Array.isArray(cfg.logics)
         ? cfg.logics.filter(Boolean)
         : (cfg.logic ? [cfg.logic] : null);
+      state.logicSelectionCleared = Array.isArray(cfg.logics) && cfg.logics.length === 0;
       setValueIfExists("vol-type", cfg.volume?.type);
       setValueIfExists("vol-value", cfg.volume?.value);
       setValueIfExists("vol-deposit", cfg.volume?.deposit);
@@ -1728,18 +1756,37 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("prefix-stocks", cfg.prefixes?.stocks);
       setValueIfExists("prefix-futures", cfg.prefixes?.futures);
       if (Array.isArray(cfg.indicators)) applyIndicatorSelection(cfg.indicators);
-      if (cfg.logicLines && typeof cfg.logicLines === "object") {
-        state.customLines = { ...state.customLines, ...cfg.logicLines };
-      }
-      ensureDefaultLogicLines();
-      if (Array.isArray(cfg.logicLineKeys) && cfg.logicLineKeys.length) {
-        state.logicLineKeys = cfg.logicLineKeys.filter(Boolean);
-      }
       if (Array.isArray(cfg.hiddenLogicKeys)) {
         state.hiddenLogicKeys = cfg.hiddenLogicKeys.filter(Boolean);
+      } else if (!Array.isArray(state.hiddenLogicKeys)) {
+        state.hiddenLogicKeys = [];
       }
+      if (Array.isArray(cfg.logicLineKeys) && cfg.logicLineKeys.length) {
+        state.logicLineKeys = cfg.logicLineKeys.filter(Boolean);
+        if (!cfg.hiddenLogicKeys?.length) {
+          const savedKeys = new Set(state.logicLineKeys);
+          const savedLines = cfg.logicLines && typeof cfg.logicLines === "object" ? cfg.logicLines : {};
+          for (const k of DEFAULT_LOGIC_LINE_KEYS) {
+            if (!savedKeys.has(k) && savedLines[k] == null && !state.hiddenLogicKeys.includes(k)) {
+              state.hiddenLogicKeys.push(k);
+            }
+          }
+        }
+      }
+      const hidden = hiddenLogicKeySet();
+      if (cfg.logicLines && typeof cfg.logicLines === "object") {
+        for (const [k, v] of Object.entries(cfg.logicLines)) {
+          if (hidden.has(k)) continue;
+          state.customLines[k] = v;
+        }
+      }
+      purgeHiddenLogicsFromState();
+      ensureDefaultLogicLines();
       if (cfg.logicLabels && typeof cfg.logicLabels === "object") {
-        state.logicLabels = { ...cfg.logicLabels };
+        state.logicLabels = {};
+        for (const [k, v] of Object.entries(cfg.logicLabels)) {
+          if (!hidden.has(k)) state.logicLabels[k] = v;
+        }
       }
       ensureLogicLineKeys();
       fillLogicEditor();
@@ -3380,12 +3427,15 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Ленивая инициализация/проверка: `ensureDefaultLogicLines`. */
   function ensureDefaultLogicLines() {
+    const hidden = hiddenLogicKeySet();
     for (const k of DEFAULT_LOGIC_LINE_KEYS) {
+      if (hidden.has(k)) continue;
       if (state.customLines[k] == null && E.DEFAULT_LOGIC_LINES[k] != null) {
         state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
       }
     }
     for (const k of ["sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"]) {
+      if (hidden.has(k)) continue;
       const line = state.customLines[k];
       if (line && /SmaSpread|SmaCorridor/i.test(line) && E.DEFAULT_LOGIC_LINES[k]) {
         state.customLines[k] = E.DEFAULT_LOGIC_LINES[k];
@@ -3489,8 +3539,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!Array.isArray(state.hiddenLogicKeys)) state.hiddenLogicKeys = [];
     if (!state.hiddenLogicKeys.includes(key)) state.hiddenLogicKeys.push(key);
     state.logicLineKeys = state.logicLineKeys.filter((k) => k !== key);
-    delete state.customLines[key];
-    delete state.logicLabels[key];
+    purgeHiddenLogicsFromState();
     fillLogicEditor();
     fillLogicSelect();
     saveConfig();
@@ -3575,6 +3624,31 @@ body.calc-running .help-ftr{opacity:.75;}
     $("calc-status").textContent = `Экспортировано ${payload.logicLineKeys.length} логик в файл.`;
   }
 
+  /** Сброс каталога к встроенным логикам; выбор в списке «Логика» — пустой. */
+  function restoreDefaultLogicCatalog() {
+    if (!window.confirm(
+      "Восстановить встроенные логики из кода?\n\n"
+      + "Будут сброшены все правки строк, добавленные и удалённые логики. "
+      + "В списке «Логика» ничего не останется выбранным."
+    )) {
+      return;
+    }
+    readLogicEditor();
+    state.hiddenLogicKeys = [];
+    state.logicLineKeys = DEFAULT_LOGIC_LINE_KEYS.slice();
+    state.logicLabels = {};
+    state.customLines = { ...E.DEFAULT_LOGIC_LINES };
+    state.logicSelectionCleared = true;
+    state.restoredLogicIds = [];
+    fillLogicEditor();
+    fillLogicSelect();
+    saveConfig();
+    invalidateFormChange();
+    updatePositionSlHint();
+    if (state.packs.length) tryRefreshEquityCharts();
+    $("calc-status").textContent = "Каталог логик восстановлен по умолчанию. Выберите логику для расчёта.";
+  }
+
   /** Импорт каталога логик из JSON (замена текущего списка). */
   function importLogicCatalogFromData(data) {
     if (!data || typeof data !== "object") throw new Error("Пустой или неверный файл.");
@@ -3630,9 +3704,11 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Функция: id выбранных логик в порядке приоритета (верх списка = первая). */
   function selectedLogicIds() {
     const sel = $("calc-logic");
-    if (!sel) return ["L5"];
+    if (!sel) return state.logicSelectionCleared ? [] : ["L5"];
     const ids = [...sel.selectedOptions].map((o) => o.value).filter(Boolean);
-    return ids.length ? ids : (sel.value ? [sel.value] : ["L5"]);
+    if (ids.length) return ids;
+    if (state.logicSelectionCleared) return [];
+    return sel.value ? [sel.value] : ["L5"];
   }
 
   /** Функция: первая логика в списке (для @OBT, подсказок, live). */
@@ -3644,17 +3720,24 @@ body.calc-running .help-ftr{opacity:.75;}
   function applySavedLogicSelection(cfg) {
     const sel = $("calc-logic");
     if (!sel) return;
-    const ids = Array.isArray(cfg?.logics) && cfg.logics.length
+    const ids = Array.isArray(cfg?.logics)
       ? cfg.logics.filter(Boolean)
-      : (cfg?.logic ? [cfg.logic] : ["L5"]);
+      : (cfg?.logic ? [cfg.logic] : []);
     const allowed = new Set([...sel.options].map((o) => o.value));
     const pick = ids.filter((id) => allowed.has(id));
     for (const o of sel.options) {
       o.selected = pick.includes(o.value);
     }
-    if (!pick.length && sel.options.length) {
-      const fallback = allowed.has("L5") ? "L5" : sel.options[0].value;
-      for (const o of sel.options) o.selected = o.value === fallback;
+    if (!pick.length) {
+      if (Array.isArray(cfg?.logics) && cfg.logics.length === 0) {
+        state.logicSelectionCleared = true;
+      } else if (sel.options.length) {
+        const fallback = allowed.has("L5") ? "L5" : sel.options[0].value;
+        for (const o of sel.options) o.selected = o.value === fallback;
+        state.logicSelectionCleared = false;
+      }
+    } else {
+      state.logicSelectionCleared = false;
     }
     syncLogicSelectedHint();
   }
@@ -3675,7 +3758,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!el || !sel) return;
     const ids = selectedLogicIds();
     if (!ids.length) {
-      el.textContent = "— не выбрано (по умолчанию L5)";
+      el.textContent = state.logicSelectionCleared ? "— не выбрано" : "— не выбрано (по умолчанию L5)";
     } else if (ids.length === 1) {
       el.textContent = `Выбрана: ${logicDisplayName(ids[0])}`;
     } else {
@@ -3708,13 +3791,16 @@ body.calc-running .help-ftr{opacity:.75;}
     for (const o of sel.options) {
       o.selected = pick.includes(o.value);
     }
-    if (!pick.length) {
-      const fallback = allowed.has("L5") ? "L5" : sel.options[0]?.value;
-      for (const o of sel.options) o.selected = o.value === fallback;
-    }
-    if (state.restoredLogicIds?.length) {
+    if (state.restoredLogicIds != null) {
       applySavedLogicSelection({ logics: state.restoredLogicIds });
       state.restoredLogicIds = null;
+    } else if (state.logicSelectionCleared) {
+      for (const o of sel.options) o.selected = false;
+      syncLogicSelectedHint();
+    } else if (!pick.length) {
+      const fallback = allowed.has("L5") ? "L5" : sel.options[0]?.value;
+      for (const o of sel.options) o.selected = o.value === fallback;
+      syncLogicSelectedHint();
     } else {
       syncLogicSelectedHint();
     }
@@ -5313,6 +5399,7 @@ ${totalBlock}
     state.pendingLogicImportKey = null;
     $("logic-catalog-file-input")?.click();
   });
+  $("logic-catalog-restore-defaults")?.addEventListener("click", () => { restoreDefaultLogicCatalog(); });
   $("logic-catalog-file-input")?.addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0];
     ev.target.value = "";
@@ -5360,6 +5447,8 @@ ${totalBlock}
     }
   });
   $("calc-logic").addEventListener("change", () => {
+    const sel = $("calc-logic");
+    if (sel && [...sel.selectedOptions].length) state.logicSelectionCleared = false;
     updatePositionSlHint();
     syncLogicSelectedHint();
     invalidateFormChange();
