@@ -11,7 +11,14 @@ except ImportError:
     print("Install ftfy: pip install ftfy", file=sys.stderr)
     raise
 
-MOJIBAKE_MARKERS = ("\u0420\u045f", "\u0420\u0455", "\u0432\u0402", "\u0420\u0454")
+MOJIBAKE_MARKERS = (
+    "\u0420\u045f",  # Рџ
+    "\u0420\u0455",  # Рѕ
+    "\u0432\u0402",  # вЂ
+    "\u0420\u0454",  # Рј start of мин
+    "\u0420\u0458",  # Рј (alternative)
+    "\u0420\u0451",  # Рё
+)
 
 
 def try_decode_line(line: str) -> str:

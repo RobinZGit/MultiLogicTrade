@@ -513,10 +513,10 @@ Cursor «Open with Browser» и двойной клик по HTML так раб�
 <div class="calc-grid">
 <div class="calc-field"><label for="calc-tf">Таймфрейм</label>
 <select id="calc-tf">
-<option value="1">1 РјРёРЅ</option>
-<option value="5">5 РјРёРЅ</option>
-<option value="10">10 РјРёРЅ</option>
-<option value="15">15 РјРёРЅ</option>
+<option value="1">1 мин</option>
+<option value="5">5 мин</option>
+<option value="10">10 мин</option>
+<option value="15">15 мин</option>
 <option value="60" selected>1 час</option>
 <option value="24">1 день</option>
 </select></div>
@@ -741,7 +741,7 @@ Cursor «Open with Browser» и двойной клик по HTML так раб�
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-13-utf8-encoding";
+  const CALC_PAGE_VERSION = "2026-06-13-tf-labels-utf8";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
   const $ = (id) => document.getElementById(id);
@@ -1168,10 +1168,10 @@ Cursor «Open with Browser» и двойной клик по HTML так раб�
   const MOEX_MINUTES_PER_SESSION = 530;
   const MIN_WARMUP_BARS = 220;
   const TF_LIMITS = {
-    "1": { label: "1 РјРёРЅ", maxDays: 7, maxBars: 900 },
-    "5": { label: "5 РјРёРЅ", maxDays: 7, maxBars: 900 },
-    "10": { label: "10 РјРёРЅ", maxDays: 31, maxBars: 1200 },
-    "15": { label: "15 РјРёРЅ", maxDays: 14, maxBars: 1200 },
+    "1": { label: "1 мин", maxDays: 7, maxBars: 900 },
+    "5": { label: "5 мин", maxDays: 7, maxBars: 900 },
+    "10": { label: "10 мин", maxDays: 31, maxBars: 1200 },
+    "15": { label: "15 мин", maxDays: 14, maxBars: 1200 },
     "60": { label: "1 час", maxDays: 99999, maxBars: 999999 },
     "24": { label: "1 день", maxDays: 99999, maxBars: 999999 }
   };
