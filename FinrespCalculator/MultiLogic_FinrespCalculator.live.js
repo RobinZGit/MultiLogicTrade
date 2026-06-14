@@ -3175,6 +3175,7 @@
     const posMeta = { ticker, sec: secForPrice || ticker, market, instrumentId, lot, isFuture };
     const tradeSource = opts.tradeSource || "robot";
     const tradeSourceLabel = opts.tradeSourceLabel || resolveTradeSourceLabel(tradeSource);
+    assertSandboxOrderWithinPortfolioCap(sb, posMeta, pieceDelta, price, volConfig());
     const orderId = opts.skipRecord
       ? null
       : (`fake-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
@@ -3872,6 +3873,77 @@
     await ingest(data.securities);
     await ingest(data.futures);
     return map;
+  }
+
+  /** Обрезка целей reconcile под портфельный лимит (Max positions × Volume% на все бумаги). */
+  async function clipReconcileTargetsToPortfolioCap(targets, actualByTicker, vol) {
+    if (!targets?.length) return targets;
+    const cap = E.createPortfolioCap(vol);
+    for (const [, cur] of actualByTicker) {
+      const sec = cur.sec || cur.ticker;
+      const inst = selectedInstruments().find(
+        (i) => String(i.sec).toUpperCase() === String(sec || "").toUpperCase()
+      );
+      const market = inst?.market || "shares";
+      let price = NaN;
+      try {
+        price = await resolveOrderPrice(cur.instrumentId, sec, market);
+      } catch (_) { /* optional */ }
+      cap.setPos(sec, +cur.pieces || 0, Number.isFinite(price) && price > 0 ? price : 0);
+    }
+    const out = [];
+    for (const p of targets) {
+      const secU = String(p.sec || "").toUpperCase();
+      const inst = selectedInstruments().find((i) => String(i.sec).toUpperCase() === secU);
+      const market = inst?.market || "shares";
+      let price = NaN;
+      try {
+        const im = await resolveLiveInstrumentMeta(p.sec, market);
+        if (im?.instrumentId) price = await resolveOrderPrice(im.instrumentId, p.sec, market);
+      } catch (_) { /* optional */ }
+      if (!Number.isFinite(price) || price <= 0) {
+        out.push(p);
+        continue;
+      }
+      const clipped = cap.clampTargetPos(p.sec, price, +p.pos || 0);
+      cap.setPos(p.sec, clipped, price);
+      out.push({ ...p, pos: clipped });
+    }
+    return out;
+  }
+
+  /** Песочница: gross-экспозиция открытых позиций в контексте createPortfolioCap. */
+  function sandboxPortfolioCapState(sb, vol) {
+    const cap = E.createPortfolioCap(vol);
+    for (const pos of sb.open.values()) {
+      const px = pos.curPrice || pos.avgPrice || 0;
+      const pieces = pos.side === "short" ? -Math.abs(+pos.pieces || 0) : Math.abs(+pos.pieces || 0);
+      cap.setPos(pos.sec || pos.ticker, pieces, px);
+    }
+    return cap;
+  }
+
+  /** Проверка: заявка не увеличивает gross выше портфельного лимита. */
+  function assertSandboxOrderWithinPortfolioCap(sb, posMeta, pieceDelta, price, vol) {
+    const delta = Math.trunc(+pieceDelta || 0);
+    if (!delta || !Number.isFinite(price) || price <= 0) return;
+    const cap = sandboxPortfolioCapState(sb, vol);
+    const sec = posMeta.sec || posMeta.ticker;
+    cap.setPrice(sec, price);
+    const key = sandboxPosKey(posMeta.market, posMeta.ticker);
+    const cur = sb.open.get(key);
+    const curSigned = cur ? (cur.side === "short" ? -cur.pieces : cur.pieces) : 0;
+    const newSigned = curSigned + delta;
+    const curExp = Math.abs(curSigned) * price;
+    const newExp = Math.abs(newSigned) * price;
+    if (newExp <= curExp + 1e-6) return;
+    const clipped = cap.clampTargetPos(sec, price, newSigned);
+    if (Math.abs(clipped) + 1e-6 < Math.abs(newSigned)) {
+      const capRub = E.portfolioGrossCapRub(vol);
+      throw new Error(
+        `Портфельный лимит: суммарная позиция ≤ ${fmt(capRub, 0)} ₽ (депозит × Max positions × Volume%).`
+      );
+    }
   }
 
   /** Live-торговля: `liveReconcileTargets`. */
@@ -4594,38 +4666,69 @@ ${referenceBlock}
     return { finresp, cash, pos, commission, buys, sells, bySec };
   }
 
-  /** Live: сигнал по каждому инструменту на своём хвосте свечей (если общего окна нет). */
+  /** Live: сигнал по каждому инструменту на хвосте свечей с общим портфельным лимитом. */
   async function calcLiveSignalsPerInstrument(runOptions) {
     const ro = runOptions || {};
     if (!state.packs.length) return null;
     const p = params();
     const spec = resolveCalcLogicSpec(p, indicatorSelection());
     if (!spec) return null;
-    const perSec = [];
     const skipped = [];
     const tail = MIN_WARMUP_BARS;
-    for (const candles of state.packs) {
-      if (ro.shouldCancel?.()) break;
+    const ref = refPack() || state.packs.find((pack) => pack?.length);
+    if (!ref?.length) return null;
+    const bRef = ref.length - 1;
+    const aRef = Math.max(0, bRef - tail + 1);
+    const times = [];
+    for (let i = aRef; i <= bRef; i++) {
+      if (ref[i]?.time) times.push(ref[i].time);
+    }
+    const tStart = times[0];
+    const tEnd = times[times.length - 1];
+    const workUnits = [];
+    for (let pi = 0; pi < state.packs.length; pi++) {
+      const candles = state.packs[pi];
       const sec = candles[0]?.sec || "?";
       if (!candles?.length || candles.length < 3) {
         skipped.push({ sec, error: "мало свечей для сигнала" });
         continue;
       }
-      const b = candles.length - 1;
-      const a = Math.max(0, b - tail + 1);
-      const r = E.runOnCandles(candles, spec, a, b, p, volConfig(), { shouldCancel: ro.shouldCancel });
-      if (!r.rows?.length) {
+      const range = E.indicesForTimeRange(candles, tStart, tEnd);
+      if (!range) {
         skipped.push({ sec, error: "нет данных для сигнала на свечах" });
         continue;
       }
-      perSec.push({ sec, ...r });
+      workUnits.push({
+        pi,
+        sec,
+        bars: Math.max(1, range.b - range.a + 1),
+        range
+      });
     }
     state.windowSkipped = skipped;
+    if (!workUnits.length || !times.length) return null;
+
+    let perSec;
+    const vol = volConfig();
+    if (workUnits.length > 1) {
+      const synced = E.runPacksOnTimeGrid(state.packs, workUnits, times, spec, p, vol, {
+        shouldCancel: ro.shouldCancel
+      });
+      perSec = synced.perSec.filter((r) => r.rows?.length);
+    } else {
+      const wu = workUnits[0];
+      const candles = state.packs[wu.pi];
+      const portfolioCap = E.createPortfolioCap(vol);
+      const r = E.runOnCandles(candles, spec, wu.range.a, wu.range.b, p, vol, {
+        shouldCancel: ro.shouldCancel,
+        sec: wu.sec,
+        portfolioCap
+      });
+      perSec = r.rows?.length ? [{ sec: wu.sec, ...r }] : [];
+    }
+
     if (!perSec.length) return null;
     const agg = aggregateFinrespLocal(perSec);
-    const ref = refPack();
-    const bRef = Math.max(0, ref.length - 1);
-    const aRef = Math.max(0, bRef - tail + 1);
     return { perSec, agg, preStopperAgg: agg, stopper: { events: [] }, a: aRef, b: bRef, skipped };
   }
 
@@ -4891,9 +4994,16 @@ ${referenceBlock}
     let aligned = 0;
     try {
       const actual = sandbox ? sandboxPositionsByTicker() : await tbankPositionsByTicker();
+      const vol = volConfig();
+      let reconcileTargets = targets;
+      try {
+        reconcileTargets = await clipReconcileTargetsToPortfolioCap(targets, actual, vol);
+      } catch (clipErr) {
+        noteLiveTech("live-cap-clip-fail", clipErr.message || String(clipErr), "");
+      }
       const brokerKeys = [...actual.keys()].join(",") || "—";
-      noteLiveTech("live-reconcile-start", `targets=${targets.length} sandbox=${sandbox}`, `brokerPos=${brokerKeys}`);
-      for (const p of targets) {
+      noteLiveTech("live-reconcile-start", `targets=${reconcileTargets.length} sandbox=${sandbox}`, `brokerPos=${brokerKeys}`);
+      for (const p of reconcileTargets) {
         const secU = String(p.sec || "").toUpperCase();
         const instMeta = selectedInstruments().find((i) => String(i.sec).toUpperCase() === secU);
         const market = instMeta?.market || "shares";

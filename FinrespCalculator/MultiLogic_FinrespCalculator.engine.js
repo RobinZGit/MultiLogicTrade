@@ -1118,11 +1118,117 @@
     return Math.max(0, (cfg.deposit * cfg.volume / 100) / p);
   }
 
-  /** Подпрограмма `maxAbsPosition`. */
+  /** Суммарный лимит gross-экспозиции портфеля (₽): депозит × Max positions × Volume%. */
+  function portfolioGrossCapRub(volConfig) {
+    const vol = normalizedVolConfig(volConfig);
+    const deposit = Math.max(0, +vol.deposit || 0);
+    const volumePct = Math.max(0, +vol.volume || 0);
+    const maxPos = Math.max(0, +vol.maxPositions || 0);
+    return deposit * maxPos * volumePct / 100;
+  }
+
+  /**
+   * Состояние портфельного лимита: Max positions — на все бумаги суммарно,
+   * Volume% — размер каждой новой позиции от депозита.
+   */
+  function createPortfolioCap(volConfig) {
+    const capRub = portfolioGrossCapRub(volConfig);
+    const positions = new Map();
+    const prices = new Map();
+
+    function grossExposureRub() {
+      let sum = 0;
+      for (const [sec, pos] of positions) {
+        const p = prices.get(sec) || 0;
+        sum += Math.abs(pos) * Math.max(0, p);
+      }
+      return sum;
+    }
+
+    function secExposureRub(sec) {
+      const pos = positions.get(sec) || 0;
+      const p = prices.get(sec) || 0;
+      return Math.abs(pos) * Math.max(0, p);
+    }
+
+    return {
+      capRub,
+      getPos(sec) { return positions.get(sec) || 0; },
+      setPrice(sec, price) {
+        if (price > 0) prices.set(sec, price);
+      },
+      setPos(sec, pos, price) {
+        if (price != null && price > 0) prices.set(sec, price);
+        if (!pos) positions.delete(sec);
+        else positions.set(sec, pos);
+      },
+      grossExposureRub,
+      remainingRub(sec, price) {
+        const p = price > 0 ? price : (prices.get(sec) || 0);
+        return Math.max(0, capRub - grossExposureRub() + secExposureRub(sec));
+      },
+      maxAbsPieces(sec, price) {
+        const p = Math.max(0, price);
+        if (p <= 0) return 0;
+        return this.remainingRub(sec, p) / p;
+      },
+      canOpenPieces(sec, price, pieces) {
+        const p = Math.max(0, price);
+        const want = Math.abs(+pieces || 0);
+        if (p <= 0 || want <= 0) return 0;
+        const allowed = Math.floor(this.maxAbsPieces(sec, p) + 1e-9);
+        return Math.max(0, Math.min(want, allowed));
+      },
+      clampTargetPos(sec, price, targetPos) {
+        const p = Math.max(0, price);
+        const tgt = +targetPos || 0;
+        if (p <= 0) return tgt;
+        const maxAbs = this.maxAbsPieces(sec, p);
+        if (Math.abs(tgt) <= maxAbs + 1e-9) return tgt;
+        return Math.sign(tgt || 1) * maxAbs;
+      }
+    };
+  }
+
+  function portfolioSyncPos(opts, pos, price) {
+    if (opts?.portfolioCap && opts?.sec) opts.portfolioCap.setPos(opts.sec, pos, price);
+  }
+
+  function resolveOpenLot(price, volConfig, opts) {
+    const lot = calcTradeVolume(price, volConfig);
+    if (lot <= 0) return 0;
+    if (opts?.portfolioCap && opts?.sec) {
+      opts.portfolioCap.setPrice(opts.sec, price);
+      return opts.portfolioCap.canOpenPieces(opts.sec, price, lot);
+    }
+    const cap = maxAbsPosition(price, volConfig);
+    return lot <= cap ? lot : 0;
+  }
+
+  function maxAbsPositionAt(price, volConfig, opts) {
+    if (opts?.portfolioCap && opts?.sec) {
+      opts.portfolioCap.setPrice(opts.sec, price);
+      return opts.portfolioCap.maxAbsPieces(opts.sec, price);
+    }
+    return maxAbsPosition(price, volConfig);
+  }
+
+  /** Подпрограмма `maxAbsPosition` (legacy: лимит на один тикер без портфельного контекста). */
   function maxAbsPosition(price, volConfig) {
     const lot = calcTradeVolume(price, volConfig);
     const maxPos = Math.max(1, volConfig?.maxPositions ?? DEFAULT_VOLUME.maxPositions);
     return lot * maxPos;
+  }
+
+  function simContinuationFromResult(r) {
+    if (!r) return {};
+    return {
+      pos: r.pos ?? 0,
+      cash: r.cash ?? 0,
+      entryPrice: r.entryPrice ?? null,
+      commission: r.commission ?? 0,
+      ...(r.simState || {})
+    };
   }
 
   /** Разрешение id/метаданных: `resolveVolCommission`. */
@@ -1314,10 +1420,10 @@
     let cash = initial.cash || 0;
     let entryPrice = initial.entryPrice ?? null;
     let commissionPaid = initial.commission || 0;
-    let activeIdx = -1;
-    let entryBarIdx = null;
-    let entryMid = null;
-    let entryBeta = null;
+    let activeIdx = initial.activeIdx ?? -1;
+    let entryBarIdx = initial.entryBarIdx ?? null;
+    let entryMid = initial.entryMid ?? null;
+    let entryBeta = initial.entryBeta ?? null;
     const rows = [];
     const w = Math.max(warmupBars(), 2);
     const from = opts.skipWarmup ? Math.max(startIdx, 0) : Math.max(startIdx, w);
@@ -1340,6 +1446,7 @@
       entryBarIdx = null;
       entryMid = null;
       entryBeta = null;
+      portfolioSyncPos(opts, 0, price);
       return vol;
     };
 
@@ -1398,9 +1505,8 @@
           const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null));
           const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
           if (esig.longOpHit === esig.shortOpHit) continue;
-          const lot = calcTradeVolume(price, volConfig);
-          const cap = maxAbsPosition(price, volConfig);
-          if (lot <= 0 || lot > cap) continue;
+          const lot = resolveOpenLot(price, volConfig, opts);
+          if (lot <= 0) continue;
           pos = esig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
@@ -1414,6 +1520,7 @@
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
           entryBeta = anchor.entryBeta;
+          portfolioSyncPos(opts, pos, price);
           break;
         }
       }
@@ -1441,7 +1548,8 @@
       commission: commissionPaid,
       buys: rows.reduce((s, r) => s + (r.buy || 0), 0),
       sells: rows.reduce((s, r) => s + (r.sell || 0), 0),
-      entryPrice
+      entryPrice,
+      simState: { activeIdx, entryBarIdx, entryMid, entryBeta }
     };
   }
 
@@ -1477,6 +1585,7 @@
       entryBarIdx = null;
       entryMid = null;
       entryBeta = null;
+      portfolioSyncPos(opts, 0, price);
       return vol;
     };
 
@@ -1528,9 +1637,8 @@
       if (pos > 0 && (esig.longClHit || esig.shortOpHit)) sell += flatten(price);
       else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) sell += flatten(price);
       if (pos === 0 && esig.longOpHit !== esig.shortOpHit) {
-        const lot = calcTradeVolume(price, volConfig);
-        const cap = maxAbsPosition(price, volConfig);
-        if (lot > 0 && lot <= cap) {
+        const lot = resolveOpenLot(price, volConfig, opts);
+        if (lot > 0) {
           pos = esig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
@@ -1543,6 +1651,7 @@
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
           entryBeta = anchor.entryBeta;
+          portfolioSyncPos(opts, pos, price);
         }
       }
 
@@ -1568,7 +1677,8 @@
       commission: commissionPaid,
       buys: rows.reduce((s, r) => s + (r.buy || 0), 0),
       sells: rows.reduce((s, r) => s + (r.sell || 0), 0),
-      entryPrice
+      entryPrice,
+      simState: { entryBarIdx, entryMid, entryBeta }
     };
   }
 
@@ -1593,7 +1703,7 @@
     let buys = 0;
     let sells = 0;
     const rows = [];
-    const capAt = (price) => maxAbsPosition(price, volConfig);
+    const capAt = (price) => maxAbsPositionAt(price, volConfig, opts);
     const from = Math.max(0, startIdx);
     const to = Math.min(endIdx, candles.length - 1);
     const barSpan = Math.max(1, to - from + 1);
@@ -1644,6 +1754,7 @@
             sells += Math.abs(pos);
             pos = 0;
             entryPrice = null;
+            portfolioSyncPos(opts, 0, price);
           }
         }
       }
@@ -1669,6 +1780,7 @@
         pos += buy - sell;
         buys += buy;
         sells += sell;
+        portfolioSyncPos(opts, pos, price);
       }
 
       if (pos === 0) {
@@ -1729,7 +1841,7 @@
     let buys = 0;
     let sells = 0;
     const rows = [];
-    const capAt = (price) => maxAbsPosition(price, volConfig);
+    const capAt = (price) => maxAbsPositionAt(price, volConfig, opts);
     const from = Math.max(0, startIdx);
     const to = Math.min(endIdx, candles.length - 1);
     const barSpan = Math.max(1, to - from + 1);
@@ -1782,6 +1894,7 @@
           sells += Math.abs(pos);
           pos = 0;
           entryPrice = null;
+          portfolioSyncPos(opts, 0, price);
         }
       }
 
@@ -1810,6 +1923,7 @@
         pos += buy - sell;
         buys += buy;
         sells += sell;
+        portfolioSyncPos(opts, pos, price);
       }
 
       if (pos === 0) {
@@ -2134,6 +2248,209 @@
     }
     if (a < 0 || b < a) return null;
     return { a, b };
+  }
+
+  /** Индекс свечи на время t (точное совпадение или последняя ≤ t). */
+  function candleIndexAtTime(candles, time) {
+    if (!candles?.length || !time) return -1;
+    let idx = -1;
+    for (let i = 0; i < candles.length; i++) {
+      const t = candles[i]?.time;
+      if (!t) continue;
+      if (t === time) return i;
+      if (t < time) idx = i;
+      else break;
+    }
+    return idx;
+  }
+
+  /**
+   * Синхронный проход по сетке времени: общий портфельный лимит на все инструменты.
+   * На каждом баре каждый инструмент получает один шаг runOnCandles(i,i).
+   */
+  function runPacksOnTimeGrid(packs, workUnits, times, spec, params, volConfig, options) {
+    const opts = options || {};
+    const signalPacks = opts.signalPacks;
+    const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
+    const buildCache = !!opts.buildIndicatorCache;
+    const ctxs = [];
+
+    for (const wu of workUnits || []) {
+      const candles = packs[wu.pi];
+      if (!candles?.length) continue;
+      const sec = wu.sec || candles[0]?.sec || "?";
+      const signalCandles = signalPacks?.[wu.pi] || candles;
+      const indicatorCache = buildCache ? new IndicatorCache(signalCandles) : null;
+      ctxs.push({
+        pi: wu.pi,
+        sec,
+        candles,
+        signalCandles,
+        indicatorCache,
+        range: wu.range,
+        rows: [],
+        initial: {},
+        buys: 0,
+        sells: 0,
+        commission: 0,
+        entryPrice: null
+      });
+    }
+
+    const totalSteps = Math.max(1, (times?.length || 0) * ctxs.length);
+    let doneSteps = 0;
+
+    for (let ti = 0; ti < (times?.length || 0); ti++) {
+      const t = times[ti];
+      if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
+      for (const ctx of ctxs) {
+        const i = candleIndexAtTime(ctx.candles, t);
+        if (i < 0 || i < ctx.range.a || i > ctx.range.b) continue;
+        const price = ctx.candles[i]?.close || 0;
+        portfolioCap.setPrice(ctx.sec, price);
+        const runOpts = {
+          sec: ctx.sec,
+          portfolioCap,
+          signalCandles: ctx.signalCandles,
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
+          initial: ctx.initial,
+          skipWarmup: true,
+          shouldCancel: opts.shouldCancel,
+          reverse: opts.reverse
+        };
+        const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
+        ctx.initial = simContinuationFromResult(r);
+        ctx.entryPrice = r.entryPrice ?? ctx.entryPrice;
+        ctx.commission = r.commission ?? ctx.commission;
+        ctx.buys += r.buys || 0;
+        ctx.sells += r.sells || 0;
+        if (r.rows?.length) ctx.rows.push(...r.rows);
+        doneSteps += 1;
+        if (typeof opts.onStep === "function") {
+          opts.onStep({
+            doneSteps,
+            totalSteps,
+            ti,
+            t,
+            sec: ctx.sec,
+            candleTime: t
+          });
+        }
+      }
+    }
+
+    return {
+      portfolioCap,
+      perSec: ctxs.map((ctx) => {
+        const last = ctx.rows.at(-1);
+        return {
+          sec: ctx.sec,
+          rows: ctx.rows,
+          finresp: last?.eq ?? 0,
+          cash: last?.cash ?? 0,
+          pos: last?.pos ?? 0,
+          commission: ctx.commission,
+          buys: ctx.buys,
+          sells: ctx.sells,
+          entryPrice: ctx.entryPrice,
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {})
+        };
+      })
+    };
+  }
+
+  /** Асинхронный runPacksOnTimeGrid с yield для UI. */
+  async function runPacksOnTimeGridAsync(packs, workUnits, times, spec, params, volConfig, options) {
+    const opts = { ...(options || {}), yieldUi: true };
+    const signalPacks = opts.signalPacks;
+    const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
+    const buildCache = !!opts.buildIndicatorCache;
+    const ctxs = [];
+
+    for (const wu of workUnits || []) {
+      const candles = packs[wu.pi];
+      if (!candles?.length) continue;
+      const sec = wu.sec || candles[0]?.sec || "?";
+      const signalCandles = signalPacks?.[wu.pi] || candles;
+      const indicatorCache = buildCache ? new IndicatorCache(signalCandles) : null;
+      ctxs.push({
+        pi: wu.pi,
+        sec,
+        candles,
+        signalCandles,
+        indicatorCache,
+        range: wu.range,
+        rows: [],
+        initial: {},
+        buys: 0,
+        sells: 0,
+        commission: 0,
+        entryPrice: null
+      });
+    }
+
+    const totalSteps = Math.max(1, (times?.length || 0) * ctxs.length);
+    let doneSteps = 0;
+
+    for (let ti = 0; ti < (times?.length || 0); ti++) {
+      const t = times[ti];
+      if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
+      for (const ctx of ctxs) {
+        const i = candleIndexAtTime(ctx.candles, t);
+        if (i < 0 || i < ctx.range.a || i > ctx.range.b) continue;
+        const price = ctx.candles[i]?.close || 0;
+        portfolioCap.setPrice(ctx.sec, price);
+        const runOpts = {
+          sec: ctx.sec,
+          portfolioCap,
+          signalCandles: ctx.signalCandles,
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
+          initial: ctx.initial,
+          skipWarmup: true,
+          shouldCancel: opts.shouldCancel,
+          reverse: opts.reverse
+        };
+        const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
+        ctx.initial = simContinuationFromResult(r);
+        ctx.entryPrice = r.entryPrice ?? ctx.entryPrice;
+        ctx.commission = r.commission ?? ctx.commission;
+        ctx.buys += r.buys || 0;
+        ctx.sells += r.sells || 0;
+        if (r.rows?.length) ctx.rows.push(...r.rows);
+        doneSteps += 1;
+        if (typeof opts.onStep === "function") {
+          await opts.onStep({
+            doneSteps,
+            totalSteps,
+            ti,
+            t,
+            sec: ctx.sec,
+            candleTime: t
+          });
+        } else if (doneSteps % 8 === 0) {
+          await delay(0);
+        }
+      }
+    }
+
+    return {
+      portfolioCap,
+      perSec: ctxs.map((ctx) => {
+        const last = ctx.rows.at(-1);
+        return {
+          sec: ctx.sec,
+          rows: ctx.rows,
+          finresp: last?.eq ?? 0,
+          cash: last?.cash ?? 0,
+          pos: last?.pos ?? 0,
+          commission: ctx.commission,
+          buys: ctx.buys,
+          sells: ctx.sells,
+          entryPrice: ctx.entryPrice,
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {})
+        };
+      })
+    };
   }
 
   /** Подпрограмма `findRowIdxAtOrBefore`. */
@@ -3462,63 +3779,105 @@
 
     emitFinrespPhaseProgress(opts, 0, totalBars, "Расчёт FINRESP: старт", finrespEnd, "", null);
 
-    for (let pi = 0; pi < packs.length; pi++) {
-      if (shouldAbortRun(opts)) break;
-      const candles = packs[pi];
-      const sec = candles[0]?.sec || "?";
-      const range = indicesForTimeRange(candles, tStart, tEnd);
-      if (!range) {
-        skipped.push({ sec, error: "нет свечей в выбранном окне" });
-        continue;
-      }
-      const unit = workUnits.find((w) => w.pi === pi);
-      const signalCandles = signalPacks?.[pi] || candles;
-      // Кэш индикаторов на весь расчёт: FINRESP + хвосты stopper (см. flattenAndResimTail).
-      const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
-      const runOpts = {
-        ...(signalPacks ? { signalCandles } : {}),
-        ...(indicatorCache ? { indicatorCache } : {}),
+    const syncTotalSteps = Math.max(1, (times?.length || 0) * workUnits.length);
+
+    if (workUnits.length > 1) {
+      const synced = runPacksOnTimeGrid(packs, workUnits, times, spec, params, volConfig, {
+        signalPacks,
+        buildIndicatorCache: !!cfg,
         shouldCancel: opts.shouldCancel,
-        onProgress: unit
-          ? (doneInInstrument, instrumentBars, candleTime) => {
-            const absolute = doneBars + Math.max(0, Math.min(instrumentBars, doneInInstrument));
-            emitFinrespPhaseProgress(
-              opts,
-              absolute,
-              totalBars,
-              finrespProgressText(unit.sec, absolute, totalBars, candleTime),
-              finrespEnd,
-              unit.sec,
-              candleTime
-            );
-          }
-          : undefined
-      };
-      const r = runOnCandles(candles, spec, range.a, range.b, params, volConfig, runOpts);
-      if (!r.rows?.length) {
-        skipped.push({ sec, error: "нет данных для расчёта в выбранном окне" });
-        continue;
-      }
-      if (unit) {
-        doneBars += unit.bars;
-        emitFinrespPhaseProgress(
-          opts,
-          doneBars,
-          totalBars,
-          finrespProgressText(sec, doneBars, totalBars, candles[range.b]?.time),
-          finrespEnd,
-          sec,
-          candles[range.b]?.time
-        );
-      }
-      perSec.push({
-        sec,
-        ...r,
-        ...(indicatorCache ? { indicatorCache } : {})
+        onStep: ({ doneSteps, totalSteps, sec, candleTime }) => {
+          emitFinrespPhaseProgress(
+            opts,
+            doneSteps,
+            totalSteps,
+            finrespProgressText(sec, doneSteps, totalSteps, candleTime),
+            finrespEnd,
+            sec,
+            candleTime
+          );
+        }
       });
-      activePacks.push(candles);
-      if (signalPacks) activeSignalPacks.push(signalCandles);
-      if (shouldAbortRun(opts)) break;
+      for (let pi = 0; pi < packs.length; pi++) {
+        if (!workUnits.some((w) => w.pi === pi)) {
+          const sec = packs[pi]?.[0]?.sec || "?";
+          skipped.push({ sec, error: "нет свечей в выбранном окне" });
+        }
+      }
+      for (const r of synced.perSec) {
+        if (!r.rows?.length) {
+          skipped.push({ sec: r.sec, error: "нет данных для расчёта в выбранном окне" });
+          continue;
+        }
+        const wu = workUnits.find((w) => w.sec === r.sec);
+        const pi = wu?.pi ?? -1;
+        perSec.push(r);
+        if (pi >= 0) {
+          activePacks.push(packs[pi]);
+          if (signalPacks) activeSignalPacks.push(signalPacks[pi] || packs[pi]);
+        }
+      }
+      doneBars = syncTotalSteps;
+    } else {
+      const portfolioCap = createPortfolioCap(volConfig);
+      for (let pi = 0; pi < packs.length; pi++) {
+        if (shouldAbortRun(opts)) break;
+        const candles = packs[pi];
+        const sec = candles[0]?.sec || "?";
+        const range = indicesForTimeRange(candles, tStart, tEnd);
+        if (!range) {
+          skipped.push({ sec, error: "нет свечей в выбранном окне" });
+          continue;
+        }
+        const unit = workUnits.find((w) => w.pi === pi);
+        const signalCandles = signalPacks?.[pi] || candles;
+        const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+        const runOpts = {
+          sec,
+          portfolioCap,
+          ...(signalPacks ? { signalCandles } : {}),
+          ...(indicatorCache ? { indicatorCache } : {}),
+          shouldCancel: opts.shouldCancel,
+          onProgress: unit
+            ? (doneInInstrument, instrumentBars, candleTime) => {
+              const absolute = doneBars + Math.max(0, Math.min(instrumentBars, doneInInstrument));
+              emitFinrespPhaseProgress(
+                opts,
+                absolute,
+                totalBars,
+                finrespProgressText(unit.sec, absolute, totalBars, candleTime),
+                finrespEnd,
+                unit.sec,
+                candleTime
+              );
+            }
+            : undefined
+        };
+        const r = runOnCandles(candles, spec, range.a, range.b, params, volConfig, runOpts);
+        if (!r.rows?.length) {
+          skipped.push({ sec, error: "нет данных для расчёта в выбранном окне" });
+          continue;
+        }
+        if (unit) {
+          doneBars += unit.bars;
+          emitFinrespPhaseProgress(
+            opts,
+            doneBars,
+            totalBars,
+            finrespProgressText(sec, doneBars, totalBars, candles[range.b]?.time),
+            finrespEnd,
+            sec,
+            candles[range.b]?.time
+          );
+        }
+        perSec.push({
+          sec,
+          ...r,
+          ...(indicatorCache ? { indicatorCache } : {})
+        });
+        activePacks.push(candles);
+        if (signalPacks) activeSignalPacks.push(signalCandles);
+      }
     }
 
     const preStopperAgg = aggregateFinresp(perSec);
@@ -3606,60 +3965,104 @@
 
     await emitRunProgressAsync(opts, CALC_PROGRESS.FINRESP_START, "Расчёт FINRESP: старт", { phase: "finresp", done: 0, total: totalBars });
 
-    for (let pi = 0; pi < packs.length; pi++) {
-      if (shouldAbortRun(opts)) break;
-      const candles = packs[pi];
-      const sec = candles[0]?.sec || "?";
-      const range = indicesForTimeRange(candles, tStart, tEnd);
-      if (!range) {
-        skipped.push({ sec, error: "нет свечей в выбранном окне" });
-        continue;
-      }
-      const unit = workUnits.find((w) => w.pi === pi);
-      const signalCandles = signalPacks?.[pi] || candles;
-      const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
-      const runOpts = {
-        ...(signalPacks ? { signalCandles } : {}),
-        ...(indicatorCache ? { indicatorCache } : {}),
-        yieldUi: true,
+    const syncTotalSteps = Math.max(1, (times?.length || 0) * workUnits.length);
+
+    if (workUnits.length > 1) {
+      const synced = await runPacksOnTimeGridAsync(packs, workUnits, times, spec, params, volConfig, {
+        signalPacks,
+        buildIndicatorCache: !!cfg,
         shouldCancel: opts.shouldCancel,
-        onProgress: unit
-          ? (doneInInstrument, instrumentBars, candleTime) => {
-            const absolute = doneBars + Math.max(0, Math.min(instrumentBars, doneInInstrument));
-            emitFinrespPhaseProgress(
-              opts,
-              absolute,
-              totalBars,
-              finrespProgressText(unit.sec, absolute, totalBars, candleTime),
-              finrespEnd,
-              unit.sec,
-              candleTime
-            );
-          }
-          : undefined
-      };
-      const r = await runOnCandlesYielding(candles, spec, range.a, range.b, params, volConfig, runOpts);
-      if (!r.rows?.length) {
-        skipped.push({ sec, error: "нет данных для расчёта в выбранном окне" });
-        continue;
-      }
-      if (unit) {
-        doneBars += unit.bars;
-        await emitRunProgressAsync(
-          opts,
-          lerpCalcProgress(CALC_PROGRESS.FINRESP_START, finrespEnd, doneBars / totalBars),
-          finrespProgressText(sec, doneBars, totalBars, candles[range.b]?.time),
-          { phase: "finresp", done: doneBars, total: totalBars, candleTime: candles[range.b]?.time, sec }
-        );
-      }
-      perSec.push({
-        sec,
-        ...r,
-        ...(indicatorCache ? { indicatorCache } : {})
+        onStep: async ({ doneSteps, totalSteps, sec, candleTime }) => {
+          emitFinrespPhaseProgress(
+            opts,
+            doneSteps,
+            totalSteps,
+            finrespProgressText(sec, doneSteps, totalSteps, candleTime),
+            finrespEnd,
+            sec,
+            candleTime
+          );
+          await delay(0);
+        }
       });
-      activePacks.push(candles);
-      if (signalPacks) activeSignalPacks.push(signalCandles);
-      if (shouldAbortRun(opts)) break;
+      for (let pi = 0; pi < packs.length; pi++) {
+        if (!workUnits.some((w) => w.pi === pi)) {
+          const sec = packs[pi]?.[0]?.sec || "?";
+          skipped.push({ sec, error: "нет свечей в выбранном окне" });
+        }
+      }
+      for (const r of synced.perSec) {
+        if (!r.rows?.length) {
+          skipped.push({ sec: r.sec, error: "нет данных для расчёта в выбранном окне" });
+          continue;
+        }
+        const wu = workUnits.find((w) => w.sec === r.sec);
+        const pi = wu?.pi ?? -1;
+        perSec.push(r);
+        if (pi >= 0) {
+          activePacks.push(packs[pi]);
+          if (signalPacks) activeSignalPacks.push(signalPacks[pi] || packs[pi]);
+        }
+      }
+      doneBars = syncTotalSteps;
+    } else {
+      const portfolioCap = createPortfolioCap(volConfig);
+      for (let pi = 0; pi < packs.length; pi++) {
+        if (shouldAbortRun(opts)) break;
+        const candles = packs[pi];
+        const sec = candles[0]?.sec || "?";
+        const range = indicesForTimeRange(candles, tStart, tEnd);
+        if (!range) {
+          skipped.push({ sec, error: "нет свечей в выбранном окне" });
+          continue;
+        }
+        const unit = workUnits.find((w) => w.pi === pi);
+        const signalCandles = signalPacks?.[pi] || candles;
+        const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+        const runOpts = {
+          sec,
+          portfolioCap,
+          ...(signalPacks ? { signalCandles } : {}),
+          ...(indicatorCache ? { indicatorCache } : {}),
+          yieldUi: true,
+          shouldCancel: opts.shouldCancel,
+          onProgress: unit
+            ? (doneInInstrument, instrumentBars, candleTime) => {
+              const absolute = doneBars + Math.max(0, Math.min(instrumentBars, doneInInstrument));
+              emitFinrespPhaseProgress(
+                opts,
+                absolute,
+                totalBars,
+                finrespProgressText(unit.sec, absolute, totalBars, candleTime),
+                finrespEnd,
+                unit.sec,
+                candleTime
+              );
+            }
+            : undefined
+        };
+        const r = await runOnCandlesYielding(candles, spec, range.a, range.b, params, volConfig, runOpts);
+        if (!r.rows?.length) {
+          skipped.push({ sec, error: "нет данных для расчёта в выбранном окне" });
+          continue;
+        }
+        if (unit) {
+          doneBars += unit.bars;
+          await emitRunProgressAsync(
+            opts,
+            lerpCalcProgress(CALC_PROGRESS.FINRESP_START, finrespEnd, doneBars / totalBars),
+            finrespProgressText(sec, doneBars, totalBars, candles[range.b]?.time),
+            { phase: "finresp", done: doneBars, total: totalBars, candleTime: candles[range.b]?.time, sec }
+          );
+        }
+        perSec.push({
+          sec,
+          ...r,
+          ...(indicatorCache ? { indicatorCache } : {})
+        });
+        activePacks.push(candles);
+        if (signalPacks) activeSignalPacks.push(signalCandles);
+      }
     }
 
     const preStopperAgg = aggregateFinresp(perSec);
@@ -3736,6 +4139,12 @@
     DEFAULT_LOGIC_LINES,
     BUILTIN_META,
     calcTradeVolume,
+    portfolioGrossCapRub,
+    createPortfolioCap,
+    runPacksOnTimeGrid,
+    runPacksOnTimeGridAsync,
+    indicesForTimeRange,
+    candleIndexAtTime,
     ORDER_BOOK_TREND_TOKEN,
     DEFAULT_OB_IMBALANCE,
     logicUsesObTrend,
