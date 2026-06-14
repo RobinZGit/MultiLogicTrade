@@ -3883,7 +3883,7 @@
 
   /** Проверка булева условия: `isLiveObTrendGateEnabled`. */
   function isLiveObTrendGateEnabled() {
-    return isLiveMode() && !!$("live-ob-trend-confirm")?.checked;
+    return isLiveMode() && !!state.live.obTrendConfirm;
   }
 
   /** Подпрограмма `activeLogicLineRaw`. */
