@@ -122,6 +122,11 @@ h2:first-child{margin-top:0;}
 .chart-mini--inactive .chart-sec-title{color:#6b7280;}
 .chart-mini--inactive svg{filter:saturate(.35) contrast(.92);}
 .chart-mini-empty{min-height:4.5rem;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:.85rem;border:1px dashed var(--border);border-radius:8px;margin-top:.25rem;}
+.ml-instrument-chart-host{width:100%;}
+.ml-instrument-chart{width:100%;}
+.ml-chart-viewport{cursor:grab;user-select:none;touch-action:none;overflow-x:auto;}
+.ml-chart-viewport.ml-chart-dragging{cursor:grabbing;}
+.ml-chart-viewport svg{display:block;min-width:720px;max-width:100%;}
 .live-mode-hidden{display:none !important;}
 .calc-card-primary{
   border:2px solid #93c5fd;border-radius:12px;padding:1rem 1.1rem 1.15rem;margin:0 0 1rem;
@@ -1076,6 +1081,8 @@ body.calc-running .help-ftr{opacity:.75;}
 </script>
 <script src="MultiLogic_FinrespCalculator.engine.js"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
+<script src="MultiLogic_FinrespCalculator.charts.js"
+  onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script src="MultiLogic_FinrespCalculator.live.js"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
@@ -1090,7 +1097,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-live-bootstrap";
+  const CALC_PAGE_VERSION = "2026-06-14-instrument-charts";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -4878,6 +4885,58 @@ body.calc-running .help-ftr{opacity:.75;}
     }).join("");
   }
 
+  /** Свечи инструмента по SEC для обогащения графика. */
+  function packForSec(sec) {
+    const target = String(sec || "").trim().toUpperCase();
+    if (!target) return null;
+    const byKey = packsByInstrumentKey(state.packs);
+    for (const inst of state.lastInstruments || []) {
+      if (String(inst.sec || "").trim().toUpperCase() === target) {
+        const pack = byKey.get(instrumentKey(inst));
+        if (pack?.length) return pack;
+      }
+    }
+    for (const pack of state.packs || []) {
+      if (String(pack[0]?.sec || "").trim().toUpperCase() === target) return pack;
+    }
+    return null;
+  }
+
+  /** OHLC + индикаторы всех выбранных логик для строк графика. */
+  function enrichChartRowsForDisplay(rows, sec) {
+    const pack = packForSec(sec);
+    if (!pack?.length || !rows?.length || !E.createIndicatorCache) return rows;
+    const timeToIdx = new Map(pack.map((c, i) => [c.time, i]));
+    const cache = E.createIndicatorCache(pack);
+    const p = params();
+    const indicators = indicatorSelection();
+    const specs = selectedLogicIds()
+      .map((id) => E.resolveLogicSpec(id, state.customLines, p, indicators))
+      .filter((s) => s && !s.disabled);
+    let prevPos = 0;
+    return rows.map((r) => {
+      const idx = timeToIdx.get(r.time);
+      const posAfter = r?.pos ?? 0;
+      const inferred = (!r?.tradeIn && !r?.tradeOut && E.tradeMarkersFromBar)
+        ? E.tradeMarkersFromBar(prevPos, posAfter, r?.posStop ?? null)
+        : {};
+      prevPos = posAfter;
+      if (idx == null) return { ...r, ...inferred };
+      const candle = pack[idx];
+      const ind = E.collectChartIndicatorsForSpecs
+        ? E.collectChartIndicatorsForSpecs(cache, specs, idx)
+        : {};
+      return {
+        ...r,
+        ...inferred,
+        open: r.open ?? candle?.open ?? r.close,
+        high: r.high ?? candle?.high ?? r.close,
+        low: r.low ?? candle?.low ?? r.close,
+        ...ind
+      };
+    });
+  }
+
   /** Построение структуры данных: `buildChartSvg`. */
   function buildChartSvg(rows, finresp, title, compact, vLines, chartDecor) {
     if (!rows?.length) return "";
@@ -5476,37 +5535,92 @@ ${referenceBlock}
     const nOk = entries.filter((e) => e.kind === "ok").length;
     const nFail = entries.filter((e) => e.kind === "fail").length;
     if (entries.length > 1) {
-      note += `<p class="note">Графики: ${entries.length} инстр. (${nOk} с данными${nFail ? `, ${nFail} с сообщением об ошибке` : ""}).</p>`;
+      note += `<p class="note">Графики: ${entries.length} инстр. (${nOk} с данными${nFail ? `, ${nFail} с сообщением об ошибке` : ""}). Колёсико — масштаб, перетаскивание — сдвиг, двойной клик — весь период.</p>`;
     }
     if (portfolioEvents.length) {
       note += `<span class="note">Верт. черта: SL красная, TP зелёная; тонкая — позиция, жирная — портфель (на всех графиках).</span>`;
     } else if (liveSession) {
       note += `<span class="note">Верт. линии заявок: покупка — синяя, продажа — оранжевая.</span>`;
     }
-    const blocks = entries.map((entry) => {
+
+    const useInteractive = typeof MLInstrumentChart !== "undefined" && MLInstrumentChart.mount;
+    syncChartBox(chartBox, note || "");
+    const stack = document.createElement("div");
+    stack.className = "chart-stack";
+    const chartFormat = {
+      axisPrice,
+      axisTime,
+      niceTicks,
+      fmtFinresp: (v) => fmt(v)
+    };
+
+    for (const entry of entries) {
       if (entry.kind === "fail") {
-        return `<div class="chart-mini chart-fail"><p class="chart-sec-title">${entry.sec}</p><p class="chart-fail-msg">${entry.error}</p></div>`;
+        const failEl = document.createElement("div");
+        failEl.className = "chart-mini chart-fail";
+        failEl.innerHTML = `<p class="chart-sec-title">${entry.sec}</p><p class="chart-fail-msg">${entry.error}</p>`;
+        stack.appendChild(failEl);
+        continue;
       }
       const p = entry.row;
       const rows = sliceRowsForLiveSession(p.rows);
       if (liveSession && !rows.length) {
-        return `<div class="chart-mini"><p class="chart-sec-title">${p.sec}</p><div class="chart-mini-empty">Ожидание свечей live-сессии…</div></div>`;
+        const waitEl = document.createElement("div");
+        waitEl.className = "chart-mini";
+        waitEl.innerHTML = `<p class="chart-sec-title">${p.sec}</p><div class="chart-mini-empty">Ожидание свечей live-сессии…</div>`;
+        stack.appendChild(waitEl);
+        continue;
       }
       const displayFin = liveSession ? liveDisplayFinresp(p.sec, p.finresp) : p.finresp;
-      const chartRows = rows.length ? rows : p.rows;
+      const chartRows = enrichChartRowsForDisplay(rows.length ? rows : p.rows, p.sec);
       const stopV = chartStopLines(chartRows, portfolioEvents);
       const orderV = liveSession ? orderMarkersForChart(p.sec, chartRows) : [];
       const vLines = [...stopV, ...orderV];
       const decor = chartDecorFromRows(chartRows, vLines);
-      const svg = buildChartSvg(chartRows, displayFin, `График ${p.sec}`, compact, vLines, decor);
-      if (!svg) {
-        return `<div class="chart-mini chart-fail"><p class="chart-sec-title">${p.sec}</p><p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p></div>`;
+
+      const mini = document.createElement("div");
+      mini.className = "chart-mini";
+      const titleEl = document.createElement("p");
+      titleEl.className = "chart-sec-title";
+      titleEl.textContent = p.sec;
+      mini.appendChild(titleEl);
+
+      if (!chartRows.length) {
+        mini.innerHTML += `<p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
+        stack.appendChild(mini);
+        continue;
       }
-      return `<div class="chart-mini"><p class="chart-sec-title">${p.sec}</p>${svg}</div>`;
-    });
-    syncChartBox(chartBox, blocks.length
-      ? `${note}<div class="chart-stack">${blocks.join("")}</div>`
-      : "<p class=\"note\">Нет данных для графика.</p>");
+
+      if (useInteractive) {
+        const host = document.createElement("div");
+        host.className = "ml-instrument-chart-host";
+        mini.appendChild(host);
+        stack.appendChild(mini);
+        MLInstrumentChart.mount(host, {
+          rows: chartRows,
+          finresp: displayFin,
+          title: `График ${p.sec}`,
+          compact,
+          decor,
+          format: chartFormat
+        });
+      } else {
+        const svg = buildChartSvg(chartRows, displayFin, `График ${p.sec}`, compact, vLines, decor);
+        if (!svg) {
+          mini.innerHTML += `<p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
+        } else {
+          mini.insertAdjacentHTML("beforeend", svg);
+        }
+        stack.appendChild(mini);
+      }
+    }
+
+    if (stack.childNodes.length) {
+      chartBox.appendChild(stack);
+      chartBox.hidden = false;
+    } else if (!note) {
+      syncChartBox(chartBox, "<p class=\"note\">Нет данных для графика.</p>");
+    }
   }
 
   /** Подпрограмма `optimDisplayAgg`. */
@@ -6284,7 +6398,7 @@ ${referenceBlock}
       "engineFailed=" + !!(window.__mlFinresp && window.__mlFinresp.engineFailed),
       "",
       "Проверьте:",
-      "1) MultiLogic_FinrespCalculator.engine.js и live.js рядом с HTML",
+      "1) MultiLogic_FinrespCalculator.engine.js, charts.js и live.js рядом с HTML",
       "2) Ctrl+F5 (жёсткое обновление)",
       "3) F12 → Console — красные ошибки",
       "4) serve-calculator.ps1 → http://127.0.0.1:8765/…"

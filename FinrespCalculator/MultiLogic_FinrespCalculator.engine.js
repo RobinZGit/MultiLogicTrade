@@ -1257,13 +1257,32 @@
     return tradeCommission(volume, price, vol.commission);
   }
 
+  /** Маркеры входа/выхода на графике по смене позиции. */
+  function tradeMarkersFromBar(posBefore, posAfter, posStop) {
+    let tradeIn = null;
+    let tradeOut = null;
+    const pb = posBefore ?? 0;
+    const pa = posAfter ?? 0;
+    if (pb === 0 && pa !== 0) tradeIn = pa > 0 ? "long" : "short";
+    if (pb !== 0 && pa === 0) {
+      tradeOut = posStop === "sl" || posStop === "tp" ? posStop : "logic";
+    }
+    return { tradeIn, tradeOut };
+  }
+
   /** Подпрограмма `pushRow`. */
-  function pushRow(rows, candle, fields) {
+  function pushRow(rows, candle, fields, posBefore) {
     if (!candle) return;
+    const posAfter = fields?.pos ?? 0;
+    const markers = tradeMarkersFromBar(posBefore, posAfter, fields?.posStop ?? null);
     rows.push({
       time: candle.time,
       close: candle.close,
-      ...fields
+      open: candle.open ?? candle.close,
+      high: candle.high ?? candle.close,
+      low: candle.low ?? candle.close,
+      ...fields,
+      ...markers
     });
   }
 
@@ -1372,6 +1391,37 @@
     return ind;
   }
 
+  /** Индикаторы для графика по всем выбранным логикам (merge полей). */
+  function collectChartIndicatorsForSpecs(cache, specs, idx) {
+    const ind = {};
+    for (const spec of specs || []) {
+      if (!spec || spec.disabled) continue;
+      if (spec.type === "logic_line" && spec.parsed) {
+        Object.assign(ind, collectChartIndicators(cache, spec.parsed, idx));
+      } else if (spec.type === "sma_spread" || spec.type === "sma_corridor") {
+        const len = spec.smaLen || 100;
+        ind.sma = cache.sma(len)[idx];
+        if (spec.type === "sma_corridor") {
+          const corridorK = Math.max(0, Number(spec.corridorAtr) || 0);
+          const atrLen = Math.max(2, Number(spec.slTpAtrLen) || DEFAULT_PARAMS.slTpAtrLen);
+          const a = cache.atr(atrLen)[idx];
+          const s = ind.sma;
+          if (s != null && a != null && a > 0) {
+            const band = corridorK * a;
+            ind.smaUpper = s + band;
+            ind.smaLower = s - band;
+          }
+        }
+      }
+    }
+    return ind;
+  }
+
+  /** Кэш индикаторов по свечам (для обогащения строк графика). */
+  function createIndicatorCache(candles) {
+    return new IndicatorCache(candles);
+  }
+
   /**
    * Сигналы одной строки логики на баре i: вход long/short (Op) и выход (Cl).
    * @returns {{ longOpHit, shortOpHit, longClHit, shortClHit }}
@@ -1452,6 +1502,7 @@
 
     for (let i = from; i <= to; i++) {
       if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
+      const posBefore = pos;
       const price = candles[i].close;
       let buy = 0;
       let sell = 0;
@@ -1536,7 +1587,7 @@
         cash,
         commission: commissionPaid,
         eq: cash + pos * price
-      });
+      }, posBefore);
     }
 
     const last = rows.at(-1);
@@ -1596,6 +1647,7 @@
 
     for (let i = from; i <= to; i++) {
       if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
+      const posBefore = pos;
       const price = candles[i].close;
       let buy = 0;
       let sell = 0;
@@ -1665,7 +1717,7 @@
         cash,
         commission: commissionPaid,
         eq: cash + pos * price
-      });
+      }, posBefore);
     }
 
     const last = rows.at(-1);
@@ -1789,9 +1841,7 @@
         entryPrice = price;
       }
 
-      rows.push({
-        time: candle.time,
-        close: price,
+      pushRow(rows, candle, {
         sma: s,
         buy,
         sell,
@@ -1800,7 +1850,7 @@
         pos,
         commission: commissionPaid,
         eq: cash + pos * (price || 0)
-      });
+      }, posBefore);
     }
     const last = rows.at(-1);
     return {
@@ -1932,9 +1982,7 @@
         entryPrice = price;
       }
 
-      rows.push({
-        time: candle.time,
-        close: price,
+      pushRow(rows, candle, {
         sma: s,
         smaUpper,
         smaLower,
@@ -1945,7 +1993,7 @@
         pos,
         commission: commissionPaid,
         eq: cash + pos * (price || 0)
-      });
+      }, posBefore);
     }
     const last = rows.at(-1);
     return {
@@ -4255,6 +4303,9 @@
     parseTbankHistoricCandles,
     applyRandomPriceShift,
     RANDOM_PRICE_SHIFT_MAX,
-    smaSeries
+    smaSeries,
+    tradeMarkersFromBar,
+    createIndicatorCache,
+    collectChartIndicatorsForSpecs
   };
 })(typeof window !== "undefined" ? window : globalThis);
