@@ -2606,7 +2606,9 @@
           buys: ctx.buys,
           sells: ctx.sells,
           entryPrice: ctx.entryPrice,
-          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {})
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
+          ...(ctx.preparedRun ? { preparedRun: ctx.preparedRun } : {}),
+          ...(ctx.preparedStack ? { preparedStack: ctx.preparedStack } : {})
         };
       })
     };
@@ -2683,7 +2685,9 @@
           buys: ctx.buys,
           sells: ctx.sells,
           entryPrice: ctx.entryPrice,
-          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {})
+          ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
+          ...(ctx.preparedRun ? { preparedRun: ctx.preparedRun } : {}),
+          ...(ctx.preparedStack ? { preparedStack: ctx.preparedStack } : {})
         };
       })
     };
@@ -2741,6 +2745,62 @@
       return sum;
     });
     return { total, perInstrument };
+  }
+
+  /** Частичное обновление equity после stopper: только затронутые инструменты с bar t. */
+  function patchPortfolioEquitySeries(portfolioEq, perSec, times, fromTimeIndex, affectedIndices) {
+    if (!portfolioEq?.perInstrument?.length || !affectedIndices?.length || !times?.length) return;
+    for (const s of affectedIndices) {
+      portfolioEq.perInstrument[s] = buildPerSecEquitySeries(perSec[s].rows, times);
+    }
+    const from = Math.max(0, fromTimeIndex);
+    for (let ti = from; ti < times.length; ti++) {
+      let sum = 0;
+      for (let s = 0; s < portfolioEq.perInstrument.length; s++) {
+        sum += portfolioEq.perInstrument[s][ti] || 0;
+      }
+      portfolioEq.total[ti] = sum;
+    }
+  }
+
+  function stopperResimRunOptions(perSecItem, signalPack) {
+    return {
+      ...(signalPack ? { signalCandles: signalPack } : {}),
+      ...(perSecItem?.indicatorCache ? { indicatorCache: perSecItem.indicatorCache } : {}),
+      ...(perSecItem?.preparedRun ? { preparedRun: perSecItem.preparedRun } : {}),
+      ...(perSecItem?.preparedStack ? { preparedStack: perSecItem.preparedStack } : {})
+    };
+  }
+
+  /** @returns {number[]} индексы инструментов, у которых пересчитан хвост */
+  function resimInstrumentsAtStopper(perSec, packs, spec, triggerTime, endTime, params, volConfig, signalPacks, progressOpts, stopperStep, stopperTotal) {
+    const onProgress = progressOpts?.onProgress;
+    const affected = [];
+    for (let s = 0; s < perSec.length; s++) {
+      const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
+      if (onProgress) {
+        onProgress(stopperStep, stopperTotal, triggerTime, {
+          resim: true,
+          sec,
+          instIndex: s,
+          instTotal: perSec.length
+        });
+      }
+      const runOptions = stopperResimRunOptions(perSec[s], signalPacks?.[s]);
+      if (flattenAndResimTail(perSec[s], packs[s], spec, triggerTime, endTime, params, volConfig, runOptions)) {
+        affected.push(s);
+      }
+    }
+    return affected;
+  }
+
+  function refreshPortfolioEquityAfterStopper(portfolioEq, perSec, times, triggerTimeIndex, affected) {
+    if (!affected?.length) return portfolioEq;
+    if (affected.length === perSec.length) {
+      return buildPortfolioEquitySeries(perSec, times);
+    }
+    patchPortfolioEquitySeries(portfolioEq, perSec, times, triggerTimeIndex, affected);
+    return portfolioEq;
   }
 
   /** Построение структуры данных: `buildPortfolioEquityRows`. */
@@ -2824,23 +2884,25 @@
     return row;
   }
 
-  /** Подпрограмма `flattenAndResimTail`. */
+  /** @returns {boolean} true — хвост пересчитан; false — позиции не было, пересчёт не нужен */
   function flattenAndResimTail(perSecItem, candles, spec, triggerTime, endTime, params, volConfig, runOptions) {
     const rowIdx = findRowIdxAtOrBefore(perSecItem.rows, triggerTime);
-    if (rowIdx < 0) return;
+    if (rowIdx < 0) return false;
+    const existingRow = perSecItem.rows[rowIdx];
+    if ((existingRow?.pos ?? 0) === 0) return false;
     const triggerRow = flattenRowAtIdx(perSecItem, rowIdx, volConfig);
     const head = perSecItem.rows.slice(0, rowIdx);
     const localEnd = findCandleIndexAtOrBefore(candles, endTime);
     if (localEnd < 0) {
       perSecItem.rows = [...head, triggerRow];
       recomputePerSecTotals(perSecItem);
-      return;
+      return true;
     }
     const candleIdx = findCandleIndexAtOrBefore(candles, triggerTime);
     if (candleIdx < 0 || candleIdx >= localEnd) {
       perSecItem.rows = [...head, triggerRow];
       recomputePerSecTotals(perSecItem);
-      return;
+      return true;
     }
     const initial = {
       pos: 0,
@@ -2861,6 +2923,7 @@
     );
     perSecItem.rows = [...head, triggerRow, ...tail.rows];
     recomputePerSecTotals(perSecItem);
+    return true;
   }
 
   /** Портфельный stop-loss/take-profit по equity и ATR. */
@@ -2915,22 +2978,10 @@
         if (!kind) continue;
 
         const refAtTrigger = referenceEquity;
-        for (let s = 0; s < perSec.length; s++) {
-          const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
-          if (onProgress) {
-            onProgress(stopperStep, stopperTotal, time, {
-              resim: true,
-              sec,
-              instIndex: s,
-              instTotal: perSec.length
-            });
-          }
-          const runOptions = {
-            ...(signalPacks?.[s] ? { signalCandles: signalPacks[s] } : {}),
-            ...(perSec[s].indicatorCache ? { indicatorCache: perSec[s].indicatorCache } : {})
-          };
-          flattenAndResimTail(perSec[s], packs[s], spec, time, endTime, params, volConfig, runOptions);
-        }
+        const affected = resimInstrumentsAtStopper(
+          perSec, packs, spec, time, endTime, params, volConfig, signalPacks,
+          progressOpts, stopperStep, stopperTotal
+        );
         events.push({
           kind,
           time,
@@ -2939,7 +2990,7 @@
           atr,
           triggerLevel
         });
-        portfolioEq = buildPortfolioEquitySeries(perSec, times);
+        portfolioEq = refreshPortfolioEquityAfterStopper(portfolioEq, perSec, times, t, affected);
         referenceEquity = portfolioEq.total[t] ?? totalEq;
         scanFrom = t + 1;
         triggered = true;
@@ -3017,23 +3068,11 @@
         }
 
         const refAtTrigger = referenceEquity;
-        for (let s = 0; s < perSec.length; s++) {
-          const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
-          if (onProgress) {
-            onProgress(stopperStep, stopperTotal, time, {
-              resim: true,
-              sec,
-              instIndex: s,
-              instTotal: perSec.length
-            });
-          }
-          const runOptions = {
-            ...(signalPacks?.[s] ? { signalCandles: signalPacks[s] } : {}),
-            ...(perSec[s].indicatorCache ? { indicatorCache: perSec[s].indicatorCache } : {})
-          };
-          flattenAndResimTail(perSec[s], packs[s], spec, time, endTime, params, volConfig, runOptions);
-          await tick();
-        }
+        const affected = resimInstrumentsAtStopper(
+          perSec, packs, spec, time, endTime, params, volConfig, signalPacks,
+          progressOpts, stopperStep, stopperTotal
+        );
+        if (yieldUi) await tick();
         events.push({
           kind,
           time,
@@ -3042,7 +3081,7 @@
           atr,
           triggerLevel
         });
-        portfolioEq = buildPortfolioEquitySeries(perSec, times);
+        portfolioEq = refreshPortfolioEquityAfterStopper(portfolioEq, perSec, times, t, affected);
         referenceEquity = portfolioEq.total[t] ?? totalEq;
         scanFrom = t + 1;
         triggered = true;
@@ -4069,11 +4108,14 @@
         const unit = workUnits.find((w) => w.pi === pi);
         const signalCandles = signalPacks?.[pi] || candles;
         const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+        const preparedRun = cfg ? buildGridSimulationPrep(spec, params, vol, indicatorCache, opts) : null;
         const runOpts = {
           sec,
           portfolioCap,
           ...(signalPacks ? { signalCandles } : {}),
           ...(indicatorCache ? { indicatorCache } : {}),
+          ...(preparedRun ? { preparedRun } : {}),
+          ...(preparedRun?.preparedStack ? { preparedStack: preparedRun.preparedStack } : {}),
           shouldCancel: opts.shouldCancel,
           onProgress: unit
             ? (doneInInstrument, instrumentBars, candleTime) => {
@@ -4110,7 +4152,9 @@
         perSec.push({
           sec,
           ...r,
-          ...(indicatorCache ? { indicatorCache } : {})
+          ...(indicatorCache ? { indicatorCache } : {}),
+          ...(preparedRun ? { preparedRun } : {}),
+          ...(preparedRun?.preparedStack ? { preparedStack: preparedRun.preparedStack } : {})
         });
         activePacks.push(candles);
         if (signalPacks) activeSignalPacks.push(signalCandles);
@@ -4256,11 +4300,14 @@
         const unit = workUnits.find((w) => w.pi === pi);
         const signalCandles = signalPacks?.[pi] || candles;
         const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+        const preparedRun = cfg ? buildGridSimulationPrep(spec, params, vol, indicatorCache, opts) : null;
         const runOpts = {
           sec,
           portfolioCap,
           ...(signalPacks ? { signalCandles } : {}),
           ...(indicatorCache ? { indicatorCache } : {}),
+          ...(preparedRun ? { preparedRun } : {}),
+          ...(preparedRun?.preparedStack ? { preparedStack: preparedRun.preparedStack } : {}),
           yieldUi: true,
           shouldCancel: opts.shouldCancel,
           onProgress: unit
@@ -4295,7 +4342,9 @@
         perSec.push({
           sec,
           ...r,
-          ...(indicatorCache ? { indicatorCache } : {})
+          ...(indicatorCache ? { indicatorCache } : {}),
+          ...(preparedRun ? { preparedRun } : {}),
+          ...(preparedRun?.preparedStack ? { preparedStack: preparedRun.preparedStack } : {})
         });
         activePacks.push(candles);
         if (signalPacks) activeSignalPacks.push(signalCandles);
