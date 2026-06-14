@@ -3580,7 +3580,7 @@
   /** Асинхронный runMulti с yield для UI/worker. */
   async function runMultiAsync(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, options) {
     const opts = { ...(options || {}), yieldUi: true };
-    const deferStopper = opts.deferPortfolioStopper !== false;
+    const deferStopper = !!opts.deferPortfolioStopper;
     const signalPacks = opts.signalPacks;
     const plan = runMultiPlan(packs, startIdx, endIdx);
     if (plan.empty) {
@@ -3617,7 +3617,7 @@
       }
       const unit = workUnits.find((w) => w.pi === pi);
       const signalCandles = signalPacks?.[pi] || candles;
-      const indicatorCache = cfg && !deferStopper ? new IndicatorCache(signalCandles) : null;
+      const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
       const runOpts = {
         ...(signalPacks ? { signalCandles } : {}),
         ...(indicatorCache ? { indicatorCache } : {}),
@@ -3671,7 +3671,7 @@
         "Stopper портфеля: подготовка…",
         { phase: "stopper", done: 0, total: stopperBars }
       );
-      const applied = applyPortfolioStopper(
+      const applied = await applyPortfolioStopperAsync(
         perSec,
         activePacks,
         spec,
@@ -3682,11 +3682,10 @@
         cfg,
         signalPacks ? activeSignalPacks : null,
         {
+          yieldUi: true,
           shouldCancel: opts.shouldCancel,
           onProgress: (doneInStopper, stopperTotal, candleTime, extra) => {
-            const text = extra?.resim
-              ? stopperResimProgressText(extra.sec, extra.instIndex, extra.instTotal, candleTime)
-              : stopperProgressText(doneInStopper, stopperTotal, candleTime);
+            const text = resolveStopperProgressText(doneInStopper, stopperTotal, candleTime, extra);
             emitStopperPhaseProgress(
               opts,
               doneInStopper,

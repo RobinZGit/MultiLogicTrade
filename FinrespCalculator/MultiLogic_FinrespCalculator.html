@@ -984,7 +984,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-stopper-main-thread";
+  const CALC_PAGE_VERSION = "2026-06-14-restore-stopper-cache";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -3132,61 +3132,13 @@ body.calc-running .help-ftr{opacity:.75;}
       }
       workerOut = await E.runMultiAsync(state.packs, spec, a, b, p, volConfig(), sc, {
         ...finrespRunOptions(),
-        deferPortfolioStopper: true,
         shouldCancel: ro.shouldCancel,
         ...(ro.silent ? {} : { onProgress: buildRunProgressHandler(ro) })
       });
     }
-    let { perSec, agg, preStopperAgg, stopper, skipped, cancelled } = workerOut;
+    const { perSec, agg, preStopperAgg, stopper, skipped } = workerOut;
     state.windowSkipped = skipped || [];
     if (!perSec?.length) return null;
-
-    const needsStopper = !cancelled && (sc.useSl || sc.useTp);
-    if (needsStopper) {
-      const plan = E.runMultiPlan(state.packs, a, b);
-      if (plan.times?.length) {
-        if (!ro.silent) {
-          setCalcProgress("Stopper портфеля: подготовка…", CALC_PROGRESS.FINRESP_MAX);
-          await yieldToUi();
-        }
-        const signalPacks = randomPriceShiftEnabled() ? E.applyRandomPriceShift(state.packs) : null;
-        const progressHandler = ro.silent ? null : buildRunProgressHandler(ro);
-        const applied = await E.applyPortfolioStopperAsync(
-          perSec,
-          state.packs,
-          spec,
-          plan.times,
-          plan.tEnd,
-          p,
-          volConfig(),
-          sc,
-          signalPacks,
-          {
-            yieldUi: true,
-            shouldCancel: ro.shouldCancel,
-            onProgress: (done, total, time, extra) => {
-              if (!progressHandler) return;
-              const text = E.resolveStopperProgressText(done, total, time, extra);
-              const pct = E.lerpCalcProgress(
-                CALC_PROGRESS.FINRESP_MAX,
-                CALC_PROGRESS.RUN_MAX,
-                done / Math.max(1, total)
-              );
-              progressHandler(pct, text, { phase: "stopper", done, total, candleTime: time });
-            }
-          }
-        );
-        if (applied.stopper?.cancelled) throw new Error("cancelled");
-        perSec = applied.perSec;
-        stopper = applied.stopper;
-        agg = E.aggregateFinresp(perSec);
-      }
-    }
-
-    if (!ro.silent) {
-      setCalcProgress("Расчёт FINRESP: готово", CALC_PROGRESS.RUN_MAX);
-      await yieldToUi();
-    }
     return { perSec, agg, preStopperAgg, stopper, a, b, skipped };
   }
 
@@ -4662,10 +4614,24 @@ ${markers}
     return logicDisplayName(key);
   }
 
+  /** Ключи логик для симуляции equity (только выбранные в «Логика»). */
+  function equitySimLogicKeys() {
+    const selected = new Set(selectedLogicIds());
+    const keys = [];
+    const indicators = indicatorSelection();
+    const p = params();
+    for (const key of equityCatalogLogicKeys()) {
+      if (!selected.has(key)) continue;
+      const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
+      if (!spec || spec.disabled || !EQUITY_RUN_TYPES.has(spec.type)) continue;
+      keys.push(key);
+    }
+    return keys;
+  }
+
   /** Выбранные элементы UI: `selectedEquityLogicKeys`. */
   function selectedEquityLogicKeys() {
-    const selected = new Set(selectedLogicIds());
-    return equityCatalogLogicKeys().filter((key) => selected.has(key));
+    return equitySimLogicKeys();
   }
 
   /** Подпрограмма `totalEquityTitle`. */
@@ -4817,7 +4783,7 @@ ${pointDot}
     if (!times.length) return null;
     const runs = {};
     const indicators = indicatorSelection();
-    for (const key of equityCatalogLogicKeys()) {
+    for (const key of equitySimLogicKeys()) {
       const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
       if (!spec || spec.disabled || !EQUITY_RUN_TYPES.has(spec.type)) continue;
       const { perSec } = E.runMulti(state.packs, spec, a, b, p, vol, EQUITY_STOPPER_OFF, finrespRunOptions());
@@ -4836,13 +4802,8 @@ ${pointDot}
     const vol = volConfig();
     const times = pack.slice(a, b + 1).map((c) => c.time).filter(Boolean);
     if (!times.length) return null;
-    const keys = [];
+    const keys = equitySimLogicKeys();
     const indicators = indicatorSelection();
-    for (const key of equityCatalogLogicKeys()) {
-      const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
-      if (!spec || spec.disabled || !EQUITY_RUN_TYPES.has(spec.type)) continue;
-      keys.push(key);
-    }
     const runs = {};
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];

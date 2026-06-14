@@ -7,7 +7,6 @@ self.onmessage = async (e) => {
     const E = self.MultiLogicFinrespEngine;
     if (!E?.runMultiAsync) throw new Error("engine not loaded in worker");
     const runOpts = {
-      deferPortfolioStopper: true,
       ...(randomPriceShift ? { signalPacks: E.applyRandomPriceShift(packs) } : {}),
       onProgress: (pct, text, detail) => {
         self.postMessage({ id, type: "progress", pct, text, detail: detail || null });
