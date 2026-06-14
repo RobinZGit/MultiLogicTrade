@@ -15,5 +15,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: npm test (engine + perf)
-        run: npm test
+      - name: Engine unit tests
+        run: npm run test:engine
+      - name: Live-tail integration tests
+        run: npm run test:live-tail
+      - name: Perf regression tests
+        run: npm run test:perf
