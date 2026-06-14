@@ -124,9 +124,26 @@ h2:first-child{margin-top:0;}
 .chart-mini-empty{min-height:4.5rem;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:.85rem;border:1px dashed var(--border);border-radius:8px;margin-top:.25rem;}
 .ml-instrument-chart-host{width:100%;}
 .ml-instrument-chart{width:100%;}
+.chart-mini-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin:0 0 .35rem;flex-wrap:wrap;}
+.chart-mini-header .chart-sec-title{margin:0;flex:1 1 auto;}
+.ml-chart-copy-btn{
+  flex:0 0 auto;font-size:.72rem;font-weight:600;padding:.28rem .6rem;border:1px solid #cbd5e1;border-radius:6px;
+  background:#fff;color:#334155;cursor:pointer;font-family:inherit;white-space:nowrap;
+}
+.ml-chart-copy-btn:hover{background:#f1f5f9;border-color:#94a3b8;}
+.ml-chart-copy-btn:disabled{opacity:.65;cursor:wait;}
+.ml-chart-copy-btn--ok{border-color:#86efac;background:#ecfdf5;color:#047857;}
+.ml-chart-copy-btn--err{border-color:#fecaca;background:#fef2f2;color:#b91c1c;}
 .ml-chart-viewport{cursor:grab;user-select:none;touch-action:none;overflow-x:auto;}
 .ml-chart-viewport.ml-chart-dragging{cursor:grabbing;}
 .ml-chart-viewport svg{display:block;min-width:720px;max-width:100%;}
+.ml-chart-legend-host{width:100%;}
+.ml-chart-ind-legend{
+  display:flex;flex-wrap:wrap;gap:.35rem .85rem;margin-top:.35rem;padding:.4rem .55rem;
+  background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:.72rem;line-height:1.35;color:#475569;
+}
+.ml-chart-legend-item{display:inline-flex;align-items:center;gap:.35rem;}
+.ml-chart-legend-swatch{display:block;flex:0 0 auto;}
 .live-mode-hidden{display:none !important;}
 .calc-card-primary{
   border:2px solid #93c5fd;border-radius:12px;padding:1rem 1.1rem 1.15rem;margin:0 0 1rem;
@@ -1097,7 +1114,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-finresp-perf";
+  const CALC_PAGE_VERSION = "2026-06-14-chart-legend-copy";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -5580,13 +5597,9 @@ ${referenceBlock}
 
       const mini = document.createElement("div");
       mini.className = "chart-mini";
-      const titleEl = document.createElement("p");
-      titleEl.className = "chart-sec-title";
-      titleEl.textContent = p.sec;
-      mini.appendChild(titleEl);
 
       if (!chartRows.length) {
-        mini.innerHTML += `<p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
+        mini.innerHTML = `<p class="chart-sec-title">${p.sec}</p><p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
         stack.appendChild(mini);
         continue;
       }
@@ -5600,16 +5613,24 @@ ${referenceBlock}
           rows: chartRows,
           finresp: displayFin,
           title: `График ${p.sec}`,
+          secTitle: p.sec,
           compact,
           decor,
           format: chartFormat
         });
       } else {
+        const titleEl = document.createElement("p");
+        titleEl.className = "chart-sec-title";
+        titleEl.textContent = p.sec;
+        mini.appendChild(titleEl);
         const svg = buildChartSvg(chartRows, displayFin, `График ${p.sec}`, compact, vLines, decor);
         if (!svg) {
           mini.innerHTML += `<p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
         } else {
           mini.insertAdjacentHTML("beforeend", svg);
+          if (typeof MLInstrumentChart !== "undefined" && MLInstrumentChart.buildIndicatorLegend) {
+            mini.insertAdjacentHTML("beforeend", MLInstrumentChart.buildIndicatorLegend(chartRows));
+          }
         }
         stack.appendChild(mini);
       }

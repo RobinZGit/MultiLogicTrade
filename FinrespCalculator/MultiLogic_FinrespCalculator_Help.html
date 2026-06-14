@@ -292,16 +292,17 @@ th{background:#f8fafc;width:28%;}
 <li><strong>Bollinger</strong> — голубая (средняя и верх/низ)</li>
 <li><strong>VWAP</strong> — зелёная пунктирная</li>
 </ul>
-<p>Если индикатор отключён в «Индикаторы» или не входит ни в одну выбранную логику — линия не рисуется.</p>
+<p>Если индикатор отключён в «Индикаторы» или не входит ни в одну выбранную логику — линия не рисуется. Под каждым графиком — <strong>легенда</strong>: образец линии (цвет и пунктир) и название индикатора.</p>
+
+<h4>Копирование графика</h4>
+<p>Справа от тикера инструмента — кнопка <strong>«Копировать график»</strong>. Копирует <em>текущий видимый</em> фрагмент (с учётом масштаба и сдвига) в буфер обмена как PNG. Нужен HTTPS или localhost и разрешение браузера на доступ к буферу.</p>
 
 <h4>Маркеры входа и выхода</h4>
-<p>Над свечами (по high бара) отмечаются смены позиции по результату симуляции:</p>
+<p>Над свечами (по high бара) отмечаются смены позиции по результату симуляции. Наведите курсор на треугольник — подсказка покажет <strong>логику</strong> (L1…L5, SMA и т.д.) и <strong>сигнал</strong> (Op long, Cl short, Stop-loss, Take-profit и т.п.).</p>
 <table>
 <tr><th>Маркер</th><th>Значение</th></tr>
-<tr><td>△ <strong>остриём вниз</strong>, только контур (не залит)</td><td><strong>Вход</strong> в позицию (long или short) — переход с нулевой позиции на ненулевую</td></tr>
-<tr><td>▲ <strong>остриём вверх</strong>, залитый тёмно-зелёный</td><td><strong>Выход</strong> по сигналу логики (закрытие позиции)</td></tr>
-<tr><td>▲ залитый <strong>красный</strong></td><td>Выход по <strong>стоп-лоссу</strong> (SL)</td></tr>
-<tr><td>▲ залитый <strong>ярко-зелёный</strong></td><td>Выход по <strong>тейк-профиту</strong> (TP)</td></tr>
+<tr><td>△ <strong>остриём вниз</strong>, только контур (не залит)</td><td><strong>Вход</strong> в позицию — зелёный для <strong>long</strong>, красный для <strong>short</strong></td></tr>
+<tr><td>▲ <strong>остриём вверх</strong>, залитый</td><td><strong>Выход</strong> — тот же цвет, что и сторона закрываемой позиции (long — зелёный, short — красный). Причина выхода (Cl, SL, TP, flip и т.п.) видна во <strong>всплывающей подсказке</strong> при наведении на маркер</td></tr>
 </table>
 <p>У SMA-логик с непрерывным набором/сбросом объёма маркеры ставятся при переходе позиции через ноль (и при срабатывании SL/TP, если включены).</p>
 
@@ -317,7 +318,7 @@ th{background:#f8fafc;width:28%;}
 </ul>
 
 <h4>Файлы и версия</h4>
-<p>Интерактивная отрисовка — модуль <code>MultiLogic_FinrespCalculator.charts.js</code> (рядом с <code>engine.js</code> и <code>live.js</code>). Версия страницы с графиками-свечами: <code>2026-06-14-instrument-charts</code> (бейдж <code>pageVersion</code> на форме).</p>
+<p>Интерактивная отрисовка — модуль <code>MultiLogic_FinrespCalculator.charts.js</code> (рядом с <code>engine.js</code> и <code>live.js</code>). Актуальная версия страницы — бейдж <code>pageVersion</code> на форме (например <code>2026-06-14-chart-legend-copy</code>).</p>
 
 <h3>10.2. Equity портфеля (<code>calc-chart-equity</code>)</h3>
 <p>Отдельный блок ниже: кривая equity выбранного стека, справочные кривые по логикам каталога, портфельный стоппер. Формат — линия по close/equity, без свечей и без pan/zoom.</p>
@@ -340,7 +341,7 @@ th{background:#f8fafc;width:28%;}
 <tr><td><strong>Песочница (фейк)</strong></td><td>Галочка под заголовком «Реальная торговля», по умолчанию выключена. Включена — спокойная <em>зелёная</em> тема блока; робот и ручные заявки <strong>не уходят на биржу</strong>, а симулируются: портфель меняется от суммы счёта на момент включения, комиссия — по полю <strong>Commission, %</strong> калькулятора. Продажа без лонга открывает <strong>шорт</strong>. Действует <strong>портфельный лимит gross</strong> (§9.1.1). В «Позициях» — открытые и закрытые фейк-позиции с пометкой <code>(фейк)</code>. Снятие галочки — все фейк-позиции и фейк-заявки удаляются, портфель снова показывает <strong>текущую реальную</strong> сумму T-Bank</td></tr>
 <tr><td><strong>Бейдж «Логики»</strong></td><td>Рядом со статусом — краткий список выбранных логик (<code>UT → L5 +2</code>). <strong>Клик</strong> раскрывает полный порядок приоритета (как в блоке «Логика» калькулятора). Обновляется при смене выбора</td></tr>
 <tr><td>Бейдж статуса</td><td>«остановлена» / «торговля активна» / «внимание» / «ошибка»; в песочнице — «· песочница (фейк)». При старте — <strong>подготовка: свечи T-Bank/MOEX/кэш и FINRESP N/M…</strong> (хвост FINRESP по всем выбранным тикерам, затем reconcile)</td></tr>
-<tr><td><strong>Бейдж версии</strong> (<code>pageVersion</code>)</td><td>Справа от статуса — версия страницы калькулятора (для проверки обновления после Ctrl+Shift+R). Актуальная: <code>2026-06-14-instrument-charts</code></td></tr>
+<tr><td><strong>Бейдж версии</strong> (<code>pageVersion</code>)</td><td>Справа от статуса — версия страницы калькулятора (для проверки обновления после Ctrl+Shift+R). Актуальная: <code>2026-06-14-chart-legend-copy</code></td></tr>
 <tr><td><strong>Плечо</strong></td><td>То же значение, что в доп. параметрах</td></tr>
 <tr><td><strong>Свечи live</strong></td><td><strong>T-Bank (если токен)</strong> — по умолчанию: свежие бары с API брокера (задержка минуты, есть незакрытый бар). <strong>Только T-Bank</strong> — то же, без MOEX. <strong>Только MOEX ISS</strong> — бесплатно, но часто отстаёт на 10–20 мин. История для индикаторов: при первом старте без расчёта подгружается MOEX/кэш, хвост обновляется T-Bank</td></tr>
 <tr><td><strong>Начать / Остановить торговлю</strong></td><td>Достаточно выбранных инструментов, логики и объёмов; «Рассчитать» не обязателен. При активной торговле — опрос свечей (1м ≈ 30 с, 5м ≈ 45 с…), пересчёт индикаторов и синхронизация позиций с T-Bank</td></tr>
@@ -369,7 +370,7 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p>Содержит: версию страницы (<code>pageVersion</code>), режим кошелька, ТФ, период, выбор инструментов, состояние кэша, live-поля (<code>liveObTrendConfirm</code>, <code>logicUsesObTrend</code>, <code>liveOpenPositionsCount</code>, источник свечей), блок <code>liveApiForbidden</code> (тикер, sec, name, uid — запрещённые для API инструменты), <code>liveReconcile.*</code> (в т.ч. пропуски по <code>@OBT</code>), журнал <code>errors:</code> со строками <code>live-forbidden-instrument:</code>, <code>live-obt-skip</code>, <code>live-orderbook</code> (до 128 строк). Обновляется при старте, расчёте, live-торговле и ошибках T-Bank.</p>
 
-<p class="note">Версия справки: 2026-06-14b (синхронизирована с формой <code>2026-06-14-instrument-charts</code>) · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
+<p class="note">Версия справки: 2026-06-14c (синхронизирована с формой <code>2026-06-14-chart-legend-copy</code>) · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
 
 <div class="btn-row">
 <a class="calc-btn" href="MultiLogic_FinrespCalculator.html">Вернуться в калькулятор</a>

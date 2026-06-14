@@ -13,22 +13,53 @@
   ];
 
   const IND_LINE = [
-    { key: "sma", stroke: "#d97706", width: 1, dash: "5 4", opacity: 0.85 },
-    { key: "smaUpper", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75 },
-    { key: "smaLower", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75 },
-    { key: "linregMid", stroke: "#7c3aed", width: 1, dash: null, opacity: 0.7 },
-    { key: "linregUp", stroke: "#a78bfa", width: 0.9, dash: "3 3", opacity: 0.65 },
-    { key: "linregDn", stroke: "#a78bfa", width: 0.9, dash: "3 3", opacity: 0.65 },
-    { key: "bollingerMid", stroke: "#0891b2", width: 0.9, dash: null, opacity: 0.65 },
-    { key: "bollingerUp", stroke: "#67e8f9", width: 0.8, dash: "2 3", opacity: 0.7 },
-    { key: "bollingerDn", stroke: "#67e8f9", width: 0.8, dash: "2 3", opacity: 0.7 },
-    { key: "vwap", stroke: "#16a34a", width: 1, dash: "7 3", opacity: 0.7 }
+    { key: "sma", stroke: "#d97706", width: 1, dash: "5 4", opacity: 0.85, label: "SMA — скользящая средняя" },
+    { key: "smaUpper", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75, label: "SMA — верх коридора (±K×ATR)" },
+    { key: "smaLower", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75, label: "SMA — низ коридора (±K×ATR)" },
+    { key: "linregMid", stroke: "#7c3aed", width: 1, dash: null, opacity: 0.7, label: "LinReg — линия регрессии (центр)" },
+    { key: "linregUp", stroke: "#a78bfa", width: 0.9, dash: "3 3", opacity: 0.65, label: "LinReg — верхняя полоса" },
+    { key: "linregDn", stroke: "#a78bfa", width: 0.9, dash: "3 3", opacity: 0.65, label: "LinReg — нижняя полоса" },
+    { key: "bollingerMid", stroke: "#0891b2", width: 0.9, dash: null, opacity: 0.65, label: "Bollinger — средняя (SMA)" },
+    { key: "bollingerUp", stroke: "#67e8f9", width: 0.8, dash: "2 3", opacity: 0.7, label: "Bollinger — верхняя полоса" },
+    { key: "bollingerDn", stroke: "#67e8f9", width: 0.8, dash: "2 3", opacity: 0.7, label: "Bollinger — нижняя полоса" },
+    { key: "vwap", stroke: "#16a34a", width: 1, dash: "7 3", opacity: 0.7, label: "VWAP — средневзвешенная цена" }
   ];
 
-  const ENTRY_STROKE = "#059669";
-  const EXIT_LOGIC_FILL = "#047857";
-  const EXIT_TP_FILL = "#16a34a";
-  const EXIT_SL_FILL = "#dc2626";
+  const LONG_MARKER = { entry: "#16a34a", exit: "#15803d" };
+  const SHORT_MARKER = { entry: "#dc2626", exit: "#b91c1c" };
+
+  const SIGNAL_HINT = {
+    op_long: "Op long",
+    op_short: "Op short",
+    cl_long: "Cl long",
+    cl_short: "Cl short",
+    flip_to_short: "Flip → short (Op)",
+    flip_to_long: "Flip → long (Op)",
+    sl: "Stop-loss",
+    tp: "Take-profit",
+    sma_long: "SMA → long",
+    sma_short: "SMA → short",
+    sma_flat: "SMA → flat",
+    logic: "Cl / сигнал логики"
+  };
+
+  function markerColors(side) {
+    return side === "short" ? SHORT_MARKER : LONG_MARKER;
+  }
+
+  function tradeMarkerTitle(kind, side, r) {
+    const sideRu = side === "short" ? "short" : "long";
+    const prefix = kind === "in" ? "Вход" : "Выход";
+    const logic = kind === "in" ? r.tradeInLogic : r.tradeOutLogic;
+    const signal = kind === "in" ? r.tradeInSignal : r.tradeOutSignal;
+    const parts = [`${prefix} ${sideRu}`];
+    if (logic) parts.push(String(logic));
+    if (signal) {
+      const hint = SIGNAL_HINT[signal] || signal;
+      if (hint) parts.push(hint);
+    }
+    return esc(parts.join(" · "));
+  }
 
   function clamp(v, lo, hi) {
     return Math.max(lo, Math.min(hi, v));
@@ -46,6 +77,89 @@
       if (rows[i]?.[key] != null) return true;
     }
     return false;
+  }
+
+  function legendLineSample(spec) {
+    const dash = spec.dash ? ` stroke-dasharray="${spec.dash}"` : "";
+    const sw = Math.max(1.6, (spec.width || 1) * 1.5);
+    return `<svg class="ml-chart-legend-swatch" width="32" height="10" aria-hidden="true"><line x1="0" y1="5" x2="32" y2="5" stroke="${spec.stroke}" stroke-width="${sw}"${dash} opacity="${spec.opacity ?? 1}"/></svg>`;
+  }
+
+  /** Легенда линий индикаторов под графиком (только присутствующие в данных). */
+  function buildIndicatorLegend(rows) {
+    const active = IND_LINE.filter((spec) => rowHasKey(rows, spec.key));
+    if (!active.length) return "";
+    const items = active.map((spec) =>
+      `<span class="ml-chart-legend-item">${legendLineSample(spec)}<span>${esc(spec.label)}</span></span>`).join("");
+    return `<div class="ml-chart-ind-legend" role="list">${items}</div>`;
+  }
+
+  /** Копирование текущего SVG-графика в буфер как PNG. */
+  async function copyChartToClipboard(viewport) {
+    const svg = viewport?.querySelector?.("svg.ml-chart-svg");
+    if (!svg) return { ok: false, reason: "no-svg" };
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      return { ok: false, reason: "clipboard" };
+    }
+    const vb = svg.viewBox.baseVal;
+    const w = vb.width || 820;
+    const h = vb.height || 340;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(w));
+    clone.setAttribute("height", String(h));
+    const xml = new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return { ok: false, reason: "canvas" };
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, w, h);
+      const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!pngBlob) return { ok: false, reason: "png" };
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+      return { ok: true };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function wireCopyButton(btn, viewport) {
+    if (!btn || !viewport) return;
+    const defaultLabel = btn.textContent || "Копировать график";
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      btn.disabled = true;
+      const result = await copyChartToClipboard(viewport);
+      btn.disabled = false;
+      if (result.ok) {
+        btn.textContent = "Скопировано";
+        btn.classList.add("ml-chart-copy-btn--ok");
+        setTimeout(() => {
+          btn.textContent = defaultLabel;
+          btn.classList.remove("ml-chart-copy-btn--ok");
+        }, 1800);
+        return;
+      }
+      btn.textContent = result.reason === "clipboard" ? "Буфер недоступен" : "Ошибка копирования";
+      btn.classList.add("ml-chart-copy-btn--err");
+      setTimeout(() => {
+        btn.textContent = defaultLabel;
+        btn.classList.remove("ml-chart-copy-btn--err");
+      }, 2200);
+    });
   }
 
   function buildModeBands(rows, modeRegions, x, top, bottom) {
@@ -93,21 +207,19 @@
       const tipY = highY - triH - 2;
       const baseY = tipY + triH;
       const pts = `${cx.toFixed(1)},${tipY.toFixed(1)} ${(cx - triW).toFixed(1)},${baseY.toFixed(1)} ${(cx + triW).toFixed(1)},${baseY.toFixed(1)}`;
-      const title = r.tradeIn === "long" ? "Вход long" : "Вход short";
-      parts.push(`<polygon points="${pts}" fill="none" stroke="${ENTRY_STROKE}" stroke-width="1.4" opacity="0.95"><title>${title}</title></polygon>`);
+      const colors = markerColors(r.tradeIn);
+      const title = tradeMarkerTitle("in", r.tradeIn, r);
+      parts.push(`<polygon points="${pts}" fill="none" stroke="${colors.entry}" stroke-width="1.4" opacity="0.95"><title>${title}</title></polygon>`);
     }
 
     if (r.tradeOut) {
-      const fill = r.tradeOut === "sl" ? EXIT_SL_FILL
-        : r.tradeOut === "tp" ? EXIT_TP_FILL
-          : EXIT_LOGIC_FILL;
-      const title = r.tradeOut === "sl" ? "Выход по SL"
-        : r.tradeOut === "tp" ? "Выход по TP"
-          : "Выход по логике";
+      const side = r.tradeOutSide || r.tradeIn || "long";
+      const colors = markerColors(side);
+      const title = tradeMarkerTitle("out", side, r);
       const baseY = highY - 3;
       const tipY = baseY - triH;
       const pts = `${cx.toFixed(1)},${tipY.toFixed(1)} ${(cx - triW).toFixed(1)},${baseY.toFixed(1)} ${(cx + triW).toFixed(1)},${baseY.toFixed(1)}`;
-      parts.push(`<polygon points="${pts}" fill="${fill}" stroke="${fill}" stroke-width="0.6" opacity="0.95"><title>${title}</title></polygon>`);
+      parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="${colors.exit}" stroke-width="0.6" opacity="0.95"><title>${title}</title></polygon>`);
     }
 
     return parts.join("");
@@ -230,7 +342,7 @@ ${indLines}
 ${candles}
 ${markers}
 <text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${color}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace">FINRESP ${fmtFin(finresp)} ₽</text>
-<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · колёсико — масштаб · перетаскивание — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
+<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико — масштаб · drag — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
 </svg>`;
   }
 
@@ -254,9 +366,29 @@ ${markers}
     const wrap = document.createElement("div");
     wrap.className = "ml-instrument-chart";
 
+    let copyBtn = null;
+    if (options?.secTitle) {
+      const header = document.createElement("div");
+      header.className = "chart-mini-header";
+      const titleEl = document.createElement("p");
+      titleEl.className = "chart-sec-title";
+      titleEl.textContent = options.secTitle;
+      copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "ml-chart-copy-btn";
+      copyBtn.textContent = "Копировать график";
+      copyBtn.title = "Скопировать видимый график в буфер обмена (PNG)";
+      header.appendChild(titleEl);
+      header.appendChild(copyBtn);
+      wrap.appendChild(header);
+    }
+
     const viewport = document.createElement("div");
     viewport.className = "ml-chart-viewport";
     viewport.title = "Колёсико — масштаб, перетаскивание — сдвиг по времени";
+
+    const legendHost = document.createElement("div");
+    legendHost.className = "ml-chart-legend-host";
 
     function render() {
       view.start = clamp(view.start, 0, rows.length - 1);
@@ -265,7 +397,10 @@ ${markers}
         view.end = Math.min(rows.length - 1, view.start + minBars - 1);
       }
       viewport.innerHTML = renderChartSvg(rows, view, options);
+      legendHost.innerHTML = buildIndicatorLegend(rows);
     }
+
+    if (copyBtn) wireCopyButton(copyBtn, viewport);
 
     function panByBars(delta) {
       const span = view.end - view.start;
@@ -344,6 +479,7 @@ ${markers}
     });
 
     wrap.appendChild(viewport);
+    wrap.appendChild(legendHost);
     host.appendChild(wrap);
     render();
 
@@ -353,6 +489,9 @@ ${markers}
         render();
       },
       panByBars,
+      copyToClipboard() {
+        return copyChartToClipboard(viewport);
+      },
       destroy() {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
@@ -361,5 +500,5 @@ ${markers}
     };
   }
 
-  root.MLInstrumentChart = { mount, renderChartSvg };
+  root.MLInstrumentChart = { mount, renderChartSvg, buildIndicatorLegend, copyChartToClipboard };
 })(typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : this);

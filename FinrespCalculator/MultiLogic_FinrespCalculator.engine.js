@@ -1261,13 +1261,61 @@
   function tradeMarkersFromBar(posBefore, posAfter, posStop) {
     let tradeIn = null;
     let tradeOut = null;
+    let tradeOutSide = null;
     const pb = posBefore ?? 0;
     const pa = posAfter ?? 0;
     if (pb === 0 && pa !== 0) tradeIn = pa > 0 ? "long" : "short";
     if (pb !== 0 && pa === 0) {
       tradeOut = posStop === "sl" || posStop === "tp" ? posStop : "logic";
+      tradeOutSide = pb > 0 ? "long" : "short";
     }
-    return { tradeIn, tradeOut };
+    return { tradeIn, tradeOut, tradeOutSide };
+  }
+
+  /** Текст сигнала для подсказки на графике (рус.). */
+  function tradeSignalHint(signal) {
+    const map = {
+      op_long: "Op long",
+      op_short: "Op short",
+      cl_long: "Cl long",
+      cl_short: "Cl short",
+      flip_to_short: "Flip → short (Op)",
+      flip_to_long: "Flip → long (Op)",
+      sl: "Stop-loss",
+      tp: "Take-profit",
+      sma_long: "SMA → long",
+      sma_short: "SMA → short",
+      sma_flat: "SMA → flat",
+      logic: "Cl / сигнал логики"
+    };
+    return map[signal] || signal || "";
+  }
+
+  /** Код сигнала выхода по логике (не SL/TP). */
+  function logicLineExitSignal(pos, esig) {
+    if (pos > 0) {
+      if (esig.longClHit) return "cl_long";
+      if (esig.shortOpHit) return "flip_to_short";
+    } else if (pos < 0) {
+      if (esig.shortClHit) return "cl_short";
+      if (esig.longOpHit) return "flip_to_long";
+    }
+    return "logic";
+  }
+
+  /** Поля tradeInLogic / tradeOutLogic для SMA при смене позиции через ноль. */
+  function smaTradeMarkerFields(posBefore, posAfter, posStop, logicId) {
+    const pb = posBefore ?? 0;
+    const pa = posAfter ?? 0;
+    const fields = {};
+    if (pb === 0 && pa !== 0) {
+      fields.tradeInLogic = logicId || "SMA";
+      fields.tradeInSignal = pa > 0 ? "sma_long" : "sma_short";
+    } else if (pb !== 0 && pa === 0) {
+      fields.tradeOutLogic = logicId || "SMA";
+      fields.tradeOutSignal = posStop === "sl" || posStop === "tp" ? posStop : "sma_flat";
+    }
+    return fields;
   }
 
   /** Подпрограмма `pushRow`. */
@@ -1275,7 +1323,7 @@
     if (!candle) return;
     const posAfter = fields?.pos ?? 0;
     const markers = tradeMarkersFromBar(posBefore, posAfter, fields?.posStop ?? null);
-    rows.push({
+    const row = {
       time: candle.time,
       close: candle.close,
       open: candle.open ?? candle.close,
@@ -1283,7 +1331,11 @@
       low: candle.low ?? candle.close,
       ...fields,
       ...markers
-    });
+    };
+    for (const k of ["tradeInLogic", "tradeInSignal", "tradeOutLogic", "tradeOutSignal"]) {
+      if (fields?.[k] != null && fields[k] !== "") row[k] = fields[k];
+    }
+    rows.push(row);
   }
 
   /** Глобальный реверс: сигналы те же, исполнение long↔short (покупка↔продажа). */
@@ -1460,7 +1512,10 @@
     if (logicSpecs.length === 1) {
       const parsed = prep?.parsedList?.[0]
         || applySlTpParams({ ...logicSpecs[0].parsed }, params || DEFAULT_PARAMS);
-      return simulateLogicLine(candles, parsed, startIdx, endIdx, volConfig, options);
+      return simulateLogicLine(candles, parsed, startIdx, endIdx, volConfig, {
+        ...options,
+        logicId: logicSpecs[0]?.logicId
+      });
     }
     const p = prep?.p || { ...DEFAULT_PARAMS, ...params };
     const parsedList = prep?.parsedList
@@ -1513,6 +1568,7 @@
       let buy = 0;
       let sell = 0;
       let posStop = null;
+      const markerMeta = {};
 
       if (typeof opts.onProgress === "function" && (i === to || (i - from) % barProgressStep === 0)) {
         opts.onProgress(i - from + 1, barSpan, candles[i]?.time);
@@ -1520,6 +1576,7 @@
 
       if (pos !== 0 && activeIdx >= 0 && activeIdx < parsedList.length) {
         const parsed = parsedList[activeIdx];
+        const activeLogicId = logicSpecs[activeIdx]?.logicId || opts.logicId || "?";
         if (parsed.slAtr > 0 || parsed.tpAtr > 0) {
           const a = atrByLen.get(parsed.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen)?.[i];
           if (a != null && a > 0 && entryPrice != null) {
@@ -1541,15 +1598,26 @@
                 posStop = "tp";
               }
             }
-            if (hit) sell += flatten(price);
+            if (hit) {
+              markerMeta.tradeOutLogic = activeLogicId;
+              markerMeta.tradeOutSignal = posStop;
+              sell += flatten(price);
+            }
           }
         }
         if (pos !== 0) {
           const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
           const sig = logicLineBarSignals(parsed, cache, i, posCtx);
           const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
-          if (pos > 0 && (esig.longClHit || esig.shortOpHit)) sell += flatten(price);
-          else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) sell += flatten(price);
+          if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
+            markerMeta.tradeOutLogic = activeLogicId;
+            markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+            sell += flatten(price);
+          } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
+            markerMeta.tradeOutLogic = activeLogicId;
+            markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+            sell += flatten(price);
+          }
         }
       }
 
@@ -1573,6 +1641,8 @@
           if (pos > 0) buy = lot;
           else sell = lot;
           activeIdx = si;
+          markerMeta.tradeInLogic = logicSpecs[si]?.logicId || opts.logicId || "?";
+          markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
           const anchor = captureEntryAnchor(cache, parsedList[si], i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -1586,6 +1656,7 @@
       const ind = collectChartIndicators(cache, chartParsed, i);
       pushRow(rows, candles[i], {
         ...ind,
+        ...markerMeta,
         buy,
         sell,
         posStop,
@@ -1613,6 +1684,7 @@
   /** Симуляция одной L-логики на массиве свечей. */
   function simulateLogicLine(candles, parsed, startIdx, endIdx, volConfig, options) {
     const opts = options || {};
+    const logicId = opts.logicId || parsed?.logicId || "logic";
     const signalCandles = opts.signalCandles || candles;
     const cache = opts.indicatorCache || new IndicatorCache(signalCandles);
     const atrLen = parsed.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen;
@@ -1663,6 +1735,7 @@
       }
 
       let posStop = null;
+      const markerMeta = {};
       if (pos !== 0 && (parsed.slAtr > 0 || parsed.tpAtr > 0)) {
         const a = atrSlTp[i];
         if (a != null && a > 0 && entryPrice != null) {
@@ -1684,7 +1757,11 @@
               posStop = "tp";
             }
           }
-          if (hit) sell += flatten(price);
+          if (hit) {
+            markerMeta.tradeOutLogic = logicId;
+            markerMeta.tradeOutSignal = posStop;
+            sell += flatten(price);
+          }
         }
       }
 
@@ -1692,8 +1769,15 @@
       const sig = logicLineBarSignals(parsed, cache, i, posCtx);
       const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
 
-      if (pos > 0 && (esig.longClHit || esig.shortOpHit)) sell += flatten(price);
-      else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) sell += flatten(price);
+      if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
+        markerMeta.tradeOutLogic = logicId;
+        markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+        sell += flatten(price);
+      } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
+        markerMeta.tradeOutLogic = logicId;
+        markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+        sell += flatten(price);
+      }
       if (pos === 0 && esig.longOpHit !== esig.shortOpHit) {
         const lot = resolveOpenLot(price, volConfig, opts);
         if (lot > 0) {
@@ -1705,6 +1789,8 @@
           entryPrice = price;
           if (pos > 0) buy = lot;
           else sell = lot;
+          markerMeta.tradeInLogic = logicId;
+          markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
           const anchor = captureEntryAnchor(cache, parsed, i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -1716,6 +1802,7 @@
       const ind = collectChartIndicators(cache, parsed, i);
       pushRow(rows, candles[i], {
         ...ind,
+        ...markerMeta,
         buy,
         sell,
         posStop,
@@ -1855,7 +1942,8 @@
         cash,
         pos,
         commission: commissionPaid,
-        eq: cash + pos * (price || 0)
+        eq: cash + pos * (price || 0),
+        ...smaTradeMarkerFields(posBefore, pos, posStop, opts.logicId)
       }, posBefore);
     }
     const last = rows.at(-1);
@@ -1998,7 +2086,8 @@
         cash,
         pos,
         commission: commissionPaid,
-        eq: cash + pos * (price || 0)
+        eq: cash + pos * (price || 0),
+        ...smaTradeMarkerFields(posBefore, pos, posStop, opts.logicId)
       }, posBefore);
     }
     const last = rows.at(-1);
@@ -2235,6 +2324,7 @@
     if (spec.type === "sma_spread") {
       return simulateSmaSpread(candles, spec.smaLen, spec.side, startIdx, endIdx, vol, {
         ...opts,
+        logicId: spec.logicId,
         slAtr: spec.slAtr,
         tpAtr: spec.tpAtr,
         slTpAtrLen: spec.slTpAtrLen
@@ -2243,13 +2333,14 @@
     if (spec.type === "sma_corridor") {
       return simulateSmaCorridor(candles, spec.smaLen, spec.mode, spec.corridorAtr, startIdx, endIdx, vol, {
         ...opts,
+        logicId: spec.logicId,
         slAtr: spec.slAtr,
         tpAtr: spec.tpAtr,
         slTpAtrLen: spec.slTpAtrLen
       });
     }
     const parsed = prep?.parsed || applySlTpParams({ ...spec.parsed }, p);
-    return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, opts);
+    return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, { ...opts, logicId: spec.logicId });
   }
 
   /** Запуск расчёта: `runOnCandlesYielding`. */
@@ -4348,6 +4439,7 @@
     RANDOM_PRICE_SHIFT_MAX,
     smaSeries,
     tradeMarkersFromBar,
+    tradeSignalHint,
     createIndicatorCache,
     collectChartIndicatorsForSpecs
   };
