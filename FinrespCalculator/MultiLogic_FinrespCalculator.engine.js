@@ -2272,7 +2272,6 @@
     const opts = options || {};
     const signalPacks = opts.signalPacks;
     const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
-    const buildCache = !!opts.buildIndicatorCache;
     const ctxs = [];
 
     for (const wu of workUnits || []) {
@@ -2280,7 +2279,7 @@
       if (!candles?.length) continue;
       const sec = wu.sec || candles[0]?.sec || "?";
       const signalCandles = signalPacks?.[wu.pi] || candles;
-      const indicatorCache = buildCache ? new IndicatorCache(signalCandles) : null;
+      const indicatorCache = new IndicatorCache(signalCandles);
       ctxs.push({
         pi: wu.pi,
         sec,
@@ -2304,10 +2303,11 @@
       const t = times[ti];
       if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
       for (const ctx of ctxs) {
-        const i = candleIndexAtTime(ctx.candles, t);
+        const i = findCandleIndexAtOrBefore(ctx.candles, t);
         if (i < 0 || i < ctx.range.a || i > ctx.range.b) continue;
         const price = ctx.candles[i]?.close || 0;
         portfolioCap.setPrice(ctx.sec, price);
+        portfolioCap.setPos(ctx.sec, ctx.initial.pos || 0, price);
         const runOpts = {
           sec: ctx.sec,
           portfolioCap,
@@ -2364,7 +2364,6 @@
     const opts = { ...(options || {}), yieldUi: true };
     const signalPacks = opts.signalPacks;
     const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
-    const buildCache = !!opts.buildIndicatorCache;
     const ctxs = [];
 
     for (const wu of workUnits || []) {
@@ -2372,7 +2371,7 @@
       if (!candles?.length) continue;
       const sec = wu.sec || candles[0]?.sec || "?";
       const signalCandles = signalPacks?.[wu.pi] || candles;
-      const indicatorCache = buildCache ? new IndicatorCache(signalCandles) : null;
+      const indicatorCache = new IndicatorCache(signalCandles);
       ctxs.push({
         pi: wu.pi,
         sec,
@@ -2396,10 +2395,11 @@
       const t = times[ti];
       if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) break;
       for (const ctx of ctxs) {
-        const i = candleIndexAtTime(ctx.candles, t);
+        const i = findCandleIndexAtOrBefore(ctx.candles, t);
         if (i < 0 || i < ctx.range.a || i > ctx.range.b) continue;
         const price = ctx.candles[i]?.close || 0;
         portfolioCap.setPrice(ctx.sec, price);
+        portfolioCap.setPos(ctx.sec, ctx.initial.pos || 0, price);
         const runOpts = {
           sec: ctx.sec,
           portfolioCap,

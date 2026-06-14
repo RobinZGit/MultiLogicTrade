@@ -3875,43 +3875,6 @@
     return map;
   }
 
-  /** Обрезка целей reconcile под портфельный лимит (Max positions × Volume% на все бумаги). */
-  async function clipReconcileTargetsToPortfolioCap(targets, actualByTicker, vol) {
-    if (!targets?.length) return targets;
-    const cap = E.createPortfolioCap(vol);
-    for (const [, cur] of actualByTicker) {
-      const sec = cur.sec || cur.ticker;
-      const inst = selectedInstruments().find(
-        (i) => String(i.sec).toUpperCase() === String(sec || "").toUpperCase()
-      );
-      const market = inst?.market || "shares";
-      let price = NaN;
-      try {
-        price = await resolveOrderPrice(cur.instrumentId, sec, market);
-      } catch (_) { /* optional */ }
-      cap.setPos(sec, +cur.pieces || 0, Number.isFinite(price) && price > 0 ? price : 0);
-    }
-    const out = [];
-    for (const p of targets) {
-      const secU = String(p.sec || "").toUpperCase();
-      const inst = selectedInstruments().find((i) => String(i.sec).toUpperCase() === secU);
-      const market = inst?.market || "shares";
-      let price = NaN;
-      try {
-        const im = await resolveLiveInstrumentMeta(p.sec, market);
-        if (im?.instrumentId) price = await resolveOrderPrice(im.instrumentId, p.sec, market);
-      } catch (_) { /* optional */ }
-      if (!Number.isFinite(price) || price <= 0) {
-        out.push(p);
-        continue;
-      }
-      const clipped = cap.clampTargetPos(p.sec, price, +p.pos || 0);
-      cap.setPos(p.sec, clipped, price);
-      out.push({ ...p, pos: clipped });
-    }
-    return out;
-  }
-
   /** Песочница: gross-экспозиция открытых позиций в контексте createPortfolioCap. */
   function sandboxPortfolioCapState(sb, vol) {
     const cap = E.createPortfolioCap(vol);
@@ -3925,7 +3888,7 @@
 
   /** Проверка: заявка не увеличивает gross выше портфельного лимита. */
   function assertSandboxOrderWithinPortfolioCap(sb, posMeta, pieceDelta, price, vol) {
-    const delta = Math.trunc(+pieceDelta || 0);
+    const delta = +pieceDelta || 0;
     if (!delta || !Number.isFinite(price) || price <= 0) return;
     const cap = sandboxPortfolioCapState(sb, vol);
     const sec = posMeta.sec || posMeta.ticker;
@@ -3944,6 +3907,16 @@
         `Портфельный лимит: суммарная позиция ≤ ${fmt(capRub, 0)} ₽ (депозит × Max positions × Volume%).`
       );
     }
+  }
+
+  /** Нужна ли заявка: не считать «выровнено», если цель — новая позиция с нуля. */
+  function reconcileNeedsTrade(targetPieces, currentPieces, delta, lot) {
+    if (!Number.isFinite(delta) || Math.abs(delta) < 1e-9) return false;
+    const tgt = +targetPieces || 0;
+    const cur = +currentPieces || 0;
+    const lotSz = Math.max(1, +lot || 1);
+    if (Math.abs(tgt) > 1e-9 && Math.abs(cur) < 1e-9) return true;
+    return Math.abs(tgt - cur) >= lotSz * 0.45;
   }
 
   /** Live-торговля: `liveReconcileTargets`. */
@@ -4994,16 +4967,9 @@ ${referenceBlock}
     let aligned = 0;
     try {
       const actual = sandbox ? sandboxPositionsByTicker() : await tbankPositionsByTicker();
-      const vol = volConfig();
-      let reconcileTargets = targets;
-      try {
-        reconcileTargets = await clipReconcileTargetsToPortfolioCap(targets, actual, vol);
-      } catch (clipErr) {
-        noteLiveTech("live-cap-clip-fail", clipErr.message || String(clipErr), "");
-      }
       const brokerKeys = [...actual.keys()].join(",") || "—";
-      noteLiveTech("live-reconcile-start", `targets=${reconcileTargets.length} sandbox=${sandbox}`, `brokerPos=${brokerKeys}`);
-      for (const p of reconcileTargets) {
+      noteLiveTech("live-reconcile-start", `targets=${targets.length} sandbox=${sandbox}`, `brokerPos=${brokerKeys}`);
+      for (const p of targets) {
         const secU = String(p.sec || "").toUpperCase();
         const instMeta = selectedInstruments().find((i) => String(i.sec).toUpperCase() === secU);
         const market = instMeta?.market || "shares";
@@ -5025,14 +4991,15 @@ ${referenceBlock}
         const cur = actual.get(ticker);
         const currentPieces = cur ? +cur.pieces : 0;
         const delta = targetPieces - currentPieces;
-        if (Math.abs(delta) < lot * 0.45) {
+        if (!reconcileNeedsTrade(targetPieces, currentPieces, delta, lot)) {
           aligned += 1;
           targetDetails.push({
             sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, action: "aligned"
           });
           continue;
         }
-        const lots = piecesToLots(delta, lot);
+        let lots = piecesToLots(delta, lot);
+        if (!lots && delta > 0 && targetPieces > 0) lots = 1;
         const direction = delta > 0 ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL";
         targetDetails.push({
           sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, lots, direction, action: "order"
