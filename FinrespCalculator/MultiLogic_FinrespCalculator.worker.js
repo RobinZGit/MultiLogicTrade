@@ -5,14 +5,15 @@ self.onmessage = async (e) => {
   const { id, packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, randomPriceShift } = e.data || {};
   try {
     const E = self.MultiLogicFinrespEngine;
-    if (!E?.runMultiAsync) throw new Error("engine not loaded in worker");
+    if (!E?.runMulti) throw new Error("engine not loaded in worker");
     const runOpts = {
       ...(randomPriceShift ? { signalPacks: E.applyRandomPriceShift(packs) } : {}),
       onProgress: (pct, text, detail) => {
         self.postMessage({ id, type: "progress", pct, text, detail: detail || null });
       }
     };
-    const result = await E.runMultiAsync(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, runOpts);
+    // Синхронный runMulti: без yieldUi/delay на каждом баре сетки (runMultiAsync в worker был в разы медленнее).
+    const result = E.runMulti(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, runOpts);
     if (result?.perSec) {
       for (const row of result.perSec) delete row.indicatorCache;
     }

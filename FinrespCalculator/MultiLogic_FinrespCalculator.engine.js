@@ -1453,18 +1453,24 @@
    */
   function simulateMultiLogicStack(candles, specs, startIdx, endIdx, volConfig, options, params) {
     const opts = options || {};
-    const logicSpecs = (specs || []).filter((s) => s && s.type === "logic_line" && !s.disabled);
+    const prep = opts.preparedStack;
+    const logicSpecs = prep?.logicSpecs
+      || (specs || []).filter((s) => s && s.type === "logic_line" && !s.disabled);
     if (!logicSpecs.length) return simulateNoSignalRows(candles, startIdx, endIdx, options);
     if (logicSpecs.length === 1) {
-      const parsed = applySlTpParams({ ...logicSpecs[0].parsed }, params || DEFAULT_PARAMS);
+      const parsed = prep?.parsedList?.[0]
+        || applySlTpParams({ ...logicSpecs[0].parsed }, params || DEFAULT_PARAMS);
       return simulateLogicLine(candles, parsed, startIdx, endIdx, volConfig, options);
     }
-    const p = { ...DEFAULT_PARAMS, ...params };
-    const parsedList = logicSpecs.map((s) => applySlTpParams({ ...s.parsed }, p));
+    const p = prep?.p || { ...DEFAULT_PARAMS, ...params };
+    const parsedList = prep?.parsedList
+      || logicSpecs.map((s) => applySlTpParams({ ...s.parsed }, p));
     const signalCandles = opts.signalCandles || candles;
     const cache = opts.indicatorCache || new IndicatorCache(signalCandles);
-    const atrLenSet = new Set(parsedList.map((x) => x.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen));
-    const atrByLen = new Map([...atrLenSet].map((len) => [len, cache.atr(len)]));
+    const atrByLen = prep?.atrByLen || (() => {
+      const atrLenSet = new Set(parsedList.map((x) => x.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen));
+      return new Map([...atrLenSet].map((len) => [len, cache.atr(len)]));
+    })();
     const initial = opts.initial || {};
     let pos = initial.pos || 0;
     let cash = initial.cash || 0;
@@ -2215,13 +2221,14 @@
     if (!candles?.length) {
       return { rows: [], finresp: 0, cash: 0, pos: 0, commission: 0, buys: 0, sells: 0, entryPrice: null };
     }
-    const p = { ...DEFAULT_PARAMS, ...params };
+    const prep = options?.preparedRun;
+    const p = prep?.p || { ...DEFAULT_PARAMS, ...params };
     const opts = {
       ...(options || {}),
       reverse: options?.reverse != null ? !!options.reverse : !!p.Reverse
     };
     if (!spec || spec.disabled) return simulateNoSignalRows(candles, startIdx, endIdx, opts);
-    const vol = normalizedVolConfig(volConfig);
+    const vol = prep?.vol || normalizedVolConfig(volConfig);
     if (spec.type === "multi_logic") {
       return simulateMultiLogicStack(candles, spec.specs, startIdx, endIdx, vol, opts, p);
     }
@@ -2241,7 +2248,7 @@
         slTpAtrLen: spec.slTpAtrLen
       });
     }
-    const parsed = applySlTpParams({ ...spec.parsed }, p);
+    const parsed = prep?.parsed || applySlTpParams({ ...spec.parsed }, p);
     return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, opts);
   }
 
@@ -2368,21 +2375,49 @@
   }
 
   /**
-   * Синхронный проход по сетке времени: общий портфельный лимит на все инструменты.
-   * На каждом баре каждый инструмент получает один шаг runOnCandles(i,i).
+   * Кэш params/vol/parsed для runPacksOnTimeGrid (тысячи вызовов runOnCandles по одному бару).
    */
-  function runPacksOnTimeGrid(packs, workUnits, times, spec, params, volConfig, options) {
-    const opts = options || {};
-    const signalPacks = opts.signalPacks;
-    const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
-    const ctxs = [];
+  function buildGridSimulationPrep(spec, params, volConfig, indicatorCache, options) {
+    const p = { ...DEFAULT_PARAMS, ...params };
+    const vol = normalizedVolConfig(volConfig);
+    const reverse = options?.reverse != null ? !!options.reverse : !!p.Reverse;
+    const prep = { p, vol, reverse };
+    if (!spec || spec.disabled) return prep;
+    if (spec.type === "multi_logic") {
+      const logicSpecs = (spec.specs || []).filter((s) => s && s.type === "logic_line" && !s.disabled);
+      const parsedList = logicSpecs.map((s) => applySlTpParams({ ...s.parsed }, p));
+      let atrByLen = null;
+      if (indicatorCache && parsedList.length > 1) {
+        const atrLenSet = new Set(parsedList.map((x) => x.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen));
+        atrByLen = new Map([...atrLenSet].map((len) => [len, indicatorCache.atr(len)]));
+      }
+      prep.preparedStack = { p, vol, logicSpecs, parsedList, atrByLen };
+      return prep;
+    }
+    if (spec.type === "logic_line" && spec.parsed) {
+      prep.parsed = applySlTpParams({ ...spec.parsed }, p);
+    }
+    return prep;
+  }
 
+  function initGridContexts(packs, workUnits, spec, params, volConfig, signalPacks, options) {
+    const gridPrepBase = buildGridSimulationPrep(spec, params, volConfig, null, options);
+    const ctxs = [];
     for (const wu of workUnits || []) {
       const candles = packs[wu.pi];
       if (!candles?.length) continue;
       const sec = wu.sec || candles[0]?.sec || "?";
       const signalCandles = signalPacks?.[wu.pi] || candles;
       const indicatorCache = new IndicatorCache(signalCandles);
+      const gridPrep = buildGridSimulationPrep(spec, params, volConfig, indicatorCache, options);
+      let preparedStack = gridPrep.preparedStack || null;
+      if (preparedStack && !preparedStack.atrByLen && preparedStack.parsedList?.length > 1) {
+        const atrLenSet = new Set(preparedStack.parsedList.map((x) => x.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen));
+        preparedStack = {
+          ...preparedStack,
+          atrByLen: new Map([...atrLenSet].map((len) => [len, indicatorCache.atr(len)]))
+        };
+      }
       ctxs.push({
         pi: wu.pi,
         sec,
@@ -2395,12 +2430,34 @@
         buys: 0,
         sells: 0,
         commission: 0,
-        entryPrice: null
+        entryPrice: null,
+        preparedRun: gridPrep,
+        preparedStack
       });
     }
+    return { ctxs, gridPrepBase };
+  }
+
+  /** Шаг yield UI на сетке времени: не чаще ~96 раз за прогон. */
+  function gridYieldStride(totalSteps) {
+    return Math.max(1, Math.floor(Math.max(1, totalSteps) / 96));
+  }
+
+  /**
+   * Синхронный проход по сетке времени: общий портфельный лимит на все инструменты.
+   * На каждом баре каждый инструмент получает один шаг runOnCandles(i,i).
+   */
+  function runPacksOnTimeGrid(packs, workUnits, times, spec, params, volConfig, options) {
+    const opts = options || {};
+    const signalPacks = opts.signalPacks;
+    const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
+    const { ctxs, gridPrepBase } = initGridContexts(packs, workUnits, spec, params, volConfig, signalPacks, opts);
 
     const totalSteps = Math.max(1, (times?.length || 0) * ctxs.length);
     let doneSteps = 0;
+    const progressStride = typeof opts.progressStride === "number"
+      ? Math.max(1, opts.progressStride)
+      : gridYieldStride(totalSteps);
 
     for (let ti = 0; ti < (times?.length || 0); ti++) {
       const t = times[ti];
@@ -2415,11 +2472,13 @@
           sec: ctx.sec,
           portfolioCap,
           signalCandles: ctx.signalCandles,
+          preparedRun: ctx.preparedRun,
+          ...(ctx.preparedStack ? { preparedStack: ctx.preparedStack } : {}),
           ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
           initial: ctx.initial,
           skipWarmup: true,
           shouldCancel: opts.shouldCancel,
-          reverse: opts.reverse
+          reverse: gridPrepBase.reverse
         };
         const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
         ctx.initial = simContinuationFromResult(r);
@@ -2429,7 +2488,7 @@
         ctx.sells += r.sells || 0;
         if (r.rows?.length) ctx.rows.push(...r.rows);
         doneSteps += 1;
-        if (typeof opts.onStep === "function") {
+        if (typeof opts.onStep === "function" && (doneSteps % progressStride === 0 || doneSteps === totalSteps)) {
           opts.onStep({
             doneSteps,
             totalSteps,
@@ -2467,31 +2526,10 @@
     const opts = { ...(options || {}), yieldUi: true };
     const signalPacks = opts.signalPacks;
     const portfolioCap = opts.portfolioCap || createPortfolioCap(volConfig);
-    const ctxs = [];
-
-    for (const wu of workUnits || []) {
-      const candles = packs[wu.pi];
-      if (!candles?.length) continue;
-      const sec = wu.sec || candles[0]?.sec || "?";
-      const signalCandles = signalPacks?.[wu.pi] || candles;
-      const indicatorCache = new IndicatorCache(signalCandles);
-      ctxs.push({
-        pi: wu.pi,
-        sec,
-        candles,
-        signalCandles,
-        indicatorCache,
-        range: wu.range,
-        rows: [],
-        initial: {},
-        buys: 0,
-        sells: 0,
-        commission: 0,
-        entryPrice: null
-      });
-    }
+    const { ctxs, gridPrepBase } = initGridContexts(packs, workUnits, spec, params, volConfig, signalPacks, opts);
 
     const totalSteps = Math.max(1, (times?.length || 0) * ctxs.length);
+    const yieldStride = gridYieldStride(totalSteps);
     let doneSteps = 0;
 
     for (let ti = 0; ti < (times?.length || 0); ti++) {
@@ -2507,11 +2545,13 @@
           sec: ctx.sec,
           portfolioCap,
           signalCandles: ctx.signalCandles,
+          preparedRun: ctx.preparedRun,
+          ...(ctx.preparedStack ? { preparedStack: ctx.preparedStack } : {}),
           ...(ctx.indicatorCache ? { indicatorCache: ctx.indicatorCache } : {}),
           initial: ctx.initial,
           skipWarmup: true,
           shouldCancel: opts.shouldCancel,
-          reverse: opts.reverse
+          reverse: gridPrepBase.reverse
         };
         const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
         ctx.initial = simContinuationFromResult(r);
@@ -2521,7 +2561,9 @@
         ctx.sells += r.sells || 0;
         if (r.rows?.length) ctx.rows.push(...r.rows);
         doneSteps += 1;
-        if (typeof opts.onStep === "function") {
+        const reportStep = typeof opts.onStep === "function"
+          && (doneSteps % yieldStride === 0 || doneSteps === totalSteps);
+        if (reportStep) {
           await opts.onStep({
             doneSteps,
             totalSteps,
@@ -2530,7 +2572,7 @@
             sec: ctx.sec,
             candleTime: t
           });
-        } else if (doneSteps % 8 === 0) {
+        } else if (opts.yieldUi && doneSteps % yieldStride === 0) {
           await delay(0);
         }
       }
@@ -3889,6 +3931,7 @@
         signalPacks,
         buildIndicatorCache: !!cfg,
         shouldCancel: opts.shouldCancel,
+        progressStride: gridYieldStride(syncTotalSteps),
         onStep: ({ doneSteps, totalSteps, sec, candleTime }) => {
           emitFinrespPhaseProgress(
             opts,
