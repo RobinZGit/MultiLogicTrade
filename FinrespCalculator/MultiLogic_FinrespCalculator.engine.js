@@ -15,7 +15,7 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2 };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, Reverse: false };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
@@ -1149,6 +1149,27 @@
     });
   }
 
+  /** Глобальный реверс: сигналы те же, исполнение long↔short (покупка↔продажа). */
+  function isReverseEnabled(options) {
+    return !!(options && options.reverse);
+  }
+
+  /** Инверсия long/short для исполнения сделок (не для индикаторов на графике). */
+  function swapLogicExecHits(sig) {
+    return {
+      ...sig,
+      longOpHit: sig.shortOpHit,
+      shortOpHit: sig.longOpHit,
+      longClHit: sig.shortClHit,
+      shortClHit: sig.longClHit
+    };
+  }
+
+  /** Поменять местами объёмы покупки и продажи (SMA-логики). */
+  function swapTradeVolumes(buy, sell) {
+    return { buy: sell, sell: buy };
+  }
+
   /** Симуляция на свечах: `simulateNoSignalRows`. */
   function simulateNoSignalRows(candles, startIdx, endIdx, options) {
     const initial = options?.initial || {};
@@ -1350,8 +1371,9 @@
         if (pos !== 0) {
           const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
           const sig = logicLineBarSignals(parsed, cache, i, posCtx);
-          if (pos > 0 && (sig.longClHit || sig.shortOpHit)) sell += flatten(price);
-          else if (pos < 0 && (sig.shortClHit || sig.longOpHit)) sell += flatten(price);
+          const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
+          if (pos > 0 && (esig.longClHit || esig.shortOpHit)) sell += flatten(price);
+          else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) sell += flatten(price);
         }
       }
 
@@ -1362,17 +1384,19 @@
         entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
           const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null));
-          if (sig.longOpHit === sig.shortOpHit) continue;
+          const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
+          if (esig.longOpHit === esig.shortOpHit) continue;
           const lot = calcTradeVolume(price, volConfig);
           const cap = maxAbsPosition(price, volConfig);
           if (lot <= 0 || lot > cap) continue;
-          pos = sig.longOpHit ? lot : -lot;
+          pos = esig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
           cash -= comm;
           commissionPaid += comm;
           entryPrice = price;
-          buy = lot;
+          if (pos > 0) buy = lot;
+          else sell = lot;
           activeIdx = si;
           const anchor = captureEntryAnchor(cache, parsedList[si], i);
           entryBarIdx = anchor.entryBarIdx;
@@ -1487,24 +1511,22 @@
 
       const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
       const sig = logicLineBarSignals(parsed, cache, i, posCtx);
-      const longOpHit = sig.longOpHit;
-      const shortOpHit = sig.shortOpHit;
-      const longClHit = sig.longClHit;
-      const shortClHit = sig.shortClHit;
+      const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
 
-      if (pos > 0 && (longClHit || shortOpHit)) sell += flatten(price);
-      else if (pos < 0 && (shortClHit || longOpHit)) sell += flatten(price);
-      if (pos === 0 && longOpHit !== shortOpHit) {
+      if (pos > 0 && (esig.longClHit || esig.shortOpHit)) sell += flatten(price);
+      else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) sell += flatten(price);
+      if (pos === 0 && esig.longOpHit !== esig.shortOpHit) {
         const lot = calcTradeVolume(price, volConfig);
         const cap = maxAbsPosition(price, volConfig);
         if (lot > 0 && lot <= cap) {
-          pos = longOpHit ? lot : -lot;
+          pos = esig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
           cash -= comm;
           commissionPaid += comm;
           entryPrice = price;
-          buy = lot;
+          if (pos > 0) buy = lot;
+          else sell = lot;
           const anchor = captureEntryAnchor(cache, parsed, i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -1624,6 +1646,7 @@
           buy = Math.max(-d, 0) * scale;
           sell = Math.max(d, 0) * scale;
         }
+        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
         const cap = capAt(price);
         if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
         if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
@@ -1764,6 +1787,7 @@
           if (isTrend) sell = excess * scale;
           else buy = excess * scale;
         }
+        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
         const cap = capAt(price);
         if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
         if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
@@ -1962,14 +1986,19 @@
     if (!candles?.length) {
       return { rows: [], finresp: 0, cash: 0, pos: 0, commission: 0, buys: 0, sells: 0, entryPrice: null };
     }
-    if (!spec || spec.disabled) return simulateNoSignalRows(candles, startIdx, endIdx, options);
+    const p = { ...DEFAULT_PARAMS, ...params };
+    const opts = {
+      ...(options || {}),
+      reverse: options?.reverse != null ? !!options.reverse : !!p.Reverse
+    };
+    if (!spec || spec.disabled) return simulateNoSignalRows(candles, startIdx, endIdx, opts);
     const vol = normalizedVolConfig(volConfig);
     if (spec.type === "multi_logic") {
-      return simulateMultiLogicStack(candles, spec.specs, startIdx, endIdx, vol, options, params);
+      return simulateMultiLogicStack(candles, spec.specs, startIdx, endIdx, vol, opts, p);
     }
     if (spec.type === "sma_spread") {
       return simulateSmaSpread(candles, spec.smaLen, spec.side, startIdx, endIdx, vol, {
-        ...options,
+        ...opts,
         slAtr: spec.slAtr,
         tpAtr: spec.tpAtr,
         slTpAtrLen: spec.slTpAtrLen
@@ -1977,14 +2006,14 @@
     }
     if (spec.type === "sma_corridor") {
       return simulateSmaCorridor(candles, spec.smaLen, spec.mode, spec.corridorAtr, startIdx, endIdx, vol, {
-        ...options,
+        ...opts,
         slAtr: spec.slAtr,
         tpAtr: spec.tpAtr,
         slTpAtrLen: spec.slTpAtrLen
       });
     }
-    const parsed = applySlTpParams({ ...spec.parsed }, params || DEFAULT_PARAMS);
-    return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, options);
+    const parsed = applySlTpParams({ ...spec.parsed }, p);
+    return simulateLogicLine(candles, parsed, startIdx, endIdx, vol, opts);
   }
 
   /** Запуск расчёта: `runOnCandlesYielding`. */

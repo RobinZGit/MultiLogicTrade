@@ -125,6 +125,20 @@ h2:first-child{margin-top:0;}
   font-family:Consolas,monospace;font-size:.78rem;color:#334155;line-height:1.5;word-break:break-word;
 }
 label .at-token{font-family:Consolas,Monaco,monospace;font-weight:700;color:#1d4ed8;}
+.calc-at-params{border-radius:10px;transition:border-color .2s ease,background .2s ease,box-shadow .2s ease;}
+.calc-at-params--reverse{
+  border:2px solid #d97706;padding:.65rem .75rem .7rem;margin:.15rem 0 .55rem;
+  background:linear-gradient(180deg,#fff7ed 0%,#fffbeb 42%,#fff 100%);
+  box-shadow:0 2px 12px rgba(217,119,6,.2);
+}
+.calc-at-params--reverse .calc-subsec{color:#9a3412;}
+.calc-reverse-badge{
+  margin:.5rem 0 0;padding:.5rem .7rem;border-radius:8px;
+  background:#ffedd5;border:1px solid #fdba74;color:#9a3412;
+  font-size:.84rem;font-weight:700;line-height:1.45;
+}
+.calc-reverse-row{align-items:center;justify-content:space-between;gap:.65rem;flex-wrap:wrap;}
+.calc-reverse-toggle{flex:1;margin:0;max-width:42rem;}
 details.logic-editor{border:1px solid var(--border);border-radius:10px;padding:.5rem .85rem;margin:1rem 0;background:#fafbfc;}
 details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px 6px rgba(37,99,235,.08);}
 .extra-params-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem .15rem .55rem;margin:-.5rem -.85rem 0;cursor:pointer;list-style:none;}
@@ -653,8 +667,9 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в «Дополнительных параметрах» ниже. При нескольких логиках — приоритет сверху вниз.</p>
 </div>
 
+<div class="calc-at-params" id="calc-at-params">
 <p class="calc-subsec">Параметры @ — подстановка в строку логики</p>
-<p class="calc-at-hint"><code>@</code> — плейсхолдер в Op/Cl. При «Рассчитать» и «Применить» числа из полей подставляются в <code>SL[@SL]</code>, <code>LinReg(@LR;K=@K)</code> и т.д. Длина ATR — общая для стопов и коридоров.</p>
+<p class="calc-at-hint"><code>@</code> — плейсхолдер в Op/Cl. При «Рассчитать» и «Применить» числа из полей подставляются в <code>SL[@SL]</code>, <code>LinReg(@LR;K=@K)</code> и т.д. Длина ATR — общая для стопов и коридоров. <code>@Reverse</code> — глобально, не в строке логики.</p>
 <div class="calc-grid">
 <div class="calc-field"><label for="param-sl"><span class="at-token">@SL</span> — стоп, ×ATR</label>
 <div class="calc-field-opt-row">
@@ -689,8 +704,20 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="param-strict" type="number" value="3" min="1" max="5" step="1" title="Strict(@Strict) в начале строки логики; 1…5">
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-strict" data-opt="strict">Оптимизировать</button>
 </div></div>
+<div class="calc-field calc-field-wide calc-reverse-field">
+<div class="calc-field-opt-row calc-reverse-row">
+<label class="indicator-toggle calc-reverse-toggle" for="param-reverse">
+<input type="checkbox" id="param-reverse">
+<span><span class="at-token">@Reverse</span> — Реверс (инверсия: покупка ↔ продажа)</span>
+</label>
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-reverse" data-opt="reverse">Оптимизировать</button>
 </div>
+<p class="note" style="margin:.35rem 0 0">Не подставляется в Op/Cl. Сигналы те же; исполнение и FINRESP — зеркально для всех логик.</p>
+</div>
+</div>
+<p class="calc-reverse-badge" id="calc-reverse-badge" hidden><span class="at-token">@Reverse</span> включён — покупка ↔ продажа</p>
 <p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@SL=2 @TP=3 ATR=14 @SmaCorridor=1 @LR=20 @K=2×ATR @Strict=3</p>
+</div>
 <p class="note" id="position-sl-hint" hidden></p>
 </div>
 
@@ -1547,6 +1574,7 @@ body.calc-running .help-ftr{opacity:.75;}
     { kind: "lr", btnId: "opt-lr", inputId: "param-lr", label: "@LR", integer: true, position: true },
     { kind: "lin-k", btnId: "opt-lin-k", inputId: "param-lin-k", label: "@K", position: true },
     { kind: "strict", btnId: "opt-strict", inputId: "param-strict", label: "@Strict", integer: true, position: true },
+    { kind: "reverse", btnId: "opt-reverse", inputId: "param-reverse", label: "@Reverse", boolean: true, position: true },
     { kind: "p-sl", btnId: "opt-stopper-sl", inputId: "stopper-sl-mult", label: "портф. SL" },
     { kind: "p-tp", btnId: "opt-stopper-tp", inputId: "stopper-tp-mult", label: "портф. TP" },
     { kind: "p-atr", btnId: "opt-stopper-atr", inputId: "stopper-atr-len", label: "портф. ATR", integer: true },
@@ -1702,6 +1730,7 @@ body.calc-running .help-ftr{opacity:.75;}
         lr: $("param-lr")?.value || "",
         linK: $("param-lin-k")?.value || "",
         strict: $("param-strict")?.value || "",
+        reverse: !!$("param-reverse")?.checked,
         sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
       stopper: {
@@ -1786,6 +1815,9 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-lr", cfg.params?.lr);
       setValueIfExists("param-lin-k", cfg.params?.linK);
       setValueIfExists("param-strict", cfg.params?.strict);
+      if ($("param-reverse")) {
+        $("param-reverse").checked = !!(cfg.params?.reverse ?? cfg.params?.Reverse);
+      }
       setValueIfExists("stopper-sl-mult", cfg.stopper?.slMult);
       setValueIfExists("stopper-tp-mult", cfg.stopper?.tpMult);
       setValueIfExists("stopper-atr-len", cfg.stopper?.atrLen);
@@ -2262,7 +2294,8 @@ body.calc-running .help-ftr{opacity:.75;}
       SL: sl,
       TP: tp,
       slTpAtrLen: atrLen,
-      smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr)
+      smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr),
+      Reverse: !!$("param-reverse")?.checked
     };
   }
 
@@ -2789,6 +2822,7 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Подпрограмма `optimValueLabel`. */
   function optimValueLabel(kind, value) {
     if (isIndicatorOptimKind(kind)) return indicatorCandidateLabel(value);
+    if (optimMeta(kind)?.boolean) return value ? "вкл" : "выкл";
     return String(optimCandidateValue(kind, value));
   }
 
@@ -3157,7 +3191,9 @@ body.calc-running .help-ftr{opacity:.75;}
     stopOptimDots();
     syncOptimButtons();
     if (meta?.indicators) applyIndicatorSelection(bestValue);
+    else if (meta?.boolean && meta?.inputId) $(meta.inputId).checked = !!bestValue;
     else if (meta?.inputId) $(meta.inputId).value = String(bestValue);
+    syncReverseUi();
     const result = calcResult(optimRunContext(kind, bestValue));
     if (result) applyResult(result, { redrawCharts: true });
     const scoreNote = isPositionOptimKind(kind) ? " (FINRESP до портф. Stopper)" : "";
@@ -3177,6 +3213,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function optimCandidateValue(kind, value) {
     const meta = optimMeta(kind);
     if (meta?.indicators) return normalizeIndicatorCandidate(value);
+    if (meta?.boolean) return !!value;
     return meta?.integer ? Math.round(value) : roundParam(value);
   }
 
@@ -3212,6 +3249,8 @@ body.calc-running .help-ftr{opacity:.75;}
         return { params: { ...p, LinK: Math.max(0.1, cv) }, stopper: sc };
       case "strict":
         return { params: { ...p, Strict: Math.max(1, Math.min(5, Math.round(cv))) }, stopper: sc };
+      case "reverse":
+        return { params: { ...p, Reverse: !!cv }, stopper: sc };
       case "p-sl": {
         const slMult = Math.max(0, cv);
         return { params: p, stopper: { ...sc, slMult, useSl: slMult > 0 } };
@@ -3261,6 +3300,7 @@ body.calc-running .help-ftr{opacity:.75;}
     const candidate = state.optim.candidates[state.optim.candidateIndex];
     state.optim.candidateIndex += 1;
     if (meta.indicators) applyIndicatorSelection(candidate);
+    else if (meta.boolean && input) input.checked = !!candidate;
     const trial = calcResult(optimRunContext(kind, candidate));
     const score = optimScore(trial, kind);
     if (trial && score > state.optim.bestFinresp) {
@@ -3268,7 +3308,10 @@ body.calc-running .help-ftr{opacity:.75;}
       state.optim.bestValue = optimCandidateValue(kind, candidate);
     }
     const candLabel = optimValueLabel(kind, candidate);
-    if (input) input.value = String(optimCandidateValue(kind, candidate));
+    if (input && !meta.indicators) {
+      if (meta.boolean) input.checked = !!optimCandidateValue(kind, candidate);
+      else input.value = String(optimCandidateValue(kind, candidate));
+    }
     if (trial) {
       applyResult(trial, {
         redrawCharts: false,
@@ -3298,6 +3341,10 @@ body.calc-running .help-ftr{opacity:.75;}
     if (meta.indicators) {
       startValue = optimCandidateValue(kind, selectedIndicatorKeys());
       candidates = enumerateIndicatorSelections();
+    } else if (meta.boolean) {
+      startValue = optimCandidateValue(kind, !!input?.checked);
+      candidates = [false, true];
+      if (input) input.checked = !!startValue;
     } else {
       const min = +input.min || 0;
       const max = +input.max || 50;
@@ -3883,6 +3930,15 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Подсветка блока @ при включённом реверсе. */
+  function syncReverseUi() {
+    const on = !!$("param-reverse")?.checked;
+    const block = $("calc-at-params");
+    const badge = $("calc-reverse-badge");
+    if (block) block.classList.toggle("calc-at-params--reverse", on);
+    if (badge) badge.hidden = !on;
+  }
+
   /** Сводка подстановок @ в строке логики. */
   function updateAtParamsSummary() {
     const el = $("calc-at-summary");
@@ -3928,6 +3984,7 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Отрисовка элемента live-панели: `renderFromParams`. */
   function renderFromParams() {
     updateAtParamsSummary();
+    syncReverseUi();
     invalidateFormChange();
   }
 
@@ -5028,6 +5085,7 @@ ${totalBlock}
     if (stopper?.events?.length) status += ` | Stopper: ${stopper.events.length} сраб.`;
     else if (stopperConfig().useSl || stopperConfig().useTp) status += " | Stopper вкл.";
     if (randomPriceShiftEnabled()) status += " | сдвиг индикаторов ±0,1%";
+    if (params().Reverse) status += " | @Reverse вкл.";
     if (opts.optimNote) {
       const bestLabel = optimValueLabel(state.optim.active, state.optim.bestValue);
       status += ` | Опт. ${opts.optimNote}: FINRESP ${fmt(agg.finresp)} ₽ | лучшее ${bestLabel} → ${fmt(state.optim.bestFinresp)} ₽`;
@@ -5538,6 +5596,7 @@ ${totalBlock}
   $("vol-type").addEventListener("change", () => { syncVolumeFields(); invalidateFormChange(); });
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
+  $("param-reverse")?.addEventListener("change", () => { syncReverseUi(); renderFromParams(); saveConfig(); });
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
@@ -5620,6 +5679,7 @@ ${totalBlock}
     fillLogicSelect();
     updatePositionSlHint();
     updateAtParamsSummary();
+    syncReverseUi();
     syncMonthInputFromDates();
     syncVolumeFields();
     syncLeverageDisplay();
