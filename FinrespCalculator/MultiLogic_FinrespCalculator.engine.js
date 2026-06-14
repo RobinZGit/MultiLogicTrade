@@ -2104,6 +2104,61 @@
     return specs[0];
   }
 
+  function summarizeLogicBarSignals(sig) {
+    if (!sig) return { longOp: false, shortOp: false, longCl: false, shortCl: false };
+    return {
+      longOp: !!sig.longOpHit,
+      shortOp: !!sig.shortOpHit,
+      longCl: !!sig.longClHit,
+      shortCl: !!sig.shortClHit
+    };
+  }
+
+  /** Снимок Op/Cl на одном баре (live-диагностика: был ли сигнал входа/выхода). */
+  function probeLogicSignalsAtBar(candles, spec, params, options) {
+    const opts = options || {};
+    if (!candles?.length || !spec) return { ready: false, reason: "no_data" };
+    const p = { ...DEFAULT_PARAMS, ...params };
+    const b = Math.min(candles.length - 1, Math.max(0, opts.barIndex ?? candles.length - 1));
+    const w = warmupBars();
+    if (b < w) return { ready: false, reason: "warmup", barIndex: b, needBars: w };
+    const cache = new IndicatorCache(candles);
+    const pos = +opts.pos || 0;
+    const posCtx = buildPosCtx(pos, opts.entryBarIdx ?? null, opts.entryMid ?? null, opts.entryBeta ?? null);
+    const reverse = opts.reverse != null ? !!opts.reverse : !!p.Reverse;
+
+    if (spec.type === "multi_logic") {
+      const hits = [];
+      for (const s of spec.specs || []) {
+        if (!s || s.type !== "logic_line" || s.disabled) continue;
+        const parsed = applySlTpParams({ ...s.parsed }, p);
+        let sig = logicLineBarSignals(parsed, cache, b, posCtx);
+        if (reverse) sig = swapLogicExecHits(sig);
+        hits.push({ logicId: s.logicId || "?", ...summarizeLogicBarSignals(sig) });
+      }
+      const primary = hits.find((h) => h.longOp || h.shortOp || h.longCl || h.shortCl) || hits[0] || null;
+      return { ready: true, barIndex: b, multi: true, hits, logicId: primary?.logicId, ...primary };
+    }
+    if (spec.type === "logic_line") {
+      const parsed = applySlTpParams({ ...spec.parsed }, p);
+      let sig = logicLineBarSignals(parsed, cache, b, posCtx);
+      if (reverse) sig = swapLogicExecHits(sig);
+      return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
+    }
+    if (spec.type === "sma_spread" || spec.type === "sma_corridor") {
+      const last = opts.lastRow || {};
+      return {
+        ready: true,
+        barIndex: b,
+        logicId: spec.logicId || spec.type,
+        smaModel: true,
+        lastBuy: +last.buy || 0,
+        lastSell: +last.sell || 0
+      };
+    }
+    return { ready: false, reason: "spec_type", type: spec.type };
+  }
+
   /**
    * Прогон spec по одному ряду свечей (один инструмент, окно startIdx…endIdx).
    * multi_logic → simulateMultiLogicStack; logic_line → simulateLogicLine; sma_spread → simulateSmaSpread.
@@ -4156,6 +4211,7 @@
     normalizeIndicatorSelection,
     resolveLogicSpec,
     resolveLogicSpecStack,
+    probeLogicSignalsAtBar,
     runOnCandles,
     runMulti,
     runMultiAsync,

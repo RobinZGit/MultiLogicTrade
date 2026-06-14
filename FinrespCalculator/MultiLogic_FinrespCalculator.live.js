@@ -4639,7 +4639,7 @@ ${referenceBlock}
     return { finresp, cash, pos, commission, buys, sells, bySec };
   }
 
-  /** Live: сигнал по каждому инструменту на хвосте свечей с общим портфельным лимитом. */
+  /** Live: сигнал по хвосту каждого инструмента (общий портфельный лимит, без привязки к окну ползунков). */
   async function calcLiveSignalsPerInstrument(runOptions) {
     const ro = runOptions || {};
     if (!state.packs.length) return null;
@@ -4648,61 +4648,128 @@ ${referenceBlock}
     if (!spec) return null;
     const skipped = [];
     const tail = MIN_WARMUP_BARS;
-    const ref = refPack() || state.packs.find((pack) => pack?.length);
-    if (!ref?.length) return null;
-    const bRef = ref.length - 1;
-    const aRef = Math.max(0, bRef - tail + 1);
-    const times = [];
-    for (let i = aRef; i <= bRef; i++) {
-      if (ref[i]?.time) times.push(ref[i].time);
-    }
-    const tStart = times[0];
-    const tEnd = times[times.length - 1];
-    const workUnits = [];
+    const vol = volConfig();
+    const portfolioCap = E.createPortfolioCap(vol);
+    const perSec = [];
+    let bRef = 0;
+    let aRef = 0;
+
     for (let pi = 0; pi < state.packs.length; pi++) {
+      if (ro.shouldCancel?.()) break;
       const candles = state.packs[pi];
-      const sec = candles[0]?.sec || "?";
+      const sec = candles?.[0]?.sec || "?";
       if (!candles?.length || candles.length < 3) {
         skipped.push({ sec, error: "мало свечей для сигнала" });
         continue;
       }
-      const range = E.indicesForTimeRange(candles, tStart, tEnd);
-      if (!range) {
+      const b = candles.length - 1;
+      const a = Math.max(0, b - tail + 1);
+      bRef = Math.max(bRef, b);
+      aRef = aRef ? Math.min(aRef, a) : a;
+      const r = E.runOnCandles(candles, spec, a, b, p, vol, {
+        shouldCancel: ro.shouldCancel,
+        sec,
+        portfolioCap
+      });
+      if (!r.rows?.length) {
         skipped.push({ sec, error: "нет данных для сигнала на свечах" });
         continue;
       }
-      workUnits.push({
-        pi,
+      const last = r.rows.at(-1);
+      const probe = E.probeLogicSignalsAtBar(candles, spec, p, {
+        barIndex: b,
+        pos: r.pos,
+        entryBarIdx: r.simState?.entryBarIdx,
+        entryMid: r.simState?.entryMid,
+        entryBeta: r.simState?.entryBeta,
+        reverse: p.Reverse,
+        lastRow: last
+      });
+      perSec.push({
         sec,
-        bars: Math.max(1, range.b - range.a + 1),
-        range
+        ...r,
+        signalProbe: probe,
+        lastBuy: +(last?.buy || 0),
+        lastSell: +(last?.sell || 0)
       });
     }
+
     state.windowSkipped = skipped;
-    if (!workUnits.length || !times.length) return null;
-
-    let perSec;
-    const vol = volConfig();
-    if (workUnits.length > 1) {
-      const synced = E.runPacksOnTimeGrid(state.packs, workUnits, times, spec, p, vol, {
-        shouldCancel: ro.shouldCancel
-      });
-      perSec = synced.perSec.filter((r) => r.rows?.length);
-    } else {
-      const wu = workUnits[0];
-      const candles = state.packs[wu.pi];
-      const portfolioCap = E.createPortfolioCap(vol);
-      const r = E.runOnCandles(candles, spec, wu.range.a, wu.range.b, p, vol, {
-        shouldCancel: ro.shouldCancel,
-        sec: wu.sec,
-        portfolioCap
-      });
-      perSec = r.rows?.length ? [{ sec: wu.sec, ...r }] : [];
-    }
-
     if (!perSec.length) return null;
     const agg = aggregateFinrespLocal(perSec);
-    return { perSec, agg, preStopperAgg: agg, stopper: { events: [] }, a: aRef, b: bRef, skipped };
+    return { perSec, agg, preStopperAgg: agg, stopper: { events: [] }, a: aRef, b: bRef, skipped, finrespMode: "tail" };
+  }
+
+  /** Подпись сигнала Op/Cl для тех. журнала. */
+  function finrespSignalOpLabel(probe) {
+    if (!probe?.ready) return probe?.reason === "warmup" ? "warmup" : "—";
+    if (probe.longOp) return "longOp";
+    if (probe.shortOp) return "shortOp";
+    return "—";
+  }
+
+  function finrespSignalClLabel(probe) {
+    if (!probe?.ready) return "—";
+    if (probe.longCl) return "longCl";
+    if (probe.shortCl) return "shortCl";
+    return "—";
+  }
+
+  /** Запись FINRESP по инструментам в тех. журнал (сигнал vs целевая позиция). */
+  function noteLiveFinrespDiagnostics(result) {
+    if (!result?.perSec?.length) return;
+    const bySec = {};
+    let withPos = 0;
+    let withOp = 0;
+    for (const p of result.perSec) {
+      const probe = p.signalProbe || {};
+      const pos = +(p.pos || 0);
+      const op = finrespSignalOpLabel(probe);
+      const cl = finrespSignalClLabel(probe);
+      const buy = +(p.lastBuy ?? p.rows?.at(-1)?.buy ?? 0);
+      const sell = +(p.lastSell ?? p.rows?.at(-1)?.sell ?? 0);
+      if (Math.abs(pos) > 1e-9) withPos += 1;
+      if (op !== "—" && op !== "warmup") withOp += 1;
+      bySec[p.sec] = { pos, op, cl, buy, sell, logicId: probe.logicId || "—", ready: !!probe.ready };
+      const willTrade = Math.abs(pos) > 1e-9 ? "→ сделка" : (op !== "—" && op !== "warmup" ? "op без pos (лимит/фильтр?)" : "flat");
+      noteLiveTech(
+        "live-finresp-sec",
+        `${p.sec} pos=${pos} op=${op} cl=${cl} buy=${buy} sell=${sell} ${willTrade}`,
+        probe.logicId ? `logic=${probe.logicId}` : ""
+      );
+    }
+    state.live.lastFinrespDiag = {
+      at: new Date().toISOString(),
+      mode: result.finrespMode || "tail",
+      bySec,
+      instrumentCount: result.perSec.length,
+      withPos,
+      withOp,
+      skippedCount: (result.skipped || state.windowSkipped || []).length
+    };
+    noteLiveTech(
+      "live-finresp-summary",
+      `mode=${result.finrespMode || "tail"} instruments=${result.perSec.length} withPos=${withPos} opSignals=${withOp} skipped=${state.live.lastFinrespDiag.skippedCount}`,
+      ""
+    );
+  }
+
+  /** Почему reconcile не выставил заявку. */
+  function reconcileAlignedReason(sec, targetPieces, currentPieces, delta) {
+    const diag = state.live.lastFinrespDiag?.bySec?.[sec];
+    const tgt = +targetPieces || 0;
+    const cur = +currentPieces || 0;
+    if (Math.abs(tgt) < 1e-9 && Math.abs(cur) < 1e-9) {
+      if (diag?.op && diag.op !== "—" && diag.op !== "warmup") {
+        return `сигнал ${diag.op} (${diag.logicId}), но pos=0 — портф.лимит или объём < лота`;
+      }
+      if (diag?.buy > 0 || diag?.sell > 0) {
+        return `buy/sell на баре, но итоговая pos=0`;
+      }
+      return "нет входа на последнем баре";
+    }
+    if (Math.abs(tgt - cur) < 1e-9) return "уже на целевой позиции";
+    return "дельта меньше порога лота";
   }
 
   /** Live-торговля: `liveFinrespPartialMessage`. */
@@ -4731,10 +4798,14 @@ ${referenceBlock}
   async function tryLiveFinrespCalc(runOptions) {
     const ro = runOptions || {};
     if (isLiveTradingSession()) {
+      const tailResult = await calcLiveSignalsPerInstrument(ro);
+      noteLiveFinrespDiagnostics(tailResult);
       pinLiveSessionEquityWindow();
+      if (tailResult?.perSec?.length) return tailResult;
       let result = await calcResultAsync(null, ro);
+      noteLiveFinrespDiagnostics(result);
       if (result?.perSec?.length) return result;
-      return calcLiveSignalsPerInstrument(ro);
+      return null;
     }
     pinLiveWindowForAllInstruments();
     let result = await calcResultAsync(null, ro);
@@ -4993,16 +5064,41 @@ ${referenceBlock}
         const delta = targetPieces - currentPieces;
         if (!reconcileNeedsTrade(targetPieces, currentPieces, delta, lot)) {
           aligned += 1;
+          const reason = reconcileAlignedReason(p.sec, targetPieces, currentPieces, delta);
+          const diag = state.live.lastFinrespDiag?.bySec?.[p.sec];
           targetDetails.push({
-            sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, action: "aligned"
+            sec: p.sec,
+            ticker,
+            target: targetPieces,
+            current: currentPieces,
+            delta,
+            lot,
+            action: "aligned",
+            reason,
+            signalOp: diag?.op,
+            signalCl: diag?.cl,
+            logicId: diag?.logicId
           });
           continue;
         }
         let lots = piecesToLots(delta, lot);
         if (!lots && delta > 0 && targetPieces > 0) lots = 1;
         const direction = delta > 0 ? "ORDER_DIRECTION_BUY" : "ORDER_DIRECTION_SELL";
+        const diag = state.live.lastFinrespDiag?.bySec?.[p.sec];
         targetDetails.push({
-          sec: p.sec, ticker, target: targetPieces, current: currentPieces, delta, lot, lots, direction, action: "order"
+          sec: p.sec,
+          ticker,
+          target: targetPieces,
+          current: currentPieces,
+          delta,
+          lot,
+          lots,
+          direction,
+          action: "order",
+          reason: "откроется сделка",
+          signalOp: diag?.op,
+          signalCl: diag?.cl,
+          logicId: diag?.logicId
         });
         if (!sandbox) {
           const tradable = await tbankValidateTradable(instrumentId, ti);

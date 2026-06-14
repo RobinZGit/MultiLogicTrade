@@ -1090,7 +1090,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-sandbox-reconcile-fix";
+  const CALC_PAGE_VERSION = "2026-06-14-live-tail-signals";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1190,9 +1190,9 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     for (const td of report.targetDetails || []) {
       if (td.action === "aligned") {
-        pushTechLogLine(`${at} live-target-aligned: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lot=${td.lot}`);
+        pushTechLogLine(`${at} live-target-aligned: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lot=${td.lot} reason=${td.reason || "—"}${td.signalOp ? ` op=${td.signalOp}` : ""}${td.logicId ? ` logic=${td.logicId}` : ""}`);
       } else if (td.action === "order") {
-        pushTechLogLine(`${at} live-target-order: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lots=${td.lots} dir=${td.direction || "—"}`);
+        pushTechLogLine(`${at} live-target-order: ${td.sec || td.ticker} target=${td.target} broker=${td.current} delta=${td.delta} lots=${td.lots} dir=${td.direction || "—"} reason=${td.reason || "откроется сделка"}${td.signalOp ? ` op=${td.signalOp}` : ""}${td.logicId ? ` logic=${td.logicId}` : ""}`);
       } else {
         pushTechLogLine(`${at} live-target-${td.action || "info"}: ${td.sec || "?"} ${td.error || td.market || ""}`);
       }
@@ -1326,6 +1326,7 @@ body.calc-running .help-ftr{opacity:.75;}
         `loadFailures=${calcState.failedInstruments?.length ?? 0}`,
         `windowSkipped=${calcState.windowSkipped?.length ?? 0}`,
         `calcWindow=${$("calc-start")?.value ?? "—"}…${$("calc-end")?.value ?? "—"}`,
+        `calcWindowTime=${calcState.anchorStartTime || "—"}…${calcState.anchorEndTime || "—"}`,
         `windowSkippedSample=${(calcState.windowSkipped || []).slice(0, 6).map((f) => `${f.sec}:${f.error}`).join("; ") || "—"}`,
         `period=${$("calc-from")?.value || "—"}…${$("calc-till")?.value || "—"}`,
         `tf=${$("calc-tf")?.value || "—"}`,
@@ -1357,6 +1358,10 @@ body.calc-running .help-ftr{opacity:.75;}
           `liveSandboxMode=${!!$("live-sandbox-mode")?.checked}`,
           `livePollTimer=${!!lv.pollTimer}`,
           `liveHasLastResult=${!!calcState.lastResult?.perSec?.length}`,
+          `liveFinrespMode=${lv.lastFinrespDiag?.mode || calcState.lastResult?.finrespMode || "—"}`,
+          `liveFinrespInstruments=${lv.lastFinrespDiag?.instrumentCount ?? calcState.lastResult?.perSec?.length ?? 0}`,
+          `liveFinrespWithPos=${lv.lastFinrespDiag?.withPos ?? "—"}`,
+          `liveFinrespOpSignals=${lv.lastFinrespDiag?.withOp ?? "—"}`,
           `liveLastResultPos=${(calcState.lastResult?.perSec || []).slice(0, 12).map((p) => `${p.sec}:${+(p.pos || 0)}`).join(",") || "—"}`,
           `liveTradeHistory=${(lv.tradeHistory || []).length} real=${(lv.tradeHistory || []).filter((h) => !h.fake).length} fake=${(lv.tradeHistory || []).filter((h) => h.fake).length}`,
           `logicUsesObTrend=${(() => { try { return E?.logicUsesObTrend && typeof activeLogicLineRaw === "function" ? E.logicUsesObTrend(activeLogicLineRaw()) : "—"; } catch (_) { return "—"; } })()}`,
@@ -1367,6 +1372,13 @@ body.calc-running .help-ftr{opacity:.75;}
           `livePositionsMtm=${Number.isFinite(lv.positionsMtmRub) ? lv.positionsMtmRub : "—"}`,
           `liveCandleSource=${lv.candleSource || $("live-candle-source")?.value || "—"}`
         );
+        const fd = lv.lastFinrespDiag;
+        if (fd?.bySec) {
+          const sample = Object.entries(fd.bySec).slice(0, 8)
+            .map(([sec, d]) => `${sec}:pos=${d.pos} op=${d.op} logic=${d.logicId}`)
+            .join("; ");
+          lines.push(`liveFinrespDiagSample=${sample || "—"}`);
+        }
         const r = lv.lastReconcile;
         if (r) {
           lines.push(
@@ -1382,9 +1394,9 @@ body.calc-running .help-ftr{opacity:.75;}
             lines.push("liveReconcile.targetDetails:");
             for (const td of r.targetDetails) {
               if (td.action === "aligned") {
-                lines.push(`  ${td.sec}: aligned target=${td.target} broker=${td.current} delta=${td.delta}`);
+                lines.push(`  ${td.sec}: aligned target=${td.target} broker=${td.current} reason=${td.reason || "—"}${td.signalOp ? ` op=${td.signalOp}` : ""}`);
               } else if (td.action === "order") {
-                lines.push(`  ${td.sec}: ORDER target=${td.target} broker=${td.current} delta=${td.delta} lots=${td.lots} ${td.direction || ""}`);
+                lines.push(`  ${td.sec}: ORDER target=${td.target} broker=${td.current} lots=${td.lots} ${td.direction || ""} reason=${td.reason || "откроется сделка"}`);
               } else {
                 lines.push(`  ${td.sec}: ${td.action} ${td.error || ""}`);
               }
