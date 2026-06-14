@@ -162,8 +162,11 @@ label .at-token-global{font-family:Consolas,Monaco,monospace;font-weight:800;col
   background:#ffedd5;border:1px solid #fdba74;color:#9a3412;
   font-size:.84rem;font-weight:700;line-height:1.45;
 }
-.calc-reverse-row{align-items:center;justify-content:space-between;gap:.65rem;flex-wrap:wrap;}
-.calc-reverse-toggle{flex:1;margin:0;max-width:42rem;}
+.calc-at-main-title{margin-top:0;}
+.calc-reverse-row{align-items:center;justify-content:flex-start;gap:.5rem;flex-wrap:wrap;}
+.calc-reverse-toggle{display:inline-flex;align-items:center;gap:.45rem;flex:0 0 auto;margin:0;max-width:none;}
+.calc-reverse-toggle input[type=checkbox]{margin:0;flex-shrink:0;}
+.calc-reverse-field{grid-column:span 1;}
 details.logic-editor{border:1px solid var(--border);border-radius:10px;padding:.5rem .85rem;margin:1rem 0;background:#fafbfc;}
 details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px 6px rgba(37,99,235,.08);}
 .extra-params-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem .15rem .55rem;margin:-.5rem -.85rem 0;cursor:pointer;list-style:none;}
@@ -693,19 +696,18 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 
 <div class="calc-at-params" id="calc-at-params">
+<p class="calc-subsec calc-at-main-title">Параметры управления</p>
+<div class="calc-at-divider" role="separator"><span>@@ — действуют на все логики независимо от выбранной строки Op/Cl</span></div>
 <div class="calc-at-global" id="calc-at-global">
-<p class="calc-subsec">Параметры @@ — на все логики</p>
-<p class="calc-at-hint">Двойная <code>@@</code> — не подставляется в Op/Cl: действует на <strong>все</strong> выбранные логики сразу, независимо от строки.</p>
 <div class="calc-grid">
-<div class="calc-field calc-field-wide calc-reverse-field">
+<div class="calc-field calc-reverse-field">
 <div class="calc-field-opt-row calc-reverse-row">
 <label class="indicator-toggle calc-reverse-toggle" for="param-reverse">
-<input type="checkbox" id="param-reverse">
 <span><span class="at-token-global">@@Reverse</span> — реверс (покупка ↔ продажа)</span>
+<input type="checkbox" id="param-reverse">
 </label>
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-reverse" data-opt="reverse">Оптимизировать</button>
 </div>
-<p class="note" style="margin:.35rem 0 0">Сигналы те же; исполнение и FINRESP — зеркально для всех логик.</p>
 </div>
 <div class="calc-field"><label for="stopper-sl-mult"><span class="at-token-global">@@SL</span> — портф. стоп, ×ATR</label>
 <div class="calc-field-opt-row">
@@ -714,7 +716,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div></div>
 <div class="calc-field"><label for="stopper-tp-mult"><span class="at-token-global">@@TP</span> — портф. тейк, ×ATR</label>
 <div class="calc-field-opt-row">
-<input id="stopper-tp-mult" type="number" value="3" min="0" max="50" step="any" title="0 — без take-profit портфеля">
+<input id="stopper-tp-mult" type="number" value="10" min="0" max="50" step="any" title="0 — без take-profit портфеля">
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-stopper-tp">Оптимизировать</button>
 </div></div>
 <div class="calc-field"><label for="stopper-atr-len"><span class="at-token-global">@@ATR</span> — длина ATR портфеля, св.</label>
@@ -727,14 +729,12 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <p class="note" style="margin:.45rem 0 0">Общепортфельный Stopper (вкладка «Stopper» робота): equity = сумма по инструментам. При срабатывании — закрытие всех позиций, база обновляется.</p>
 <p class="calc-reverse-badge" id="calc-reverse-badge" hidden><span class="at-token-global">@@Reverse</span> включён — покупка ↔ продажа</p>
-<p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@Reverse=выкл @@SL=2 @@TP=3 @@ATR=14</p>
+<p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@Reverse=выкл @@SL=2 @@TP=10 @@ATR=14</p>
 </div>
 
-<div class="calc-at-divider" role="separator"><span>@@ — действуют на все логики независимо от выбранной строки Op/Cl</span></div>
+<div class="calc-at-divider calc-at-divider--logic" role="separator"><span>@ — действуют только если явно указано в строке логики</span></div>
 
 <div class="calc-at-logic" id="calc-at-logic">
-<p class="calc-subsec">Параметры @ — подстановка в строку логики</p>
-<p class="calc-at-hint">Одна <code>@</code> — плейсхолдер в Op/Cl: подставляется при «Рассчитать» и «Применить», <strong>если прописан</strong> в строке (<code>SL[@SL]</code>, <code>LinReg(@LR;K=@K)</code> и т.д.). Длина ATR ниже — общая для @SL/@TP, @SmaCorridor и @K.</p>
 <div class="calc-grid">
 <div class="calc-field"><label for="param-sl"><span class="at-token">@SL</span> — стоп позиции, ×ATR</label>
 <div class="calc-field-opt-row">
@@ -743,7 +743,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div></div>
 <div class="calc-field"><label for="param-tp"><span class="at-token">@TP</span> — тейк позиции, ×ATR</label>
 <div class="calc-field-opt-row">
-<input id="param-tp" type="number" value="3" min="0" max="50" step="any" title="0 — без take-profit; кратность ATR">
+<input id="param-tp" type="number" value="6" min="0" max="50" step="any" title="0 — без take-profit; кратность ATR">
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-tp" data-opt="tp">Оптимизировать</button>
 </div></div>
 <div class="calc-field"><label for="param-atr-sl">Длина ATR, свечей</label>
@@ -770,7 +770,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-strict" data-opt="strict">Оптимизировать</button>
 </div></div>
 </div>
-<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@ — если в строке: @SL=2 @TP=3 ATR=14 @SmaCorridor=1 @LR=20 @K=2×ATR @Strict=3</p>
+<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@ — если в строке: @SL=2 @TP=6 ATR=14 @SmaCorridor=1 @LR=20 @K=2×ATR @Strict=3</p>
 </div>
 </div>
 <p class="note" id="position-sl-hint" hidden></p>
@@ -781,6 +781,12 @@ body.calc-running .help-ftr{opacity:.75;}
 <span class="extra-params-title">Дополнительные параметры</span>
 <a href="#" class="extra-params-toggle" id="extra-params-toggle" role="button">Развернуть</a>
 </summary>
+
+<div class="extra-section-row">
+<p class="extra-section">Сброс настроек</p>
+<button class="calc-btn calc-btn-secondary" type="button" id="calc-restore-defaults" title="Вернуть @@/@, объём, комиссию и индикаторы к значениям по умолчанию">Установить параметры по умолчанию</button>
+</div>
+<p class="note" style="margin:-.15rem 0 .75rem">Спросит, сбрасывать ли также каталог логик к встроенным строкам из кода.</p>
 
 <div class="extra-section-row">
 <p class="extra-section">Объём сделки (как в роботе)</p>
@@ -1017,7 +1023,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-at-params-split";
+  const CALC_PAGE_VERSION = "2026-06-14-params-defaults-reset";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -3785,15 +3791,8 @@ body.calc-running .help-ftr{opacity:.75;}
     $("calc-status").textContent = `Экспортировано ${payload.logicLineKeys.length} логик в файл.`;
   }
 
-  /** Сброс каталога к встроенным логикам; выбор в списке «Логика» — пустой. */
-  function restoreDefaultLogicCatalog() {
-    if (!window.confirm(
-      "Восстановить встроенные логики из кода?\n\n"
-      + "Будут сброшены все правки строк, добавленные и удалённые логики. "
-      + "В списке «Логика» ничего не останется выбранным."
-    )) {
-      return;
-    }
+  /** Сброс каталога к встроенным логикам (без диалога). */
+  function restoreDefaultLogicCatalogCore() {
     readLogicEditor();
     state.hiddenLogicKeys = [];
     state.logicLineKeys = DEFAULT_LOGIC_LINE_KEYS.slice();
@@ -3803,6 +3802,73 @@ body.calc-running .help-ftr{opacity:.75;}
     state.restoredLogicIds = [];
     fillLogicEditor();
     fillLogicSelect();
+  }
+
+  /** Значения @@/@, объём, комиссия и индикаторы — как в engine defaults. */
+  function applyDefaultParamsToUi() {
+    const p = E.DEFAULT_PARAMS;
+    const s = E.DEFAULT_STOPPER;
+    const v = E.DEFAULT_VOLUME;
+    setValueIfExists("param-sl", p.SL);
+    setValueIfExists("param-tp", p.TP);
+    setValueIfExists("param-atr-sl", p.slTpAtrLen);
+    setValueIfExists("param-sma-corridor", p.smaCorridorAtr);
+    setValueIfExists("param-lr", p.LR);
+    setValueIfExists("param-lin-k", p.LinK);
+    setValueIfExists("param-strict", p.Strict);
+    if ($("param-reverse")) $("param-reverse").checked = !!p.Reverse;
+    setValueIfExists("stopper-sl-mult", s.slMult);
+    setValueIfExists("stopper-tp-mult", s.tpMult);
+    setValueIfExists("stopper-atr-len", s.atrLen);
+    setValueIfExists("stopper-ref", s.refEquity);
+    setValueIfExists("vol-type", v.volumeType);
+    setValueIfExists("vol-value", v.volume);
+    setValueIfExists("vol-deposit", v.deposit);
+    setValueIfExists("vol-maxpos", v.maxPositions);
+    setValueIfExists("commission-pct", E.DEFAULT_COMMISSION.value);
+    if ($("random-price-shift")) $("random-price-shift").checked = false;
+    document.querySelectorAll("#indicator-toggles input[type=checkbox]").forEach((el) => {
+      el.checked = true;
+    });
+    syncVolumeFields();
+    syncLeverageDisplay();
+  }
+
+  /** Кнопка «Установить параметры по умолчанию» (+ опционально логики). */
+  function restoreCalcDefaultsInteractive() {
+    if (!window.confirm(
+      "Установить параметры по умолчанию?\n\n"
+      + "@@/@, портфельный Stopper, объём, комиссия, индикаторы."
+    )) {
+      return;
+    }
+    const resetLogics = window.confirm(
+      "Также сбросить каталог логик к встроенным?\n\n"
+      + "Да — восстановить строки Op/Cl из кода (выбор в списке «Логика» будет сброшен).\n"
+      + "Нет — только параметры."
+    );
+    applyDefaultParamsToUi();
+    if (resetLogics) restoreDefaultLogicCatalogCore();
+    renderFromParams();
+    saveConfig();
+    invalidateFormChange();
+    updatePositionSlHint();
+    syncLogicSelectedHint();
+    $("calc-status").textContent = resetLogics
+      ? "Параметры и каталог логик восстановлены по умолчанию. Выберите логику и нажмите «Рассчитать»."
+      : "Параметры установлены по умолчанию. Нажмите «Рассчитать».";
+  }
+
+  /** Сброс каталога к встроенным логикам; выбор в списке «Логика» — пустой. */
+  function restoreDefaultLogicCatalog() {
+    if (!window.confirm(
+      "Восстановить встроенные логики из кода?\n\n"
+      + "Будут сброшены все правки строк, добавленные и удалённые логики. "
+      + "В списке «Логика» ничего не останется выбранным."
+    )) {
+      return;
+    }
+    restoreDefaultLogicCatalogCore();
     saveConfig();
     invalidateFormChange();
     updatePositionSlHint();
@@ -5719,6 +5785,7 @@ ${referenceBlock}
     $("logic-catalog-file-input")?.click();
   });
   $("logic-catalog-restore-defaults")?.addEventListener("click", () => { restoreDefaultLogicCatalog(); });
+  $("calc-restore-defaults")?.addEventListener("click", () => { restoreCalcDefaultsInteractive(); });
   $("logic-catalog-file-input")?.addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0];
     ev.target.value = "";

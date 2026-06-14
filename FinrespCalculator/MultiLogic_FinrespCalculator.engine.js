@@ -15,13 +15,13 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, Reverse: false };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 6, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, Reverse: false };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
     useTp: false,
     slMult: 2,
-    tpMult: 3,
+    tpMult: 10,
     atrLen: 14,
     refEquity: 0
   };
