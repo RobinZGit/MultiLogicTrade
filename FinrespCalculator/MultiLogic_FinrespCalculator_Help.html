@@ -57,6 +57,7 @@ th{background:#f8fafc;width:28%;}
 <a href="#header">Шапка</a> ·
 <a href="#instruments">Инструменты</a> ·
 <a href="#period">Период и расчёт</a> ·
+<a href="#atparams">Параметры @</a> ·
 <a href="#cache">База цен</a> ·
 <a href="#results">Результаты</a> ·
 <a href="#window">Окно</a> ·
@@ -123,16 +124,31 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p class="note" id="calc-date-hint-ref">Серая подсказка под датами — лимит дней для выбранного ТФ и числа бумаг.</p>
 
-<h2 id="cache">6. База цен MOEX</h2>
+<h2 id="atparams">5.1. Параметры @ (основной блок)</h2>
+<p>В синей карточке «Основной расчёт», сразу под выбором логики — поля подстановки в строку Op/Cl. Символ <code>@</code> — плейсхолдер; при «Рассчитать» и «Применить» числа подставляются в <code>SL[@SL]</code>, <code>LinReg(@LR;K=@K)</code>, <code>Strict(@Strict)</code> и т.д.</p>
+<table>
+<tr><th>Поле</th><th>Назначение</th></tr>
+<tr><td><strong>@SL</strong> — стоп, ×ATR</td><td>Кратность ATR для stop-loss позиции; 0 — выкл. Не абсолютная цена</td></tr>
+<tr><td><strong>@TP</strong> — тейк, ×ATR</td><td>Take-profit позиции; кратность ATR</td></tr>
+<tr><td><strong>Длина ATR, свечей</strong></td><td>Период ATR в <strong>барах (свечах)</strong> — общий для @SL/@TP, @SmaCorridor и @K</td></tr>
+<tr><td><strong>@SmaCorridor</strong> — SMA, ×ATR</td><td>Ширина коридора ±K×ATR вокруг SMA (логики SMA-эталон); не в свечах</td></tr>
+<tr><td><strong>@LR</strong> — LinReg, свечей</td><td>Длина линейной регрессии в <strong>барах (свечах)</strong>, не в ATR</td></tr>
+<tr><td><strong>@K</strong> — LinReg, ×ATR</td><td>Ширина канала LinReg: по умолчанию <strong>0,8</strong> = граница на 0,8×ATR от центра (не свечи, не абсолютная цена). UCT: <code>LinReg(@LR;K=@K)</code></td></tr>
+<tr><td><strong>@Strict</strong> — строгость</td><td><code>Strict(@Strict)</code> в начале строки; 1…5</td></tr>
+</table>
+<p class="note">Серая строка-сводка под полями показывает текущие значения подстановок. Кнопки «Оптимизировать» у @SL, @TP и длины ATR перебирают значения по FINRESP.</p>
+
+<h2 id="cache">6. База цен MOEX (доп. параметры)</h2>
 <table>
 <tr><th>Кнопка</th><th>Назначение</th></tr>
 <tr><td><strong>Сохранить в файл</strong></td><td>JSON-резервная копия IndexedDB (удобно положить в <code>price-cache/</code>)</td></tr>
 <tr><td><strong>Загрузить из файла</strong></td><td>Восстановить базу из JSON на другом ПК</td></tr>
 <tr><td><strong>Удалить базу цен</strong></td><td>Очистить IndexedDB в браузере</td></tr>
 </table>
-<p>При «Рассчитать»: сначала кэш, если хватает периода и ТФ; иначе — запрос MOEX ISS, дополнение кэша без затирания уже сохранённых дат.</p>
+<p>При «Рассчитать»: сначала кэш, если хватает периода и ТФ; иначе — запрос MOEX ISS, дополнение кэша без затирания уже сохранённых дат. Блок находится в «Дополнительных параметрах», перед MOEX-тикерами.</p>
 
 <h2 id="results">7. Блок результатов</h2>
+<p>Крупный блок FINRESP, строка статуса, доп. метрики и ползунки окна — <strong>ниже</strong> сворачиваемого блока «Дополнительные параметры» (не внутри него).</p>
 <h3>Основные показатели (крупный блок)</h3>
 <table>
 <tr><th>Поле</th><th>Назначение</th></tr>
@@ -162,8 +178,8 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p>Под ползунками — даты/время выбранных границ. Пересчёт мгновенный, без повторной загрузки MOEX.</p>
 
-<h2 id="extra">9. Дополнительные параметры и логики</h2>
-<p>Блок сворачивается/разворачивается по заголовку «Дополнительные параметры и логики».</p>
+<h2 id="extra">9. Дополнительные параметры</h2>
+<p>Блок сворачивается/разворачивается по заголовку «Дополнительные параметры». Содержит объём, Stopper, индикаторы, каталог логик, кэш цен и MOEX-тикеры. Поля @SL, @TP, @LR, @K и др. — в основном блоке выше.</p>
 
 <h3>9.1. Объём сделки</h3>
 <table>
@@ -194,16 +210,7 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p class="note">Галочка без <code>@OBT</code> в строке — без эффекта. <code>@OBT</code> без галочки — тоже без эффекта.</p>
 
-<h3>9.4. SL / TP позиции по ATR</h3>
-<table>
-<tr><th>Поле</th><th>Назначение</th></tr>
-<tr><td><strong>SL позиции (@SL)</strong> + Оптимизировать</td><td>Кратность ATR для stop-loss позиции; 0 — выкл. Кнопка перебирает значения по FINRESP</td></tr>
-<tr><td><strong>TP позиции (@TP)</strong> + Оптимизировать</td><td>Take-profit позиции</td></tr>
-<tr><td><strong>Длина ATR для SL/TP</strong> + Оптимизировать</td><td>Период ATR для стопов позиции</td></tr>
-</table>
-<p>Подставляется в строки L1…L5 как SL[@SL] TP[@TP]. Лонг: SL = вход − K×ATR, TP = вход + K×ATR; шорт — наоборот.</p>
-
-<h3>9.5. Общепортфельный Stopper</h3>
+<h3>9.4. Общепортфельный Stopper</h3>
 <table>
 <tr><th>Поле</th><th>Назначение</th></tr>
 <tr><td><strong>SL / TP кратность ATR</strong> + Оптимизировать</td><td>Стопы по суммарному equity портфеля</td></tr>
@@ -212,22 +219,15 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p>При срабатывании — закрытие всех позиций по всем инструментам, обновление базы.</p>
 
-<h3>9.6. Параметры строки логики</h3>
-<table>
-<tr><th>Поле</th><th>Назначение</th></tr>
-<tr><td><strong>LinReg длина (@LR)</strong></td><td>Длина линейной регрессии в строках логики</td></tr>
-<tr><td><strong>Ширина канала LinReg (@K), ×ATR</strong></td><td>K для <code>LinReg(@LR;K=@K)</code> и UCT: граница = центр ± K×ATR</td></tr>
-</table>
-
-<h3>9.7. Используемые индикаторы</h3>
+<h3>9.5. Используемые индикаторы</h3>
 <p>Чекбоксы SMA, ATR, Stoch, LinReg, Bollinger, VWAP, CCI, MACD, Momentum. Отключённые удаляются из Op/Cl перед расчётом. SL/TP позиции не зависят от этого списка.</p>
 <p><strong>Оптимизировать</strong> (индикаторы) — перебор непустых комбинаций, остаётся набор с лучшим FINRESP.</p>
 
-<h3>9.8. Каталог логик (UCT, L5, L1…L4, SMA…)</h3>
+<h3>9.6. Каталог логик (UCT, L5, L1…L4, SMA…)</h3>
 <p>Первая — <strong>UCT (Universal Counter Trend)</strong>: контртренд лонг+шорт, LinReg K×ATR, выход с RegDrift от якоря открытия. Equity по UCT считается как по остальным логикам.</p>
-<p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code> из полей выше и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
+<p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code>, <code>@Strict</code> из основного блока и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
 
-<h3>9.9. MOEX — тикеры и префиксы</h3>
+<h3>9.7. MOEX — тикеры и префиксы</h3>
 <table>
 <tr><th>Поле / кнопка</th><th>Назначение</th></tr>
 <tr><td><strong>Тикеры акций</strong> + <strong>Подобрать</strong></td><td>Список через запятую; «Подобрать» отмечает совпадения в <code>calc-sec</code></td></tr>

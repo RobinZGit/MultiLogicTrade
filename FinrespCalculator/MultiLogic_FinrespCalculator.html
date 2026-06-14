@@ -113,6 +113,18 @@ h2:first-child{margin-top:0;}
 .chart-mini--inactive svg{filter:saturate(.35) contrast(.92);}
 .chart-mini-empty{min-height:4.5rem;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:.85rem;border:1px dashed var(--border);border-radius:8px;margin-top:.25rem;}
 .live-mode-hidden{display:none !important;}
+.calc-card-primary{
+  border:2px solid #93c5fd;border-radius:12px;padding:1rem 1.1rem 1.15rem;margin:0 0 1rem;
+  background:linear-gradient(180deg,#eff6ff 0%,#fff 55%);box-shadow:0 2px 10px rgba(37,99,235,.1);
+}
+.calc-primary-title{margin:0 0 .85rem;font-size:1.12rem;font-weight:800;color:#1e3a5f;letter-spacing:-.02em;}
+.calc-at-hint{margin:.15rem 0 .55rem;font-size:.82rem;color:#64748b;line-height:1.45;}
+.calc-at-hint code{font-family:Consolas,monospace;font-size:.8rem;}
+.calc-at-summary{
+  margin:.55rem 0 0;padding:.5rem .65rem;border-radius:8px;background:#f1f5f9;border:1px solid #e2e8f0;
+  font-family:Consolas,monospace;font-size:.78rem;color:#334155;line-height:1.5;word-break:break-word;
+}
+label .at-token{font-family:Consolas,Monaco,monospace;font-weight:700;color:#1d4ed8;}
 details.logic-editor{border:1px solid var(--border);border-radius:10px;padding:.5rem .85rem;margin:1rem 0;background:#fafbfc;}
 details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px 6px rgba(37,99,235,.08);}
 .extra-params-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem .15rem .55rem;margin:-.5rem -.85rem 0;cursor:pointer;list-style:none;}
@@ -124,6 +136,9 @@ details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px
 button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cursor:pointer;line-height:inherit;}
 .extra-section{margin:1rem 0 .5rem;font-size:.95rem;font-weight:600;color:#374151;border-bottom:1px solid var(--border);padding-bottom:.3rem;}
 .extra-section:first-of-type{margin-top:.5rem;}
+.calc-subsec{margin:.85rem 0 .35rem;font-size:.82rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.04em;}
+.calc-param-group{border:1px solid var(--border);border-radius:10px;padding:.65rem .85rem .75rem;margin:.35rem 0 1rem;background:#fafbfc;}
+.calc-param-group .calc-subsec:first-child{margin-top:0;}
 .extra-section-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem 1rem;margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--border);}
 .extra-section-row:first-of-type{margin-top:.5rem;}
 .extra-section-row .extra-section{margin:0;padding:0;border:0;}
@@ -596,6 +611,9 @@ body.calc-running .help-ftr{opacity:.75;}
 
 <div class="calc-card" id="finresp-calc">
 
+<div class="calc-card-primary" id="calc-main-panel">
+<h2 class="calc-primary-title">Основной расчёт</h2>
+
 <div class="calc-field calc-field-wide">
 <div class="calc-sec-head">
 <label for="calc-sec">Акции (фьючерсы) — выбор (Ctrl+клик)</label>
@@ -624,49 +642,55 @@ body.calc-running .help-ftr{opacity:.75;}
 <button class="calc-btn" id="calc-run" type="button">Рассчитать</button>
 <button class="calc-btn calc-btn-secondary" id="calc-select-positive" type="button" disabled title="После расчёта оставить только инструменты с FINRESP ≥ 0">Отобрать FINRESP ≥ 0</button>
 </div>
+<p class="calc-sec-hint" id="calc-date-hint"></p>
+
 <div class="calc-field calc-field-wide calc-logic-row">
 <div class="calc-logic-head">
 <label for="calc-logic">Логика (Ctrl+клик — несколько; приоритет сверху вниз)</label>
 </div>
 <p class="calc-logic-selected" id="calc-logic-selected">—</p>
 <select id="calc-logic" class="calc-logic-multi" multiple size="9"></select>
-<p class="calc-sec-hint" id="calc-logic-hint">Все логики — редактируемые строки в каталоге (Op/Cl или <code>SMA(L;Vol)(Ab|Bl)</code>, <code>SMA(L;Spread=…)(Trend|Anti)</code>). При нескольких выбранных — приоритет сверху вниз.</p>
+<p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в «Дополнительных параметрах» ниже. При нескольких логиках — приоритет сверху вниз.</p>
 </div>
-<div class="calc-field calc-field-wide cache-row">
-<label>База цен MOEX (IndexedDB браузера)</label>
-<div class="cache-btn-row">
-<button class="calc-btn calc-btn-secondary" type="button" id="cache-save-file">Сохранить в файл</button>
-<button class="calc-btn calc-btn-secondary" type="button" id="cache-load-file">Загрузить из файла</button>
-<button class="calc-btn calc-btn-secondary" type="button" id="cache-clear">Удалить базу цен</button>
+
+<p class="calc-subsec">Параметры @ — подстановка в строку логики</p>
+<p class="calc-at-hint"><code>@</code> — плейсхолдер в Op/Cl. При «Рассчитать» и «Применить» числа из полей подставляются в <code>SL[@SL]</code>, <code>LinReg(@LR;K=@K)</code> и т.д. Длина ATR — общая для стопов и коридоров.</p>
+<div class="calc-grid">
+<div class="calc-field"><label for="param-sl"><span class="at-token">@SL</span> — стоп, ×ATR</label>
+<div class="calc-field-opt-row">
+<input id="param-sl" type="number" value="2" min="0" max="50" step="any" title="0 — без stop-loss; кратность ATR, не цена">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-sl" data-opt="sl">Оптимизировать</button>
+</div></div>
+<div class="calc-field"><label for="param-tp"><span class="at-token">@TP</span> — тейк, ×ATR</label>
+<div class="calc-field-opt-row">
+<input id="param-tp" type="number" value="3" min="0" max="50" step="any" title="0 — без take-profit; кратность ATR">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-tp" data-opt="tp">Оптимизировать</button>
+</div></div>
+<div class="calc-field"><label for="param-atr-sl">Длина ATR, свечей</label>
+<div class="calc-field-opt-row">
+<input id="param-atr-sl" type="number" value="14" min="2" max="200" step="1" title="Период ATR в свечах: для @SL/@TP, @SmaCorridor и @K">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-atr-sl">Оптимизировать</button>
+</div></div>
+<div class="calc-field"><label for="param-sma-corridor"><span class="at-token">@SmaCorridor</span> — SMA, ×ATR</label>
+<input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any" title="Ширина коридора в ATR вокруг SMA, не в свечах">
 </div>
-<p class="calc-sec-hint" id="cache-hint">База цен не открыта</p>
-<input type="file" id="cache-file-input" accept=".json,application/json" hidden>
-<p class="note">При «Рассчитать» свечи берутся из браузерной базы IndexedDB, если хватает периода и ТФ; иначе — MOEX, затем свечи добавляются в базу без перезаписи уже сохранённых дат. Файл — резервная копия/перенос базы.</p>
+<div class="calc-field"><label for="param-lr"><span class="at-token">@LR</span> — LinReg, свечей</label>
+<input id="param-lr" type="number" value="20" min="2" max="500" title="Длина линейной регрессии в барах (свечах), не в ATR">
 </div>
-<p class="calc-sec-hint" id="calc-date-hint"></p>
-<div class="calc-result-hero" aria-label="Итог FINRESP">
-<div class="calc-metric-primary calc-metric-finresp"><b>FINRESP Σ (с комиссией)</b><span id="calc-finresp">—</span></div>
-<div class="calc-metric-primary calc-metric-commission"><b>Комиссии уплачено</b><span id="calc-commission">—</span></div>
-<div class="calc-metric-primary"><b>% годовых, простой (с комиссией)</b><span id="calc-ann-simple">—</span></div>
-<div class="calc-metric-primary"><b>% годовых, сложный (с комиссией)</b><span id="calc-ann-compound">—</span></div>
+<div class="calc-field"><label for="param-lin-k"><span class="at-token">@K</span> — LinReg, ×ATR</label>
+<input id="param-lin-k" type="number" value="0.8" min="0.1" max="20" step="0.1" title="Ширина канала LinReg: 0,8 = граница на 0,8×ATR от центра (не свечи, не абсолютная цена). UCT: LinReg(@LR;K=@K)">
 </div>
-<p class="calc-sec-hint" id="calc-ann-hint"></p>
-<p class="calc-sec-hint" style="margin:.35rem 0 .15rem">Строка статуса — серый текст ниже FINRESP и % годовых (сообщения о загрузке MOEX, ошибках, окне расчёта):</p>
-<p class="calc-status" id="calc-status">Выберите бумаги и логику, нажмите «Рассчитать».</p>
-<div class="calc-result-secondary">
-<div class="calc-metric-secondary"><b>Свечей в окне</b><span id="calc-count">—</span></div>
-<div class="calc-metric-secondary"><b>Позиция z</b><span id="calc-pos">—</span></div>
-<div class="calc-metric-secondary"><b>Кэш C</b><span id="calc-cash">—</span></div>
-<div class="calc-metric-secondary" style="grid-column:1/-1"><b>По инструментам</b><div id="calc-bysec" class="bysec-scroll" style="font-size:.75rem">—</div></div>
+<div class="calc-field"><label for="param-strict"><span class="at-token">@Strict</span> — строгость</label>
+<input id="param-strict" type="number" value="3" min="1" max="5" step="1" title="Strict(@Strict) в начале строки логики; 1…5">
 </div>
-<div class="range-grid">
-<div><label for="calc-start">Левая граница</label><input id="calc-start" type="range" min="0" max="0" value="0" disabled><small id="calc-start-label">—</small></div>
-<div><label for="calc-end">Правая граница</label><input id="calc-end" type="range" min="0" max="0" value="0" disabled><small id="calc-end-label">—</small></div>
+</div>
+<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@SL=2 @TP=3 ATR=14 @SmaCorridor=1 @LR=20 @K=0.8×ATR @Strict=3</p>
+<p class="note" id="position-sl-hint" hidden></p>
 </div>
 
 <details class="logic-editor" id="extra-params">
 <summary class="extra-params-head">
-<span class="extra-params-title">Дополнительные параметры и логики</span>
+<span class="extra-params-title">Дополнительные параметры</span>
 <a href="#" class="extra-params-toggle" id="extra-params-toggle" role="button">Развернуть</a>
 </summary>
 
@@ -715,32 +739,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="live-ob-trend-confirm">
 <span>Подтверждать тренд / анти-тренд / отсутствие тренда по стакану (<code>@OBT</code> в строке логики)</span>
 </label>
-<p class="note">По умолчанию выключено. Работает <strong>только в live T-Bank</strong>, если в L1…L5 есть <code>@OBT</code> (Order Book Trend). В FINRESP по истории стакана нет — фильтр не применяется. Тренд: перевес bid/ask по стороне сделки; <code>@OBT(anti)</code> или <code>Entry=FlatOnly</code> — анти-тренд; <code>@OBT(flat)</code> или L4 — боковик (|imbalance| мал).</p>
-
-<p class="extra-section">SL / TP позиции по ATR (вкладка «Логики» робота)</p>
-<div class="calc-grid">
-<div class="calc-field"><label for="param-sl">SL позиции кратность ATR (@SL)</label>
-<div class="calc-field-opt-row">
-<input id="param-sl" type="number" value="2" min="0" max="50" step="any" title="0 — без stop-loss">
-<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-sl" data-opt="sl">Оптимизировать</button>
-</div></div>
-<div class="calc-field"><label for="param-tp">TP позиции кратность ATR (@TP)</label>
-<div class="calc-field-opt-row">
-<input id="param-tp" type="number" value="3" min="0" max="50" step="any" title="0 — без take-profit">
-<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-tp" data-opt="tp">Оптимизировать</button>
-</div></div>
-<div class="calc-field"><label for="param-atr-sl">Длина ATR для SL/TP</label>
-<div class="calc-field-opt-row">
-<input id="param-atr-sl" type="number" value="14" min="2" max="200" step="1">
-<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-atr-sl">Оптимизировать</button>
-</div></div>
-<div class="calc-field"><label for="param-sma-corridor" title="Мёртвая зона ±K×ATR вокруг SMA для логик SMA-эталон">Коридор SMA, кратность ATR</label>
-<input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any">
-</div>
-</div>
-<p class="note">Подставляется в строку L1…L5 как SL[@SL] TP[@TP] и в расчёт для всех логик. Для лонга: SL = вход − K×ATR, TP = вход + K×ATR; для шорта наоборот. 0 у кратности — без стопа. После изменения полей нажмите «Рассчитать».</p>
-<p class="note">Логики <strong>SMA-эталон</strong> в каталоге: <code>SMA(L;Spread=@SmaCorridor)(Trend|Anti)</code> — коридор ±K×ATR (длина ATR — «Длина ATR для SL/TP»). Внутри коридора сделок нет. K=0 — как <code>SMA(L;Vol)(Ab|Bl)</code>.</p>
-<p class="note" id="position-sl-hint" hidden></p>
+<p class="note">По умолчанию выключено. Работает <strong>только в live T-Bank</strong>, если в строке логики есть <code>@OBT</code>. В FINRESP по истории стакана нет.</p>
 
 <p class="extra-section">Общепортфельный Stopper (вкладка «Stopper» робота)</p>
 <div class="calc-grid">
@@ -763,12 +762,6 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="stopper-ref" type="number" value="0" min="0" step="1000" title="0 — авто: equity на первой свече окна"></div>
 </div>
 <p class="note">Equity = сумма FINRESP по инструментам. ATR<sub>порт</sub> = mean(|Δequity|) за N свечей. SL/TP портфеля действуют, если кратность &gt; 0; длина ATR ≥ 2. При срабатывании — закрытие всех позиций, база обновляется.</p>
-
-<p class="extra-section">Параметры строки логики</p>
-<div class="calc-grid">
-<div class="calc-field"><label for="param-lr">LinReg длина (@LR)</label><input id="param-lr" type="number" value="20" min="2" max="500"></div>
-<div class="calc-field"><label for="param-lin-k">Ширина канала LinReg (@K), ×ATR</label><input id="param-lin-k" type="number" value="1.5" min="0.1" max="20" step="0.1" title="Universal Counter Trend и LinReg(K=@K): граница = центр ± K×ATR"></div>
-</div>
 
 <p class="extra-section">Используемые индикаторы</p>
 <div class="useful-indicators-card" id="useful-indicators-card">
@@ -796,6 +789,19 @@ body.calc-running .help-ftr{opacity:.75;}
 <button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
 <p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
 
+<p class="extra-section">База цен MOEX (IndexedDB браузера)</p>
+<div class="calc-field calc-field-wide cache-row">
+<label>Кэш свечей</label>
+<div class="cache-btn-row">
+<button class="calc-btn calc-btn-secondary" type="button" id="cache-save-file">Сохранить в файл</button>
+<button class="calc-btn calc-btn-secondary" type="button" id="cache-load-file">Загрузить из файла</button>
+<button class="calc-btn calc-btn-secondary" type="button" id="cache-clear">Удалить базу цен</button>
+</div>
+<p class="calc-sec-hint" id="cache-hint">База цен не открыта</p>
+<input type="file" id="cache-file-input" accept=".json,application/json" hidden>
+<p class="note">При «Рассчитать» свечи берутся из IndexedDB, если хватает периода и ТФ; иначе — MOEX, затем дополнение кэша без перезаписи уже сохранённых дат. Файл — резервная копия/перенос базы.</p>
+</div>
+
 <p class="extra-section">MOEX — тикеры акций и префиксы фьючерсов</p>
 <div class="logic-grid">
 <div><label for="prefix-stocks">Тикеры акций (через запятую; точное совпадение)</label>
@@ -811,6 +817,26 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <p class="note">Как вкладки «MOEX акции» / «MOEX фьючерсы» в роботе. Акции: «Подобрать» — из текста поля. Фьючерсы: «Подобрать» и «Рассчитать» — контракты MOEX по префиксам и периоду расчёта: экспирация (LASTTRADEDATE) не раньше начала периода, выпуск (FIRSTTRADEDATE) внутри периода; бессрочные (…RUBF, IMOEXF) — по экспирации. При «выбрать все фьючерсы» в расчёт попадают все подходящие серии, не только по одному на префикс.</p>
 </details>
+
+<div class="calc-result-hero" aria-label="Итог FINRESP">
+<div class="calc-metric-primary calc-metric-finresp"><b>FINRESP Σ (с комиссией)</b><span id="calc-finresp">—</span></div>
+<div class="calc-metric-primary calc-metric-commission"><b>Комиссии уплачено</b><span id="calc-commission">—</span></div>
+<div class="calc-metric-primary"><b>% годовых, простой (с комиссией)</b><span id="calc-ann-simple">—</span></div>
+<div class="calc-metric-primary"><b>% годовых, сложный (с комиссией)</b><span id="calc-ann-compound">—</span></div>
+</div>
+<p class="calc-sec-hint" id="calc-ann-hint"></p>
+<p class="calc-sec-hint" style="margin:.35rem 0 .15rem">Строка статуса — серый текст ниже FINRESP и % годовых (сообщения о загрузке MOEX, ошибках, окне расчёта):</p>
+<p class="calc-status" id="calc-status">Выберите бумаги и логику, нажмите «Рассчитать».</p>
+<div class="calc-result-secondary">
+<div class="calc-metric-secondary"><b>Свечей в окне</b><span id="calc-count">—</span></div>
+<div class="calc-metric-secondary"><b>Позиция z</b><span id="calc-pos">—</span></div>
+<div class="calc-metric-secondary"><b>Кэш C</b><span id="calc-cash">—</span></div>
+<div class="calc-metric-secondary" style="grid-column:1/-1"><b>По инструментам</b><div id="calc-bysec" class="bysec-scroll" style="font-size:.75rem">—</div></div>
+</div>
+<div class="range-grid">
+<div><label for="calc-start">Левая граница</label><input id="calc-start" type="range" min="0" max="0" value="0" disabled><small id="calc-start-label">—</small></div>
+<div><label for="calc-end">Правая граница</label><input id="calc-end" type="range" min="0" max="0" value="0" disabled><small id="calc-end-label">—</small></div>
+</div>
 
 <div class="chart-card" id="calc-chart-equity" hidden></div>
 <div class="chart-card" id="calc-chart" hidden></div>
@@ -1666,6 +1692,7 @@ body.calc-running .help-ftr{opacity:.75;}
         smaCorridor: $("param-sma-corridor")?.value || "",
         lr: $("param-lr")?.value || "",
         linK: $("param-lin-k")?.value || "",
+        strict: $("param-strict")?.value || "",
         sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
       stopper: {
@@ -1749,6 +1776,7 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-sma-corridor", cfg.params?.smaCorridor);
       setValueIfExists("param-lr", cfg.params?.lr);
       setValueIfExists("param-lin-k", cfg.params?.linK);
+      setValueIfExists("param-strict", cfg.params?.strict);
       setValueIfExists("stopper-sl-mult", cfg.stopper?.slMult);
       setValueIfExists("stopper-tp-mult", cfg.stopper?.tpMult);
       setValueIfExists("stopper-atr-len", cfg.stopper?.atrLen);
@@ -2214,9 +2242,14 @@ body.calc-running .help-ftr{opacity:.75;}
     const atrLen = Number.isFinite(atrRaw) && atrRaw >= 2
       ? Math.round(atrRaw)
       : ((sl > 0 || tp > 0) ? E.DEFAULT_PARAMS.slTpAtrLen : 2);
+    const strictRaw = +$("param-strict").value;
+    const strict = Number.isFinite(strictRaw) && strictRaw >= 1 && strictRaw <= 5
+      ? Math.round(strictRaw)
+      : E.DEFAULT_PARAMS.Strict;
     return {
       LR: +$("param-lr").value || E.DEFAULT_PARAMS.LR,
       LinK: Math.max(0.1, +$("param-lin-k").value ?? E.DEFAULT_PARAMS.LinK),
+      Strict: strict,
       SL: sl,
       TP: tp,
       slTpAtrLen: atrLen,
@@ -3823,6 +3856,21 @@ body.calc-running .help-ftr{opacity:.75;}
     }
   }
 
+  /** Сводка подстановок @ в строке логики. */
+  function updateAtParamsSummary() {
+    const el = $("calc-at-summary");
+    if (!el) return;
+    const sl = $("param-sl")?.value ?? "—";
+    const tp = $("param-tp")?.value ?? "—";
+    const atr = $("param-atr-sl")?.value ?? "—";
+    const sma = $("param-sma-corridor")?.value ?? "—";
+    const lr = $("param-lr")?.value ?? "—";
+    const k = $("param-lin-k")?.value ?? "—";
+    const strict = $("param-strict")?.value ?? "—";
+    el.textContent =
+      `@SL=${sl} @TP=${tp} ATR=${atr} @SmaCorridor=${sma} @LR=${lr} @K=${k}×ATR @Strict=${strict}`;
+  }
+
   /** Обновление: `updatePositionSlHint`. */
   function updatePositionSlHint() {
     const el = $("position-sl-hint");
@@ -3852,6 +3900,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Отрисовка элемента live-панели: `renderFromParams`. */
   function renderFromParams() {
+    updateAtParamsSummary();
     invalidateFormChange();
   }
 
@@ -5461,8 +5510,8 @@ ${totalBlock}
   $("vol-type").addEventListener("change", () => { syncVolumeFields(); invalidateFormChange(); });
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
-  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-lr", "param-lin-k", "param-sma-corridor", "stopper-ref"].forEach((id) => {
-    $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); });
+  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-ref"].forEach((id) => {
+    $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
   });
   OPT_BUTTONS.forEach(({ inputId }) => {
@@ -5542,6 +5591,7 @@ ${totalBlock}
     applySavedConfig();
     fillLogicSelect();
     updatePositionSlHint();
+    updateAtParamsSummary();
     syncMonthInputFromDates();
     syncVolumeFields();
     syncLeverageDisplay();

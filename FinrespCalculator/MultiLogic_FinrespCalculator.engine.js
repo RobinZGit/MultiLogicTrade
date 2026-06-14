@@ -15,7 +15,7 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 1.5 };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 0.8 };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
@@ -397,7 +397,7 @@
       if (Number.isFinite(n) && n > 0) return n;
     }
     const p = params || DEFAULT_PARAMS;
-    return Number(p.LinK ?? DEFAULT_PARAMS.LinK) || 1.5;
+    return Number(p.LinK ?? DEFAULT_PARAMS.LinK) || 0.8;
   }
 
   /** Подпрограмма `parseLinRegAtrLen`. */
