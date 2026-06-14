@@ -675,16 +675,22 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any" title="Ширина коридора в ATR вокруг SMA, не в свечах">
 </div>
 <div class="calc-field"><label for="param-lr"><span class="at-token">@LR</span> — LinReg, свечей</label>
-<input id="param-lr" type="number" value="20" min="2" max="500" title="Длина линейной регрессии в барах (свечах), не в ATR">
-</div>
+<div class="calc-field-opt-row">
+<input id="param-lr" type="number" value="20" min="2" max="500" step="1" title="Длина линейной регрессии в барах (свечах), не в ATR">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-lr" data-opt="lr">Оптимизировать</button>
+</div></div>
 <div class="calc-field"><label for="param-lin-k"><span class="at-token">@K</span> — LinReg, ×ATR</label>
-<input id="param-lin-k" type="number" value="0.8" min="0.1" max="20" step="0.1" title="Ширина канала LinReg: 0,8 = граница на 0,8×ATR от центра (не свечи, не абсолютная цена). UCT: LinReg(@LR;K=@K)">
-</div>
+<div class="calc-field-opt-row">
+<input id="param-lin-k" type="number" value="2" min="0.1" max="20" step="0.1" title="Ширина канала LinReg: 2 = граница на 2×ATR от центра (не свечи, не абсолютная цена). UT/UCT: LinReg(@LR;K=@K)">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-lin-k" data-opt="lin-k">Оптимизировать</button>
+</div></div>
 <div class="calc-field"><label for="param-strict"><span class="at-token">@Strict</span> — строгость</label>
+<div class="calc-field-opt-row">
 <input id="param-strict" type="number" value="3" min="1" max="5" step="1" title="Strict(@Strict) в начале строки логики; 1…5">
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-strict" data-opt="strict">Оптимизировать</button>
+</div></div>
 </div>
-</div>
-<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@SL=2 @TP=3 ATR=14 @SmaCorridor=1 @LR=20 @K=0.8×ATR @Strict=3</p>
+<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@SL=2 @TP=3 ATR=14 @SmaCorridor=1 @LR=20 @K=2×ATR @Strict=3</p>
 <p class="note" id="position-sl-hint" hidden></p>
 </div>
 
@@ -776,7 +782,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 
 <p class="extra-section">Каталог логик</p>
-<p class="note">Список «Логика» = этот каталог. Первая — <strong>UCT (Universal Counter Trend)</strong>, затем L5, L1…L4. Строка Op/Cl, SMA-коридор или объёмная SMA, плюс SL/TP.</p>
+<p class="note">Список «Логика» = этот каталог. Первая — <strong>UT (Universal Trend)</strong>, затем UCT, L5, L1…L4. Строка Op/Cl, SMA-коридор или объёмная SMA, плюс SL/TP.</p>
 <div class="logic-lines-toolbar">
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
@@ -1425,7 +1431,7 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
-    logicLineKeys: ["UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLineKeys: ["UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
@@ -1538,6 +1544,9 @@ body.calc-running .help-ftr{opacity:.75;}
     { kind: "sl", btnId: "opt-sl", inputId: "param-sl", label: "@SL", position: true },
     { kind: "tp", btnId: "opt-tp", inputId: "param-tp", label: "@TP", position: true },
     { kind: "atr-sl", btnId: "opt-atr-sl", inputId: "param-atr-sl", label: "ATR SL/TP", integer: true, position: true },
+    { kind: "lr", btnId: "opt-lr", inputId: "param-lr", label: "@LR", integer: true, position: true },
+    { kind: "lin-k", btnId: "opt-lin-k", inputId: "param-lin-k", label: "@K", position: true },
+    { kind: "strict", btnId: "opt-strict", inputId: "param-strict", label: "@Strict", integer: true, position: true },
     { kind: "p-sl", btnId: "opt-stopper-sl", inputId: "stopper-sl-mult", label: "портф. SL" },
     { kind: "p-tp", btnId: "opt-stopper-tp", inputId: "stopper-tp-mult", label: "портф. TP" },
     { kind: "p-atr", btnId: "opt-stopper-atr", inputId: "stopper-atr-len", label: "портф. ATR", integer: true },
@@ -1709,7 +1718,7 @@ body.calc-running .help-ftr{opacity:.75;}
       logicLines: visibleLogicLinesConfig(),
       logicLineKeys: state.logicLineKeys.filter((k) => !hiddenLogicKeySet().has(k)),
       hiddenLogicKeys: (state.hiddenLogicKeys || []).slice(),
-      logicCatalogVersion: 2,
+      logicCatalogVersion: 3,
       logicLabels: { ...state.logicLabels },
       randomPriceShift: !!$("random-price-shift")?.checked
     };
@@ -3197,6 +3206,12 @@ body.calc-running .help-ftr{opacity:.75;}
         return { params: { ...p, TP: Math.max(0, cv) }, stopper: sc };
       case "atr-sl":
         return { params: { ...p, slTpAtrLen: Math.max(2, Math.round(cv)) }, stopper: sc };
+      case "lr":
+        return { params: { ...p, LR: Math.max(2, Math.round(cv)) }, stopper: sc };
+      case "lin-k":
+        return { params: { ...p, LinK: Math.max(0.1, cv) }, stopper: sc };
+      case "strict":
+        return { params: { ...p, Strict: Math.max(1, Math.min(5, Math.round(cv))) }, stopper: sc };
       case "p-sl": {
         const slMult = Math.max(0, cv);
         return { params: p, stopper: { ...sc, slMult, useSl: slMult > 0 } };
@@ -3427,7 +3442,7 @@ body.calc-running .help-ftr{opacity:.75;}
   // === Выбор логики (calc-logic, множественный) ===
 
   const DEFAULT_LOGIC_LINE_KEYS = [
-    "UCT", "L5", "L1", "L2", "L3", "L4",
+    "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
     "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
   ];
 
@@ -3460,6 +3475,18 @@ body.calc-running .help-ftr{opacity:.75;}
         seen.add(k);
       }
     }
+    normalizeLogicLineKeyOrder();
+  }
+
+  /** Порядок ключей каталога: встроенные — как DEFAULT_LOGIC_LINE_KEYS, затем пользовательские U*. */
+  function normalizeLogicLineKeyOrder() {
+    const hidden = hiddenLogicKeySet();
+    const set = new Set(state.logicLineKeys.filter((k) => !hidden.has(k)));
+    const ordered = DEFAULT_LOGIC_LINE_KEYS.filter((k) => set.has(k));
+    for (const k of state.logicLineKeys) {
+      if (!ordered.includes(k) && !hidden.has(k)) ordered.push(k);
+    }
+    state.logicLineKeys = ordered;
   }
 
   /** Ленивая инициализация/проверка: `ensureDefaultLogicLines`. */
@@ -3741,16 +3768,16 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Функция: id выбранных логик в порядке приоритета (верх списка = первая). */
   function selectedLogicIds() {
     const sel = $("calc-logic");
-    if (!sel) return state.logicSelectionCleared ? [] : ["UCT"];
+    if (!sel) return state.logicSelectionCleared ? [] : ["UT"];
     const ids = [...sel.selectedOptions].map((o) => o.value).filter(Boolean);
     if (ids.length) return ids;
     if (state.logicSelectionCleared) return [];
-    return sel.value ? [sel.value] : ["UCT"];
+    return sel.value ? [sel.value] : ["UT"];
   }
 
   /** Функция: первая логика в списке (для @OBT, подсказок, live). */
   function primaryLogicId() {
-    return selectedLogicIds()[0] || "UCT";
+    return selectedLogicIds()[0] || "UT";
   }
 
   /** Процедура: восстановить selectedOptions из config.logics / config.logic. */
@@ -3769,7 +3796,7 @@ body.calc-running .help-ftr{opacity:.75;}
       if (Array.isArray(cfg?.logics) && cfg.logics.length === 0) {
         state.logicSelectionCleared = true;
       } else if (sel.options.length) {
-        const fallback = allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0].value);
+        const fallback = allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0].value));
         for (const o of sel.options) o.selected = o.value === fallback;
         state.logicSelectionCleared = false;
       }
@@ -3795,7 +3822,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!el || !sel) return;
     const ids = selectedLogicIds();
     if (!ids.length) {
-      el.textContent = state.logicSelectionCleared ? "— не выбрано" : "— не выбрано (по умолчанию UCT)";
+      el.textContent = state.logicSelectionCleared ? "— не выбрано" : "— не выбрано (по умолчанию UT)";
     } else if (ids.length === 1) {
       el.textContent = `Выбрана: ${logicDisplayName(ids[0])}`;
     } else {
@@ -3835,7 +3862,7 @@ body.calc-running .help-ftr{opacity:.75;}
       for (const o of sel.options) o.selected = false;
       syncLogicSelectedHint();
     } else if (!pick.length) {
-      const fallback = allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0]?.value);
+      const fallback = allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0]?.value));
       for (const o of sel.options) o.selected = o.value === fallback;
       syncLogicSelectedHint();
     } else {
@@ -4481,6 +4508,7 @@ ${markers}
   }
 
   const LOGIC_EQUITY_COLORS = {
+    UT: "#b45309",
     UCT: "#be123c",
     L5: "#047857",
     L1: "#2563eb",

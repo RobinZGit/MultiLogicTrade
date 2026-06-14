@@ -132,11 +132,11 @@ th{background:#f8fafc;width:28%;}
 <tr><td><strong>@TP</strong> — тейк, ×ATR</td><td>Take-profit позиции; кратность ATR</td></tr>
 <tr><td><strong>Длина ATR, свечей</strong></td><td>Период ATR в <strong>барах (свечах)</strong> — общий для @SL/@TP, @SmaCorridor и @K</td></tr>
 <tr><td><strong>@SmaCorridor</strong> — SMA, ×ATR</td><td>Ширина коридора ±K×ATR вокруг SMA (логики SMA-эталон); не в свечах</td></tr>
-<tr><td><strong>@LR</strong> — LinReg, свечей</td><td>Длина линейной регрессии в <strong>барах (свечах)</strong>, не в ATR</td></tr>
-<tr><td><strong>@K</strong> — LinReg, ×ATR</td><td>Ширина канала LinReg: по умолчанию <strong>0,8</strong> = граница на 0,8×ATR от центра (не свечи, не абсолютная цена). UCT: <code>LinReg(@LR;K=@K)</code></td></tr>
-<tr><td><strong>@Strict</strong> — строгость</td><td><code>Strict(@Strict)</code> в начале строки; 1…5</td></tr>
+<tr><td><strong>@LR</strong> — LinReg, свечей</td><td>Длина линейной регрессии в <strong>барах (свечах)</strong>, не в ATR. Кнопка «Оптимизировать»</td></tr>
+<tr><td><strong>@K</strong> — LinReg, ×ATR</td><td>Ширина канала: по умолчанию <strong>2</strong>×ATR (не свечи, не абсолютная цена). UT/UCT: <code>LinReg(@LR;K=@K)</code>. Кнопка «Оптимизировать»</td></tr>
+<tr><td><strong>@Strict</strong> — строгость</td><td><code>Strict(@Strict)</code> в начале строки; 1…5. Кнопка «Оптимизировать»</td></tr>
 </table>
-<p class="note">Серая строка-сводка под полями показывает текущие значения подстановок. Кнопки «Оптимизировать» у @SL, @TP и длины ATR перебирают значения по FINRESP.</p>
+<p class="note">Серая строка-сводка под полями показывает текущие значения подстановок. Кнопки «Оптимизировать» у @SL, @TP, длины ATR, @LR, @K и @Strict перебирают значения по FINRESP.</p>
 
 <h2 id="cache">6. База цен MOEX (доп. параметры)</h2>
 <table>
@@ -179,7 +179,7 @@ th{background:#f8fafc;width:28%;}
 <p>Под ползунками — даты/время выбранных границ. Пересчёт мгновенный, без повторной загрузки MOEX.</p>
 
 <h2 id="extra">9. Дополнительные параметры</h2>
-<p>Блок сворачивается/разворачивается по заголовку «Дополнительные параметры». Содержит объём, Stopper, индикаторы, каталог логик, кэш цен и MOEX-тикеры. Поля @SL, @TP, @LR, @K и др. — в основном блоке выше.</p>
+<p>Блок сворачивается/разворачивается по заголовку «Дополнительные параметры». Содержит объём, Stopper, индикаторы, каталог логик, кэш цен и MOEX-тикеры. Поля @SL, @TP, @LR, @K, @Strict и др. — в основном блоке выше.</p>
 
 <h3>9.1. Объём сделки</h3>
 <table>
@@ -223,8 +223,8 @@ th{background:#f8fafc;width:28%;}
 <p>Чекбоксы SMA, ATR, Stoch, LinReg, Bollinger, VWAP, CCI, MACD, Momentum. Отключённые удаляются из Op/Cl перед расчётом. SL/TP позиции не зависят от этого списка.</p>
 <p><strong>Оптимизировать</strong> (индикаторы) — перебор непустых комбинаций, остаётся набор с лучшим FINRESP.</p>
 
-<h3>9.6. Каталог логик (UCT, L5, L1…L4, SMA…)</h3>
-<p>Первая — <strong>UCT (Universal Counter Trend)</strong>: контртренд лонг+шорт, LinReg K×ATR, выход с RegDrift от якоря открытия. Equity по UCT считается как по остальным логикам.</p>
+<h3>9.6. Каталог логик (UT, UCT, L5, L1…L4, SMA…)</h3>
+<p>Первая — <strong>UT (Universal Trend)</strong>: тренд лонг+шорт, пробой LinReg K×ATR, выход с RegDrift. Вторая — <strong>UCT (Universal Counter Trend)</strong>: контртренд, отскок от края канала.</p>
 <p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code>, <code>@Strict</code> из основного блока и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
 
 <h3>9.7. MOEX — тикеры и префиксы</h3>
@@ -241,7 +241,7 @@ th{background:#f8fafc;width:28%;}
 <table>
 <tr><th>Блок</th><th>Назначение</th></tr>
 <tr><td><strong>Графики по инструментам</strong> (<code>calc-chart</code>)</td><td>Mini-графики цены, индикаторов, сделок по каждой бумаге в окне</td></tr>
-<tr><td><strong>Equity портфеля</strong> (<code>calc-chart-equity</code>)</td><td>Суммарная кривая equity и сравнение логик UCT, L5, L1…L4</td></tr>
+<tr><td><strong>Equity портфеля</strong> (<code>calc-chart-equity</code>)</td><td>Суммарная кривая equity и сравнение логик UT, UCT, L5, L1…L4</td></tr>
 </table>
 
 <h2 id="tbank">11. Реальный счёт T-Bank</h2>

@@ -15,7 +15,7 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 0.8 };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2 };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
@@ -213,6 +213,12 @@
   const SLTP = " SL[@SL] TP[@TP] ";
 
   const DEFAULT_LOGIC_LINES = {
+    UT: UCT_REGIME +
+      "Op(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K)(AbLinK))) " +
+      "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) " +
+      "Op(Short(SMA(100)(Bl) AND LinReg(@LR;K=@K)(BlLinK))) " +
+      "Cl(Short(SMA(100)(Ab) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) " +
+      SLTP + "Note(universal-trend)",
     UCT: UCT_REGIME +
       "Op(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K)(BlLinK))) " +
       "Cl(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) " +
@@ -252,6 +258,12 @@
   };
 
   const BUILTIN_META = [
+    {
+      id: "UT",
+      name: "Universal Trend — LinReg K×ATR + RegDrift",
+      type: "logic_line",
+      key: "UT"
+    },
     {
       id: "UCT",
       name: "Universal Counter Trend — LinReg K×ATR + RegDrift",
@@ -397,7 +409,7 @@
       if (Number.isFinite(n) && n > 0) return n;
     }
     const p = params || DEFAULT_PARAMS;
-    return Number(p.LinK ?? DEFAULT_PARAMS.LinK) || 0.8;
+    return Number(p.LinK ?? DEFAULT_PARAMS.LinK) || 2;
   }
 
   /** Подпрограмма `parseLinRegAtrLen`. */
