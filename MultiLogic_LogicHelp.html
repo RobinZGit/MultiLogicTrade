@@ -67,7 +67,8 @@ a{color:var(--accent);}
 <li><a href="#topic-3">3) Условия во 2-й скобке Ind(…)(условие):</a></li>
 <li><a href="#topic-4">4) SL / TP (на уровне строки, после Cl):</a></li>
 <li><a href="#topic-5">5) Слоты «Логика 1…10»: при изменении любой строки робот перечитывает все 10 параметров.</a></li>
-<li><a href="#topic-6a">6a) Стандартные логики L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</a></li>
+<li><a href="#topic-6a">6a) Стандартные логики UCT, L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</a></li>
+<li><a href="#def-uct">UCT — Universal Counter Trend (лонг+шорт, контртренд)</a></li>
 <li><a href="#def-l1">L1 — lon-trend (Лонг, тренд)</a></li>
 <li><a href="#def-l2">L2 — lon-bokovik (Лонг, боковик)</a></li>
 <li><a href="#def-l3">L3 — short-trend (Шорт, тренд)</a></li>
@@ -346,16 +347,28 @@ a{color:var(--accent);}
 <li>Другие параметры — отдельный индикатор. Пустые/Disabled логики индикаторы не добавляют.</li>
 <li>Номера индикаторов: 101 … 1099 (общий пул, без дублей).</li>
 </ul>
-<h3 class="sec" id="topic-6a">6a) Стандартные логики L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</h3>
+<h3 class="sec" id="topic-6a">6a) Стандартные логики UCT, L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</h3>
 <ul>
+<li>В FINRESP-калькуляторе в каталоге первой идёт <strong>UCT</strong> (Universal Counter Trend), затем L5 и L1…L4.</li>
 <li>Записывает четыре строки в «Логика 1…4», очищает «Логика 5…10»; индикаторы на графике — сразу.</li>
-<li>Смысл набора: на базе TrendMultiIndicator+CCI — два лонга (тренд и боковик) и два шорта (тренд и боковик).</li>
+<li>Смысл набора L1…L4: на базе TrendMultiIndicator+CCI — два лонга (тренд и боковик) и два шорта (тренд и боковик).</li>
 <li>L1/L3 — Regime MatchSide (вход по наклону LinReg); L2/L4 — Regime FlatOnly (вход во флэте, Stoch от границ).</li>
 <li>При Regime=On на одной свече могут сработать L1+L2 (лонг) и L3+L4 (шорт) — разные фильтры, не дубли.</li>
 </ul>
 <div class="logic-formula-group">
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] — кратность ATR из параметров вкладки «Логики»; 0 = без SL/TP по позиции.</code></div>
 </div>
+<h4 id="def-uct" class="def-logic">UCT — Universal Counter Trend (лонг + шорт, контртренд)</h4>
+<div class="logic-formula-group">
+<div class="logic-formula"><span class="logic-formula-label">Строка: </span><code class="logic-formula-code">(<span class="lf-param-ref">@Strict</span>) <span class="lf-regime">Regime</span>(LinReg;L=@LR;SlopeLb=3;OnFlip=Close) Op(Long(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>)(BlLinK))) Cl(Long(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) Op(Short(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>)(AbLinK))) Cl(Short(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) <span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] <span class="lf-note-tag">Note</span>(universal-counter-trend)</code></div>
+</div>
+<ul>
+<li><strong>Контртренд всегда</strong> — без SlopeDead и без Entry=FlatOnly; боковик/тренд для входа не фильтруются.</li>
+<li><strong>@K</strong> — ширина канала LinReg в ×ATR: нижняя/верхняя граница = центр ± K×ATR.</li>
+<li><strong>Op</strong> — канал на текущем баре: лонг <span class="lf-ind">BlLinK</span> (close ≤ mid−K×ATR) + <span class="lf-ind">SMA</span>(Bl); шорт <span class="lf-ind">AbLinK</span> + <span class="lf-ind">SMA</span>(Ab).</li>
+<li><strong>Cl</strong> — якорь открытия + <strong>RegDrift</strong> = β<sub>open</sub>×баров в позиции: лонг <span class="lf-ind">AbRegK</span> (close ≥ mid<sub>open</sub>+RegDrift+K×ATR) + <span class="lf-ind">SMA</span>(Ab); шорт <span class="lf-ind">BlRegK</span> + <span class="lf-ind">SMA</span>(Bl).</li>
+<li><strong>OnFlip(Close)</strong> — принудительный выход при смене наклона LinReg (SlopeLb из Regime).</li>
+</ul>
 <h4 id="def-l1" class="def-logic">L1 — lon-trend (Лонг, тренд)</h4>
 <div class="logic-formula-group">
 <div class="logic-formula"><span class="logic-formula-label">Strict: </span><code class="logic-formula-code">(<span class="lf-param-ref">@Strict</span>) <span class="lf-regime">Regime</span>(LinReg;L=@LR;Dev=2;SlopeLb=3;OnFlip=Close;Entry=MatchSide) Op(Long(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;Dev=2)(AbUp) <span class="lf-kw">AND</span> <span class="lf-ind">ATR</span>(14;Gr=3%;Lb=5)(GrOk) <span class="lf-kw">AND</span> <span class="lf-ind">CCI</span>(20;Lmin=100;Smax=-100)(CCI&gt;=100) <span class="lf-kw">AND</span> <span class="lf-ind">MACD</span>(12,26,9)(Macd&gt;Sig))) Cl(Long(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;Dev=2)(BlLo) <span class="lf-kw">AND</span> <span class="lf-ind">CCI</span>(20;Lmin=100;Smax=-100)(CCI&lt;=-100) <span class="lf-kw">AND</span> <span class="lf-ind">MACD</span>(12,26,9)(Macd&lt;Sig)) OnFlip(Close)) <span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] <span class="lf-note-tag">Note</span>(lon-trend)</code></div>
@@ -543,8 +556,18 @@ a{color:var(--accent);}
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-ind">LinReg</span>(@LR;Dev=2)</code><span class="logic-formula-comment"> — длина из параметра, отклонение границ</span></div>
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-ind">LinReg</span>(50;Dev=2)</code><span class="logic-formula-comment"> — явная длина 50 (не из параметра)</span></div>
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-ind">LinReg</span>(L=@LR,Dev=2)</code><span class="logic-formula-comment"> — именованно, длина из параметра</span></div>
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>)</code><span class="logic-formula-comment"> — канал ±K×ATR вокруг центра (Universal Counter Trend)</span></div>
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>;Anchor=Open;Drift=RegDrift)</code><span class="logic-formula-comment"> — выход: mid<sub>open</sub> + β×Δt ± K×ATR</span></div>
 </div>
-<p>Сигналы (как TrendMultiIndicatorScreener — канал LinReg):</p>
+<p>Сигналы канала K×ATR (FINRESP / Universal Counter Trend):</p>
+<div class="logic-formula-group">
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-op">Op</span>[BlLinK] — close ≤ mid − K×ATR (лонг, отскок снизу)</code></div>
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-op">Op</span>[AbLinK] — close ≥ mid + K×ATR (шорт, отскок сверху)</code></div>
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-cl">Cl</span>[AbRegK] — close ≥ mid<sub>open</sub> + RegDrift + K×ATR (выход лонга)</code></div>
+<div class="logic-formula"><code class="logic-formula-code"><span class="lf-cl">Cl</span>[BlRegK] — close ≤ mid<sub>open</sub> − RegDrift − K×ATR (выход шорта)</code></div>
+<div class="logic-formula"><code class="logic-formula-code">RegDrift = β<sub>open</sub> × баров в позиции; β — приращение центра LinReg за 1 бар на входе</code></div>
+</div>
+<p>Сигналы Dev×σ (как TrendMultiIndicatorScreener — канал LinReg):</p>
 <div class="logic-formula-group">
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-op">Op</span>[AbUp]  — close выше верхней линии (лонг)</code></div>
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-cl">Cl</span>[BlUp]  — close ниже верхней (выход)</code></div>

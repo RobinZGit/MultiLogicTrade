@@ -15,7 +15,7 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1 };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 3, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 1.5 };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
@@ -208,9 +208,17 @@
     "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;OnFlip=Close;Entry=MatchSide) ";
   const BOKOVIK_REGIME =
     "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close;Entry=FlatOnly) ";
+  const UCT_REGIME =
+    "Strict(@Strict) Regime(LinReg;L=@LR;SlopeLb=3;OnFlip=Close) ";
   const SLTP = " SL[@SL] TP[@TP] ";
 
   const DEFAULT_LOGIC_LINES = {
+    UCT: UCT_REGIME +
+      "Op(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K)(BlLinK))) " +
+      "Cl(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) " +
+      "Op(Short(SMA(100)(Ab) AND LinReg(@LR;K=@K)(AbLinK))) " +
+      "Cl(Short(SMA(100)(Bl) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) " +
+      SLTP + "Note(universal-counter-trend)",
     L1: TREND_REGIME +
       "Op(Long(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND MACD(12,26,9)(Macd>Sig))) " +
       "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;Dev=2)(BlLo) AND CCI(20;Lmin=100;Smax=-100)(CCI<=-100) AND MACD(12,26,9)(Macd<Sig)) OnFlip(Close))" +
@@ -244,6 +252,12 @@
   };
 
   const BUILTIN_META = [
+    {
+      id: "UCT",
+      name: "Universal Counter Trend — LinReg K×ATR + RegDrift",
+      type: "logic_line",
+      key: "UCT"
+    },
     { id: "L5", name: "L5 — LmaxTrend, лонг+шорт тренд", type: "logic_line", key: "L5" },
     { id: "L1", name: "L1 — лонг, тренд", type: "logic_line", key: "L1" },
     { id: "L2", name: "L2 — лонг, боковик", type: "logic_line", key: "L2" },
@@ -276,7 +290,8 @@
       .replace(/@Strict/g, String(p.Strict))
       .replace(/@SL/g, String(p.SL))
       .replace(/@TP/g, String(p.TP))
-      .replace(/@SmaCorridor/g, String(p.smaCorridorAtr ?? DEFAULT_PARAMS.smaCorridorAtr));
+      .replace(/@SmaCorridor/g, String(p.smaCorridorAtr ?? DEFAULT_PARAMS.smaCorridorAtr))
+      .replace(/@K/g, String(p.LinK ?? DEFAULT_PARAMS.LinK));
   }
 
   /** Логика FINRESP: `logicUsesObTrend`. */
@@ -342,6 +357,65 @@
       askVol,
       reason: ok ? "тренд по стакану" : `imb=${imb.toFixed(3)} (нужно ${buy ? "≥" : "≤"}${buy ? thr : -thr})`
     };
+  }
+
+  /** Подпрограмма `stripOnFlipFromExpr`. */
+  function stripOnFlipFromExpr(expr) {
+    return String(expr || "").replace(/\s*OnFlip\s*\(\s*Close\s*\)/gi, "").trim();
+  }
+
+  /** Подпрограмма `exprHasOnFlipClose`. */
+  function exprHasOnFlipClose(expr) {
+    return /OnFlip\s*\(\s*Close\s*\)/i.test(String(expr || ""));
+  }
+
+  /** Подпрограмма `parseRegimeFromLine`. */
+  function parseRegimeFromLine(raw) {
+    const m = String(raw || "").match(/Regime\s*\(\s*([^)]*)\s*\)/i);
+    if (!m) return {};
+    const map = parseParamsMap(m[1].replace(/,/g, ";"));
+    const slopeLb = parseInt(map.SlopeLb || map.slopelb || "3", 10);
+    const onFlip = String(map.OnFlip || map.onflip || "").toLowerCase();
+    let regimeLinLen = null;
+    const lRaw = map.L || map.l;
+    if (lRaw != null) {
+      const n = parseInt(String(lRaw).replace(/@LR/i, ""), 10);
+      if (Number.isFinite(n) && n > 0) regimeLinLen = n;
+    }
+    return {
+      regimeSlopeLb: Number.isFinite(slopeLb) && slopeLb > 0 ? slopeLb : 3,
+      onFlipClose: onFlip === "close",
+      regimeLinLen
+    };
+  }
+
+  /** Подпрограмма `parseLinRegK`. */
+  function parseLinRegK(pm, params) {
+    const kRaw = pm.K ?? pm.k;
+    if (kRaw != null) {
+      const n = parseFloat(String(kRaw).replace(/ATR/i, "").trim());
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const p = params || DEFAULT_PARAMS;
+    return Number(p.LinK ?? DEFAULT_PARAMS.LinK) || 1.5;
+  }
+
+  /** Подпрограмма `parseLinRegAtrLen`. */
+  function parseLinRegAtrLen(pm) {
+    const n = parseInt(pm.AtrL || pm.atrl || pm.Atr || "14", 10);
+    return Number.isFinite(n) && n >= 2 ? n : 14;
+  }
+
+  /** Подпрограмма `linRegSlopeSign`. */
+  function linRegSlopeSign(cache, len, idx, slopeLb) {
+    const lr = cache.linreg(len, 2);
+    const lb = Math.max(1, slopeLb || 3);
+    const c1 = lr.center[idx];
+    const c0 = lr.center[idx - lb];
+    if (c1 == null || c0 == null) return 0;
+    if (c1 > c0) return 1;
+    if (c1 < c0) return -1;
+    return 0;
   }
 
   /** Подпрограмма `stripDecor`. */
@@ -518,6 +592,7 @@
   /** Разбор строки Op/Cl в AST/spec для симуляции одной логики. */
   function parseLogicLine(line, params, indicatorSelection) {
     const raw = substituteParams(line, params || DEFAULT_PARAMS);
+    const regime = parseRegimeFromLine(raw);
     const { slAtr, tpAtr } = parseSlTp(raw);
     const body = stripDecor(raw);
     const opBlocks = extractBlocks(body, "Op");
@@ -526,11 +601,13 @@
     const firstCl = clBlocks[0];
     const atomsForSide = (blocks, side) => blocks
       .filter((block) => block.side === side)
-      .flatMap((block) => splitTopLevelAnd(block.expr).map(parseAtom).filter(Boolean));
+      .flatMap((block) => splitTopLevelAnd(stripOnFlipFromExpr(block.expr)).map(parseAtom).filter(Boolean));
     const opLongAtoms = filterAtomsByIndicators(atomsForSide(opBlocks, "long"), indicatorSelection);
     const opShortAtoms = filterAtomsByIndicators(atomsForSide(opBlocks, "short"), indicatorSelection);
     const clLongAtoms = filterAtomsByIndicators(atomsForSide(clBlocks, "long"), indicatorSelection);
     const clShortAtoms = filterAtomsByIndicators(atomsForSide(clBlocks, "short"), indicatorSelection);
+    const clLongOnFlip = clBlocks.filter((b) => b.side === "long").some((b) => exprHasOnFlipClose(b.expr));
+    const clShortOnFlip = clBlocks.filter((b) => b.side === "short").some((b) => exprHasOnFlipClose(b.expr));
     return {
       slAtr,
       tpAtr,
@@ -542,6 +619,11 @@
       opShortAtoms,
       clLongAtoms,
       clShortAtoms,
+      regimeSlopeLb: regime.regimeSlopeLb || 3,
+      regimeLinLen: regime.regimeLinLen,
+      onFlipClose: regime.onFlipClose || clLongOnFlip || clShortOnFlip,
+      clLongOnFlip,
+      clShortOnFlip,
       indicators: normalizeIndicatorSelection(indicatorSelection)
     };
   }
@@ -652,6 +734,23 @@
     return { up, center, down };
   }
 
+  /** LinReg-центр ± K×ATR (канал Parsa / Universal Counter Trend). */
+  function linRegAtrSeries(closes, candles, len, kMult, atrLen) {
+    const center = linRegSeries(closes, len, 2).center;
+    const atr = atrSeries(candles, atrLen);
+    const up = new Array(closes.length).fill(null);
+    const down = new Array(closes.length).fill(null);
+    const k = Math.max(0, Number(kMult) || 0);
+    for (let i = 0; i < closes.length; i++) {
+      const mid = center[i];
+      const a = atr[i];
+      if (mid == null || a == null || k <= 0) continue;
+      up[i] = mid + k * a;
+      down[i] = mid - k * a;
+    }
+    return { up, down, center };
+  }
+
   /** Подпрограмма `bollingerSeries`. */
   function bollingerSeries(closes, len, devMult) {
     const up = new Array(closes.length).fill(null);
@@ -736,6 +835,7 @@
       this._atr = new Map();
       this._stoch = new Map();
       this._linreg = new Map();
+      this._linregAtr = new Map();
       this._bollinger = new Map();
       this._momentum = new Map();
       this._vwap = new Map();
@@ -760,6 +860,13 @@
       const key = `${len};${dev}`;
       if (!this._linreg.has(key)) this._linreg.set(key, linRegSeries(this.closes, len, dev));
       return this._linreg.get(key);
+    }
+    linregAtr(len, kMult, atrLen) {
+      const key = `${len};${kMult};${atrLen}`;
+      if (!this._linregAtr.has(key)) {
+        this._linregAtr.set(key, linRegAtrSeries(this.closes, this.candles, len, kMult, atrLen));
+      }
+      return this._linregAtr.get(key);
     }
     bollinger(len, dev) {
       const key = `${len};${dev}`;
@@ -804,7 +911,7 @@
   }
 
   /** Подпрограмма `evaluateAtom`. */
-  function evaluateAtom(atom, cache, idx) {
+  function evaluateAtom(atom, cache, idx, posCtx) {
     const c = cache.candles[idx];
     const close = c.close;
     const pm = parseParamsMap(atom.params);
@@ -838,6 +945,31 @@
     }
     if (kind === "linreg") {
       const len = pm.L || parseInt(atom.params, 10) || 20;
+      const kMult = parseLinRegK(pm);
+      const atrLen = parseLinRegAtrLen(pm);
+      const useAtrBand = pm.K != null || pm.k != null
+        || /BLLINK|ABLINK|ABREGK|BLREGK/i.test(sigU)
+        || String(pm.Drift || pm.drift || "").toLowerCase() === "regdrift"
+        || String(pm.Anchor || pm.anchor || "").toLowerCase() === "open";
+      if (useAtrBand) {
+        const bands = cache.linregAtr(len, kMult, atrLen);
+        const atr = cache.atr(atrLen);
+        const a = atr[idx];
+        if (sigU === "BLLINK") return bands.down[idx] != null && close <= bands.down[idx];
+        if (sigU === "ABLINK") return bands.up[idx] != null && close >= bands.up[idx];
+        if (sigU === "ABREGK" || sigU === "BLREGK") {
+          if (!posCtx || posCtx.pos === 0 || posCtx.entryBarIdx == null || posCtx.entryMid == null) return false;
+          if (a == null) return false;
+          const bars = Math.max(0, idx - posCtx.entryBarIdx);
+          const drift = (posCtx.entryBeta || 0) * bars;
+          if (sigU === "ABREGK") {
+            const target = posCtx.entryMid + drift + kMult * a;
+            return close >= target;
+          }
+          const target = posCtx.entryMid - drift - kMult * a;
+          return close <= target;
+        }
+      }
       const dev = parseFloat(pm.Dev || pm.dev || "2");
       const lr = cache.linreg(len, dev);
       if (sigU === "ABUP") return lr.up[idx] != null && close > lr.up[idx];
@@ -914,9 +1046,37 @@
   }
 
   /** Подпрограмма `evaluateExpr`. */
-  function evaluateExpr(atoms, cache, idx) {
+  function evaluateExpr(atoms, cache, idx, posCtx) {
     if (!atoms.length) return false;
-    return atoms.every((a) => evaluateAtom(a, cache, idx));
+    return atoms.every((a) => evaluateAtom(a, cache, idx, posCtx));
+  }
+
+  /** Подпрограмма `captureEntryAnchor`. */
+  function captureEntryAnchor(cache, parsed, idx) {
+    const len = parsed?.regimeLinLen || DEFAULT_PARAMS.LR;
+    const lr = cache.linreg(len, 2);
+    const entryMid = lr.center[idx];
+    let entryBeta = 0;
+    if (idx > 0 && lr.center[idx - 1] != null && entryMid != null) {
+      entryBeta = entryMid - lr.center[idx - 1];
+    }
+    return { entryBarIdx: idx, entryMid, entryBeta };
+  }
+
+  /** Подпрограмма `buildPosCtx`. */
+  function buildPosCtx(pos, entryBarIdx, entryMid, entryBeta) {
+    if (!pos) return { pos: 0, entryBarIdx: null, entryMid: null, entryBeta: null };
+    return { pos, entryBarIdx, entryMid, entryBeta };
+  }
+
+  /** Подпрограмма `evalOnFlipClose`. */
+  function evalOnFlipClose(parsed, cache, idx, pos) {
+    if (!parsed?.onFlipClose || pos === 0) return false;
+    const len = parsed.regimeLinLen || DEFAULT_PARAMS.LR;
+    const sign = linRegSlopeSign(cache, len, idx, parsed.regimeSlopeLb || 3);
+    if (pos > 0) return sign < 0;
+    if (pos < 0) return sign > 0;
+    return false;
   }
 
   /** Подпрограмма `warmupBars`. */
@@ -1029,11 +1189,22 @@
       }
       if (kind === "linreg") {
         const len = pm.L || parseInt(atom.params, 10) || 20;
-        const dev = parseFloat(pm.Dev || pm.dev || "2");
-        const lr = cache.linreg(len, dev);
-        ind.linregUp = lr.up[idx];
-        ind.linregDn = lr.down[idx];
-        ind.linregMid = lr.center[idx];
+        const kMult = parseLinRegK(pm);
+        const atrLen = parseLinRegAtrLen(pm);
+        const useAtrBand = pm.K != null || pm.k != null
+          || /BLLINK|ABLINK|ABREGK|BLREGK/i.test(String(atom.signal || ""));
+        if (useAtrBand) {
+          const bands = cache.linregAtr(len, kMult, atrLen);
+          ind.linregUp = bands.up[idx];
+          ind.linregDn = bands.down[idx];
+          ind.linregMid = bands.center[idx];
+        } else {
+          const dev = parseFloat(pm.Dev || pm.dev || "2");
+          const lr = cache.linreg(len, dev);
+          ind.linregUp = lr.up[idx];
+          ind.linregDn = lr.down[idx];
+          ind.linregMid = lr.center[idx];
+        }
       }
       if (kind === "bollinger") {
         const len = pm.L || parseInt(atom.params, 10) || 20;
@@ -1054,16 +1225,21 @@
    * Сигналы одной строки логики на баре i: вход long/short (Op) и выход (Cl).
    * @returns {{ longOpHit, shortOpHit, longClHit, shortClHit }}
    */
-  function logicLineBarSignals(parsed, cache, i) {
+  function logicLineBarSignals(parsed, cache, i, posCtx) {
     const opLongAtoms = parsed.opLongAtoms || (parsed.opSide === "long" ? parsed.opAtoms : []);
     const opShortAtoms = parsed.opShortAtoms || (parsed.opSide === "short" ? parsed.opAtoms : []);
     const clLongAtoms = parsed.clLongAtoms || (parsed.clSide === "long" ? parsed.clAtoms : []);
     const clShortAtoms = parsed.clShortAtoms || (parsed.clSide === "short" ? parsed.clAtoms : []);
+    const pos = posCtx?.pos || 0;
+    const longClHit = evaluateExpr(clLongAtoms, cache, i, posCtx)
+      || (pos > 0 && evalOnFlipClose(parsed, cache, i, pos));
+    const shortClHit = evaluateExpr(clShortAtoms, cache, i, posCtx)
+      || (pos < 0 && evalOnFlipClose(parsed, cache, i, pos));
     return {
-      longOpHit: evaluateExpr(opLongAtoms, cache, i),
-      shortOpHit: evaluateExpr(opShortAtoms, cache, i),
-      longClHit: evaluateExpr(clLongAtoms, cache, i),
-      shortClHit: evaluateExpr(clShortAtoms, cache, i)
+      longOpHit: evaluateExpr(opLongAtoms, cache, i, posCtx),
+      shortOpHit: evaluateExpr(opShortAtoms, cache, i, posCtx),
+      longClHit,
+      shortClHit
     };
   }
 
@@ -1094,6 +1270,9 @@
     let entryPrice = initial.entryPrice ?? null;
     let commissionPaid = initial.commission || 0;
     let activeIdx = -1;
+    let entryBarIdx = null;
+    let entryMid = null;
+    let entryBeta = null;
     const rows = [];
     const w = Math.max(warmupBars(), 2);
     const from = opts.skipWarmup ? Math.max(startIdx, 0) : Math.max(startIdx, w);
@@ -1113,6 +1292,9 @@
       pos = 0;
       entryPrice = null;
       activeIdx = -1;
+      entryBarIdx = null;
+      entryMid = null;
+      entryBeta = null;
       return vol;
     };
 
@@ -1154,7 +1336,8 @@
           }
         }
         if (pos !== 0) {
-          const sig = logicLineBarSignals(parsed, cache, i);
+          const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
+          const sig = logicLineBarSignals(parsed, cache, i, posCtx);
           if (pos > 0 && (sig.longClHit || sig.shortOpHit)) sell += flatten(price);
           else if (pos < 0 && (sig.shortClHit || sig.longOpHit)) sell += flatten(price);
         }
@@ -1162,8 +1345,11 @@
 
       if (pos === 0) {
         activeIdx = -1;
+        entryBarIdx = null;
+        entryMid = null;
+        entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
-          const sig = logicLineBarSignals(parsedList[si], cache, i);
+          const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null));
           if (sig.longOpHit === sig.shortOpHit) continue;
           const lot = calcTradeVolume(price, volConfig);
           const cap = maxAbsPosition(price, volConfig);
@@ -1176,6 +1362,10 @@
           entryPrice = price;
           buy = lot;
           activeIdx = si;
+          const anchor = captureEntryAnchor(cache, parsedList[si], i);
+          entryBarIdx = anchor.entryBarIdx;
+          entryMid = anchor.entryMid;
+          entryBeta = anchor.entryBeta;
           break;
         }
       }
@@ -1218,6 +1408,9 @@
     let pos = initial.pos || 0;
     let cash = initial.cash || 0;
     let entryPrice = initial.entryPrice ?? null;
+    let entryBarIdx = initial.entryBarIdx ?? null;
+    let entryMid = initial.entryMid ?? null;
+    let entryBeta = initial.entryBeta ?? null;
     let commissionPaid = initial.commission || 0;
     const rows = [];
     const w = Math.max(warmupBars(), 2);
@@ -1233,6 +1426,9 @@
       commissionPaid += comm;
       pos = 0;
       entryPrice = null;
+      entryBarIdx = null;
+      entryMid = null;
+      entryBeta = null;
       return vol;
     };
 
@@ -1277,14 +1473,12 @@
         }
       }
 
-      const opLongAtoms = parsed.opLongAtoms || (parsed.opSide === "long" ? parsed.opAtoms : []);
-      const opShortAtoms = parsed.opShortAtoms || (parsed.opSide === "short" ? parsed.opAtoms : []);
-      const clLongAtoms = parsed.clLongAtoms || (parsed.clSide === "long" ? parsed.clAtoms : []);
-      const clShortAtoms = parsed.clShortAtoms || (parsed.clSide === "short" ? parsed.clAtoms : []);
-      const longOpHit = evaluateExpr(opLongAtoms, cache, i);
-      const shortOpHit = evaluateExpr(opShortAtoms, cache, i);
-      const longClHit = evaluateExpr(clLongAtoms, cache, i);
-      const shortClHit = evaluateExpr(clShortAtoms, cache, i);
+      const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
+      const sig = logicLineBarSignals(parsed, cache, i, posCtx);
+      const longOpHit = sig.longOpHit;
+      const shortOpHit = sig.shortOpHit;
+      const longClHit = sig.longClHit;
+      const shortClHit = sig.shortClHit;
 
       if (pos > 0 && (longClHit || shortOpHit)) sell += flatten(price);
       else if (pos < 0 && (shortClHit || longOpHit)) sell += flatten(price);
@@ -1299,6 +1493,10 @@
           commissionPaid += comm;
           entryPrice = price;
           buy = lot;
+          const anchor = captureEntryAnchor(cache, parsed, i);
+          entryBarIdx = anchor.entryBarIdx;
+          entryMid = anchor.entryMid;
+          entryBeta = anchor.entryBeta;
         }
       }
 

@@ -216,14 +216,16 @@ th{background:#f8fafc;width:28%;}
 <table>
 <tr><th>Поле</th><th>Назначение</th></tr>
 <tr><td><strong>LinReg длина (@LR)</strong></td><td>Длина линейной регрессии в строках логики</td></tr>
+<tr><td><strong>Ширина канала LinReg (@K), ×ATR</strong></td><td>K для <code>LinReg(@LR;K=@K)</code> и UCT: граница = центр ± K×ATR</td></tr>
 </table>
 
 <h3>9.7. Используемые индикаторы</h3>
 <p>Чекбоксы SMA, ATR, Stoch, LinReg, Bollinger, VWAP, CCI, MACD, Momentum. Отключённые удаляются из Op/Cl перед расчётом. SL/TP позиции не зависят от этого списка.</p>
 <p><strong>Оптимизировать</strong> (индикаторы) — перебор непустых комбинаций, остаётся набор с лучшим FINRESP.</p>
 
-<h3>9.8. Строки L1…L5</h3>
-<p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code> из полей выше и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em> (не подставляется кнопкой «Применить»).</p>
+<h3>9.8. Каталог логик (UCT, L5, L1…L4, SMA…)</h3>
+<p>Первая — <strong>UCT (Universal Counter Trend)</strong>: контртренд лонг+шорт, LinReg K×ATR, выход с RegDrift от якоря открытия. Equity по UCT считается как по остальным логикам.</p>
+<p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code> из полей выше и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
 
 <h3>9.9. MOEX — тикеры и префиксы</h3>
 <table>
@@ -239,7 +241,7 @@ th{background:#f8fafc;width:28%;}
 <table>
 <tr><th>Блок</th><th>Назначение</th></tr>
 <tr><td><strong>Графики по инструментам</strong> (<code>calc-chart</code>)</td><td>Mini-графики цены, индикаторов, сделок по каждой бумаге в окне</td></tr>
-<tr><td><strong>Equity портфеля</strong> (<code>calc-chart-equity</code>)</td><td>Суммарная кривая equity и сравнение логик L1…L5</td></tr>
+<tr><td><strong>Equity портфеля</strong> (<code>calc-chart-equity</code>)</td><td>Суммарная кривая equity и сравнение логик UCT, L5, L1…L4</td></tr>
 </table>
 
 <h2 id="tbank">11. Реальный счёт T-Bank</h2>
