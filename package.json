@@ -1,0 +1,10 @@
+{
+  "name": "multilogic-trade",
+  "private": true,
+  "description": "MultiLogic FINRESP calculator — engine tests",
+  "scripts": {
+    "test": "node --test FinrespCalculator/tests/engine.portfolio-cap.test.mjs FinrespCalculator/tests/engine.run-multi.test.mjs FinrespCalculator/tests/engine.probe-signals.test.mjs FinrespCalculator/tests/engine.perf.test.mjs",
+    "test:engine": "node --test FinrespCalculator/tests/engine.portfolio-cap.test.mjs FinrespCalculator/tests/engine.run-multi.test.mjs FinrespCalculator/tests/engine.probe-signals.test.mjs",
+    "test:perf": "node --test FinrespCalculator/tests/engine.perf.test.mjs"
+  }
+}
