@@ -2398,7 +2398,119 @@
     return { perSec, stopper: { events, referenceEquity } };
   }
 
-  /** Подпрограмма `moexFileProtocolHint`. */
+  /** Асинхронный портфельный Stopper (yield между шагами — для основного потока). */
+  async function applyPortfolioStopperAsync(perSec, packs, spec, times, endTime, params, volConfig, cfg, signalPacks, progressOpts) {
+    const opts = progressOpts || {};
+    const onProgress = opts.onProgress;
+    const yieldUi = !!opts.yieldUi;
+    const tick = () => (yieldUi ? delay(0) : Promise.resolve());
+    const stopper = { ...DEFAULT_STOPPER, ...cfg };
+    const events = [];
+    const stopperTotal = Math.max(1, times?.length || 1);
+    if ((!stopper.useSl && !stopper.useTp) || !perSec.length || !packs.length) {
+      return { perSec, stopper: { events } };
+    }
+    if (!times?.length) return { perSec, stopper: { events } };
+
+    let referenceEquity = stopper.refEquity > 0 ? stopper.refEquity : null;
+    let scanFrom = 0;
+    const equityHistory = [];
+    let stopperStep = 0;
+
+    if (onProgress) onProgress(0, stopperTotal, times[0], { building: true });
+    await tick();
+    let portfolioEq = buildPortfolioEquitySeries(perSec, times);
+    await tick();
+
+    while (scanFrom < times.length) {
+      let triggered = false;
+
+      for (let t = scanFrom; t < times.length; t++) {
+        if (typeof opts.shouldCancel === "function" && opts.shouldCancel()) {
+          return { perSec, stopper: { events, referenceEquity, cancelled: true } };
+        }
+        const time = times[t];
+        stopperStep = Math.min(stopperTotal, stopperStep + 1);
+        if (onProgress) onProgress(stopperStep, stopperTotal, time);
+        const totalEq = portfolioEq.total[t] ?? 0;
+
+        if (referenceEquity == null) referenceEquity = totalEq;
+        equityHistory.push({ equity: totalEq, time });
+        const idx = equityHistory.length - 1;
+        const atrLen = Math.max(1, stopper.atrLen || DEFAULT_STOPPER.atrLen);
+        if (idx < atrLen) {
+          if (yieldUi && t % 48 === 0) await tick();
+          continue;
+        }
+
+        const atr = portfolioEquityAtr(equityHistory, idx, atrLen);
+        if (atr == null || atr <= 0) {
+          if (yieldUi && t % 48 === 0) await tick();
+          continue;
+        }
+
+        let kind = null;
+        let triggerLevel = referenceEquity;
+        if (stopper.useSl && stopper.slMult > 0 && totalEq <= referenceEquity - stopper.slMult * atr) {
+          kind = "sl";
+          triggerLevel = referenceEquity - stopper.slMult * atr;
+        } else if (stopper.useTp && stopper.tpMult > 0 && totalEq >= referenceEquity + stopper.tpMult * atr) {
+          kind = "tp";
+          triggerLevel = referenceEquity + stopper.tpMult * atr;
+        }
+        if (!kind) {
+          if (yieldUi && t % 48 === 0) await tick();
+          continue;
+        }
+
+        const refAtTrigger = referenceEquity;
+        for (let s = 0; s < perSec.length; s++) {
+          const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
+          if (onProgress) {
+            onProgress(stopperStep, stopperTotal, time, {
+              resim: true,
+              sec,
+              instIndex: s,
+              instTotal: perSec.length
+            });
+          }
+          const runOptions = {
+            ...(signalPacks?.[s] ? { signalCandles: signalPacks[s] } : {}),
+            ...(perSec[s].indicatorCache ? { indicatorCache: perSec[s].indicatorCache } : {})
+          };
+          flattenAndResimTail(perSec[s], packs[s], spec, time, endTime, params, volConfig, runOptions);
+          await tick();
+        }
+        events.push({
+          kind,
+          time,
+          equity: totalEq,
+          referenceEquity: refAtTrigger,
+          atr,
+          triggerLevel
+        });
+        portfolioEq = buildPortfolioEquitySeries(perSec, times);
+        referenceEquity = portfolioEq.total[t] ?? totalEq;
+        scanFrom = t + 1;
+        triggered = true;
+        await tick();
+        break;
+      }
+      if (!triggered) break;
+    }
+
+    return { perSec, stopper: { events, referenceEquity } };
+  }
+
+  /** Текст прогресса Stopper (скан / пересчёт / сводка equity). */
+  function resolveStopperProgressText(done, total, time, extra) {
+    if (extra?.building) return "Stopper портфеля: сводка equity…";
+    if (extra?.resim) {
+      return stopperResimProgressText(extra.sec, extra.instIndex, extra.instTotal, time);
+    }
+    return stopperProgressText(done, total, time);
+  }
+
   function moexFileProtocolHint() {
     if (typeof location !== "undefined" && location.protocol === "file:") {
       return " Страница открыта как file:// — браузер блокирует MOEX (CORS). "
@@ -3468,6 +3580,7 @@
   /** Асинхронный runMulti с yield для UI/worker. */
   async function runMultiAsync(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, options) {
     const opts = { ...(options || {}), yieldUi: true };
+    const deferStopper = opts.deferPortfolioStopper !== false;
     const signalPacks = opts.signalPacks;
     const plan = runMultiPlan(packs, startIdx, endIdx);
     if (plan.empty) {
@@ -3504,7 +3617,7 @@
       }
       const unit = workUnits.find((w) => w.pi === pi);
       const signalCandles = signalPacks?.[pi] || candles;
-      const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+      const indicatorCache = cfg && !deferStopper ? new IndicatorCache(signalCandles) : null;
       const runOpts = {
         ...(signalPacks ? { signalCandles } : {}),
         ...(indicatorCache ? { indicatorCache } : {}),
@@ -3551,7 +3664,7 @@
 
     const preStopperAgg = aggregateFinresp(perSec);
     let stopper = { events: [] };
-    if (!shouldAbortRun(opts) && cfg && perSec.length) {
+    if (!shouldAbortRun(opts) && cfg && perSec.length && !deferStopper) {
       await emitRunProgressAsync(
         opts,
         CALC_PROGRESS.FINRESP_MAX,
@@ -3603,6 +3716,7 @@
       preStopperAgg,
       stopper,
       cancelled: shouldAbortRun(opts),
+      deferredStopper: !!(deferStopper && cfg && perSec.length),
       a: aRef,
       b: bRef,
       tStart,
@@ -3612,6 +3726,7 @@
 
   root.MultiLogicFinrespEngine = {
     CALC_PROGRESS,
+    lerpCalcProgress,
     DEFAULT_PARAMS,
     DEFAULT_STOPPER,
     DEFAULT_VOLUME,
@@ -3636,6 +3751,10 @@
     runOnCandles,
     runMulti,
     runMultiAsync,
+    runMultiPlan,
+    applyPortfolioStopperAsync,
+    resolveStopperProgressText,
+    aggregateFinresp,
     buildPortfolioEquityRows,
     portfolioEquityAtr,
     checkPortfolioStopperTrigger,

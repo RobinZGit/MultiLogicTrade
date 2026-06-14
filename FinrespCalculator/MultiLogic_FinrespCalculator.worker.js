@@ -7,12 +7,16 @@ self.onmessage = async (e) => {
     const E = self.MultiLogicFinrespEngine;
     if (!E?.runMultiAsync) throw new Error("engine not loaded in worker");
     const runOpts = {
+      deferPortfolioStopper: true,
       ...(randomPriceShift ? { signalPacks: E.applyRandomPriceShift(packs) } : {}),
       onProgress: (pct, text, detail) => {
         self.postMessage({ id, type: "progress", pct, text, detail: detail || null });
       }
     };
     const result = await E.runMultiAsync(packs, spec, startIdx, endIdx, params, volConfig, stopperConfig, runOpts);
+    if (result?.perSec) {
+      for (const row of result.perSec) delete row.indicatorCache;
+    }
     self.postMessage({ id, ok: true, result });
   } catch (err) {
     self.postMessage({ id, ok: false, error: err?.message || String(err) });
