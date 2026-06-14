@@ -940,20 +940,29 @@
         status.textContent = `${warnOnly ? "внимание" : "ошибка"}: ${state.live.lastError}`;
       }
       else if (state.live.active) {
-        const { calcEnd, freshest } = liveMoexBarTimes(state.packs);
-        const bar = formatMoexBarTime(calcEnd || state.live.lastCandleBarTime);
-        const freshHint = freshest && calcEnd && freshest > calcEnd
-          ? ` (самый свежий тикер ${formatMoexBarTime(freshest)})`
-          : "";
-        const polled = formatLiveRefreshClock(state.live.lastCandleRefreshAt);
-        const src = state.live.candleSource === "tbank" ? "T-Bank" : "MOEX";
-        const busy = state.live.candleRefreshBusy
-          ? ` · загрузка свечей ${src}…`
-          : "";
-        const sandboxHint = sandbox ? " · песочница (фейк)" : "";
-        status.textContent =
-          `торговля активна${sandboxHint} · ${src} бары до ${bar}${freshHint} · опрос ${polled}${busy}`;
-      }       else status.textContent = sandbox ? "остановлена · песочница (фейк)" : "остановлена";
+        const boot = isLiveFinrespBootstrapPending()
+          && (state.live.candleRefreshBusy || isLiveBootstrapWindow());
+        if (boot) {
+          const src = state.live.candleSource === "tbank" ? "T-Bank" : (state.live.candleSource === "cache" ? "кэш" : "MOEX");
+          const prog = state.live.finrespBootstrapProgress;
+          const progHint = prog ? ` ${prog.done}/${prog.total}` : "";
+          status.textContent = `подготовка: свечи ${src} и FINRESP${progHint}…`;
+        } else {
+          const { calcEnd, freshest } = liveMoexBarTimes(state.packs);
+          const bar = formatMoexBarTime(calcEnd || state.live.lastCandleBarTime);
+          const freshHint = freshest && calcEnd && freshest > calcEnd
+            ? ` (самый свежий тикер ${formatMoexBarTime(freshest)})`
+            : "";
+          const polled = formatLiveRefreshClock(state.live.lastCandleRefreshAt);
+          const src = state.live.candleSource === "tbank" ? "T-Bank" : "MOEX";
+          const busy = state.live.candleRefreshBusy
+            ? ` · загрузка свечей ${src}…`
+            : "";
+          const sandboxHint = sandbox ? " · песочница (фейк)" : "";
+          status.textContent =
+            `торговля активна${sandboxHint} · ${src} бары до ${bar}${freshHint} · опрос ${polled}${busy}`;
+        }
+      } else status.textContent = sandbox ? "остановлена · песочница (фейк)" : "остановлена";
     }
     syncLiveCandleDelayUi(isLive);
     renderLivePortfolioStats();
@@ -4006,6 +4015,23 @@
     return liveCandlePackCount(state.packs) > 0;
   }
 
+  /** FINRESP ещё не посчитан после старта торговли. */
+  function isLiveFinrespBootstrapPending() {
+    return !!state.live.active && !(state.lastResult?.perSec?.length);
+  }
+
+  /** Первые минуты после старта live-торговли — не считать задержкой опроса/FINRESP. */
+  function isLiveBootstrapWindow(nowMs) {
+    const t0 = state.live.tradingStartedAt
+      || state.live.sessionStartedAt
+      || state.live.chartSession?.startedAt;
+    if (!t0) return false;
+    const tf = $("calc-tf")?.value || "60";
+    const bootMs = Math.max(300000, tfDurationMs(tf) * 3);
+    const elapsed = (nowMs ?? Date.now()) - new Date(t0).getTime();
+    return elapsed >= 0 && elapsed < bootMs;
+  }
+
   /** Не ругаться на «нет свечей» первый TF после старта live-сессии. */
   function liveCandleDelayGraceUntilMs() {
     const cs = state.live.chartSession;
@@ -4054,6 +4080,10 @@
     }
 
     if (pollGapMs > maxPollGapMs) {
+      if (state.live.candleRefreshBusy
+        || (isLiveFinrespBootstrapPending() && isLiveBootstrapWindow(now))) {
+        return { stale: false, message: "" };
+      }
       const min = Math.max(1, Math.round(pollGapMs / 60000));
       return {
         stale: true,
@@ -4653,13 +4683,17 @@ ${referenceBlock}
     const perSec = [];
     let bRef = 0;
     let aRef = 0;
-
-    for (let pi = 0; pi < state.packs.length; pi++) {
+    const total = state.packs.length;
+    state.live.finrespBootstrapProgress = { done: 0, total };
+    try {
+    for (let pi = 0; pi < total; pi++) {
       if (ro.shouldCancel?.()) break;
+      if (pi > 0 && pi % 4 === 0) await yieldToUi();
       const candles = state.packs[pi];
       const sec = candles?.[0]?.sec || "?";
       if (!candles?.length || candles.length < 3) {
         skipped.push({ sec, error: "мало свечей для сигнала" });
+        state.live.finrespBootstrapProgress = { done: pi + 1, total };
         continue;
       }
       const b = candles.length - 1;
@@ -4673,6 +4707,7 @@ ${referenceBlock}
       });
       if (!r.rows?.length) {
         skipped.push({ sec, error: "нет данных для сигнала на свечах" });
+        state.live.finrespBootstrapProgress = { done: pi + 1, total };
         continue;
       }
       const last = r.rows.at(-1);
@@ -4692,6 +4727,11 @@ ${referenceBlock}
         lastBuy: +(last?.buy || 0),
         lastSell: +(last?.sell || 0)
       });
+      state.live.finrespBootstrapProgress = { done: pi + 1, total };
+      if (pi > 0 && pi % 8 === 0) syncLiveTradingUi();
+    }
+    } finally {
+      state.live.finrespBootstrapProgress = null;
     }
 
     state.windowSkipped = skipped;
@@ -4860,6 +4900,14 @@ ${referenceBlock}
 
   /** Подгрузка свечей MOEX/T-Bank для live-графиков и расчёта. */
   async function refreshLiveCandleStream(options) {
+    if (state.live.candleRefreshPromise) return state.live.candleRefreshPromise;
+    state.live.candleRefreshPromise = refreshLiveCandleStreamInner(options).finally(() => {
+      state.live.candleRefreshPromise = null;
+    });
+    return state.live.candleRefreshPromise;
+  }
+
+  async function refreshLiveCandleStreamInner(options) {
     const opts = options || {};
     if (!isLiveMode() || !state.live.chartSession) return false;
     if (state.live.candleRefreshBusy || state.uiBusy || state.live.tradingActionBusy) return false;
@@ -4948,7 +4996,11 @@ ${referenceBlock}
       state.live.lastError = skipN
         ? liveFinrespPartialMessage(result.perSec.length, skipN)
         : "";
-      applyResult(state.lastResult, { redrawCharts: true, liveSession: true, silent: !!opts.silent });
+      applyResult(state.lastResult, {
+        redrawCharts: !opts.silent && opts.redrawCharts !== false,
+        liveSession: true,
+        silent: !!opts.silent
+      });
       syncLiveTradingUi();
       return true;
     } catch (err) {
@@ -5027,6 +5079,9 @@ ${referenceBlock}
     }));
     if (!targets.length) {
       const n = state.lastResult?.perSec?.length ?? 0;
+      if (n === 0 && (state.live.candleRefreshBusy || isLiveBootstrapWindow())) {
+        return;
+      }
       noteLiveReconcileAbort("нет целей reconcile", `lastResult.perSec=${n} manualFlatten=${!!state.live.manualFlatten}`);
       return;
     }
@@ -5199,6 +5254,19 @@ ${referenceBlock}
 
   // === Live: опрос баров, FINRESP на сессии, задержка свечей ===
 
+  /** Один цикл: свечи → FINRESP → reconcile (если торговля активна). */
+  async function livePollTickAfterRefresh() {
+    if (!isLiveMode() || !state.live.chartSession) return false;
+    if (state.live.tradingActionBusy) return false;
+    const ok = await refreshLiveCandleStream({ silent: true });
+    if (!ok) return false;
+    if (state.live.active && state.lastResult?.perSec?.length) {
+      await liveTradingReconcile();
+      queueLiveChartsRefresh();
+    }
+    return ok;
+  }
+
   /** Запуск периодического опроса: `startLiveModePoll`. */
   function startLiveModePoll() {
     stopLiveModePoll();
@@ -5209,13 +5277,11 @@ ${referenceBlock}
         return;
       }
       if (state.live.candleRefreshBusy || (state.live.active && state.live.reconcileBusy) || state.live.tradingActionBusy) return;
-      refreshLiveCandleStream({ silent: true })
+      livePollTickAfterRefresh()
         .then((ok) => {
           if (!ok) {
             noteLiveTech("live-tick-skip-reconcile", "refreshLiveCandleStream=false", `lastError=${state.live.lastError || "—"}`);
-            return;
           }
-          if (state.live.active) return liveTradingReconcile();
         })
         .catch((err) => {
           state.live.lastError = err.message;
@@ -5259,6 +5325,7 @@ ${referenceBlock}
     }
     if (state.live.active) {
       state.live.active = false;
+      state.live.tradingStartedAt = null;
       state.live.lastError = "";
       syncLiveTradingUi();
       return;
@@ -5310,13 +5377,13 @@ ${referenceBlock}
       }
     }
     state.live.active = true;
+    state.live.tradingStartedAt = new Date().toISOString();
     state.live.lastError = "";
     syncLiveTradingUi();
     if (!state.live.pollTimer) startLiveModePoll();
     try {
-      await refreshLiveCandleStream({ silent: true });
+      await livePollTickAfterRefresh();
       await refreshLiveOrders();
-      await liveTradingReconcile();
       syncLiveTradingUi();
     } catch (err) {
       state.live.lastError = err.message;
