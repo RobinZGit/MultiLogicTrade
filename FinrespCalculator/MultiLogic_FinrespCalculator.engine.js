@@ -2363,6 +2363,15 @@
 
         const refAtTrigger = referenceEquity;
         for (let s = 0; s < perSec.length; s++) {
+          const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
+          if (onProgress) {
+            onProgress(stopperStep, stopperTotal, time, {
+              resim: true,
+              sec,
+              instIndex: s,
+              instTotal: perSec.length
+            });
+          }
           const runOptions = {
             ...(signalPacks?.[s] ? { signalCandles: signalPacks[s] } : {}),
             ...(perSec[s].indicatorCache ? { indicatorCache: perSec[s].indicatorCache } : {})
@@ -3195,6 +3204,13 @@
     return `Stopper портфеля${barsPart}${timePart}`;
   }
 
+  /** Текст прогресса при пересчёте хвоста после срабатывания Stopper. */
+  function stopperResimProgressText(sec, instIndex, instTotal, candleTime) {
+    const t = formatProgressTime(candleTime);
+    const timePart = t ? ` · ${t}` : "";
+    return `Stopper: пересчёт ${sec} (${instIndex + 1}/${instTotal})${timePart}`;
+  }
+
   /** Подпрограмма `yieldChunkSize`. */
   function yieldChunkSize(span) {
     if (span <= 96) return span;
@@ -3408,12 +3424,15 @@
         signalPacks ? activeSignalPacks : null,
         {
           shouldCancel: opts.shouldCancel,
-          onProgress: (doneInStopper, stopperTotal, candleTime) => {
+          onProgress: (doneInStopper, stopperTotal, candleTime, extra) => {
+            const text = extra?.resim
+              ? stopperResimProgressText(extra.sec, extra.instIndex, extra.instTotal, candleTime)
+              : stopperProgressText(doneInStopper, stopperTotal, candleTime);
             emitStopperPhaseProgress(
               opts,
               doneInStopper,
               stopperTotal,
-              stopperProgressText(doneInStopper, stopperTotal, candleTime),
+              text,
               candleTime
             );
           }
@@ -3533,6 +3552,12 @@
     const preStopperAgg = aggregateFinresp(perSec);
     let stopper = { events: [] };
     if (!shouldAbortRun(opts) && cfg && perSec.length) {
+      await emitRunProgressAsync(
+        opts,
+        CALC_PROGRESS.FINRESP_MAX,
+        "Stopper портфеля: подготовка…",
+        { phase: "stopper", done: 0, total: stopperBars }
+      );
       const applied = applyPortfolioStopper(
         perSec,
         activePacks,
@@ -3545,12 +3570,15 @@
         signalPacks ? activeSignalPacks : null,
         {
           shouldCancel: opts.shouldCancel,
-          onProgress: (doneInStopper, stopperTotal, candleTime) => {
+          onProgress: (doneInStopper, stopperTotal, candleTime, extra) => {
+            const text = extra?.resim
+              ? stopperResimProgressText(extra.sec, extra.instIndex, extra.instTotal, candleTime)
+              : stopperProgressText(doneInStopper, stopperTotal, candleTime);
             emitStopperPhaseProgress(
               opts,
               doneInStopper,
               stopperTotal,
-              stopperProgressText(doneInStopper, stopperTotal, candleTime),
+              text,
               candleTime
             );
           }

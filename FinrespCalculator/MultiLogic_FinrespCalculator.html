@@ -986,7 +986,7 @@ body.calc-running .help-ftr{opacity:.75;}
 (() => {
   const CALC_PAGE_VERSION = "2026-06-13-logic-restore-defaults";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
-  const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, RUN_MAX: 99 };
+  const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
   const $ = (id) => document.getElementById(id);
   const IS_FILE_PROTOCOL = location.protocol === "file:";
@@ -2852,6 +2852,14 @@ body.calc-running .help-ftr{opacity:.75;}
     const t = Math.max(1, +total || 1);
     const d = Math.max(0, Math.min(t, +done || 0));
     return Math.round((d / t) * CALC_PROGRESS.LOAD_MAX);
+  }
+
+  /** Прогресс построения equity-графиков (88–99%). */
+  function mapEquityProgressPct(done, total) {
+    const t = Math.max(1, +total || 1);
+    const d = Math.max(0, Math.min(t, +done || 0));
+    const span = CALC_PROGRESS.RUN_MAX - CALC_PROGRESS.CHARTS_START;
+    return CALC_PROGRESS.CHARTS_START + Math.round((d / t) * span);
   }
 
   /** Установка значения: `setCalcProgress`. */
@@ -4771,6 +4779,35 @@ ${pointDot}
     return { runs, times };
   }
 
+  /** Асинхронный расчёт equity по каталогу логик (с yield между логиками). */
+  async function calcLogicEquityRunsAsync(a, b, onProgress) {
+    if (!state.packs.length) return null;
+    const pack = refPack();
+    if (!pack.length) return null;
+    const p = params();
+    const vol = volConfig();
+    const times = pack.slice(a, b + 1).map((c) => c.time).filter(Boolean);
+    if (!times.length) return null;
+    const keys = [];
+    const indicators = indicatorSelection();
+    for (const key of equityCatalogLogicKeys()) {
+      const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
+      if (!spec || spec.disabled || !EQUITY_RUN_TYPES.has(spec.type)) continue;
+      keys.push(key);
+    }
+    const runs = {};
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (onProgress) onProgress(i, keys.length, key);
+      const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
+      const { perSec } = E.runMulti(state.packs, spec, a, b, p, vol, EQUITY_STOPPER_OFF, finrespRunOptions());
+      const rows = E.buildPortfolioEquityRows(perSec, times);
+      runs[key] = { rows, finresp: rows.length ? rows.at(-1).eq : 0 };
+      await yieldToUi();
+    }
+    return { runs, times };
+  }
+
   /** Построение структуры данных: `buildTotalEquityRows`. */
   function buildTotalEquityRows(runs, times, keys) {
     const active = keys || selectedEquityLogicKeys();
@@ -4790,8 +4827,8 @@ ${pointDot}
     return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
   }
 
-  /** Кривые equity по логикам каталога. */
-  function drawEquityCharts(a, b, drawOpts) {
+  /** Отрисовка equity-графиков по готовым рядам. */
+  function renderEquityChartsFromData(a, b, data, drawOpts) {
     const opts = drawOpts || {};
     const liveSession = opts.liveSession || isLiveTradingSession();
     const box = $("calc-chart-equity");
@@ -4804,7 +4841,6 @@ ${pointDot}
       syncChartBox(box, "");
       return;
     }
-    const data = calcLogicEquityRuns(a, b);
     const catalogKeys = equityCatalogLogicKeys();
     const activeKeys = selectedEquityLogicKeys();
     const selectedSet = new Set(activeKeys);
@@ -4895,6 +4931,17 @@ ${liveNote}${markerNote}
 ${totalBlock}
 <div class="chart-stack">${logicBlocks.join("")}</div>
 </div>`);
+  }
+
+  /** Кривые equity по логикам каталога. */
+  function drawEquityCharts(a, b, drawOpts) {
+    renderEquityChartsFromData(a, b, calcLogicEquityRuns(a, b), drawOpts);
+  }
+
+  /** Асинхронное построение equity-графиков с прогрессом. */
+  async function drawEquityChartsAsync(a, b, drawOpts, onProgress) {
+    const data = await calcLogicEquityRunsAsync(a, b, onProgress);
+    renderEquityChartsFromData(a, b, data, drawOpts);
   }
 
   /** Подпрограмма `chartFailuresForDraw`. */
@@ -5303,7 +5350,17 @@ ${totalBlock}
           $("calc-status").textContent += ` Загружено ${state.packs.length}/${instruments.length}; ошибок MOEX: ${loadedData.failures.length}.`;
         }
       } else {
-        applyResult(result);
+        applyResult(result, { redrawCharts: false });
+        const { a: ra, b: rb, perSec, stopper } = result;
+        setCalcProgress("Графики по инструментам…", CALC_PROGRESS.CHARTS_START);
+        await yieldToUi();
+        drawCharts(perSec, stopper, {});
+        await drawEquityChartsAsync(ra, rb, {}, (i, n, key) => {
+          setCalcProgress(
+            `Equity по логикам: ${key} (${i + 1}/${n})`,
+            mapEquityProgressPct(i + 1, n)
+          );
+        });
         if (instruments.length > 1 && loadedData.failures.length) {
           $("calc-status").textContent +=
             ` Загружено ${state.packs.length}/${instruments.length}; ошибок MOEX: ${loadedData.failures.length}.`;
