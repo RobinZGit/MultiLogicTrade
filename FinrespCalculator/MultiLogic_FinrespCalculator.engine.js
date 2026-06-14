@@ -29,7 +29,7 @@
     volumeType: "Deposit percent",
     volume: 10,
     deposit: 1000000,
-    maxPositions: 40,
+    maxPositions: 100,
     commissionPct: 0
   };
   const DEFAULT_COMMISSION = { type: "Percent", value: 0.04 };

@@ -193,10 +193,14 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .extra-section-row:first-of-type{margin-top:.5rem;}
 .extra-section-row .extra-section{margin:0;padding:0;border:0;}
 .volume-leverage-display{font-size:.95rem;font-weight:800;color:#1e3a5f;white-space:nowrap;}
-.volume-leverage-display span{font-family:Consolas,monospace;font-size:1.05rem;margin-left:.35rem;}
+.volume-leverage-display span{font-family:Consolas,monospace;font-size:1.05rem;}
+.volume-leverage-in-grid{
+  padding:.42rem .5rem;border:1px solid var(--border);border-radius:7px;background:#f8fafc;
+  font-size:1.05rem;line-height:1.35;min-height:2.35rem;display:flex;align-items:center;
+}
 .live-trading-banner{justify-content:space-between;}
 .live-trading-banner-main{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem 1rem;}
-.live-trading-leverage{font-size:.92rem;font-weight:800;color:#7f1d1d;text-align:right;white-space:nowrap;margin-left:auto;}
+.live-trading-leverage{font-size:.92rem;font-weight:800;color:#7f1d1d;text-align:left;white-space:nowrap;flex:0 0 auto;order:-1;}
 .live-trading-leverage span{font-family:Consolas,monospace;font-size:1.08rem;margin-left:.35rem;}
 .logic-grid{display:grid;gap:.75rem;margin-top:.75rem;}
 .logic-grid label{font-size:.82rem;color:var(--muted);display:block;margin-bottom:.2rem;}
@@ -586,6 +590,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
 <div id="live-trading-panel" class="live-trading-panel" hidden>
 <div class="live-trading-banner">
+<div class="live-trading-leverage"><b>Плечо</b><span id="live-leverage-value">—</span></div>
 <div class="live-trading-banner-main">
 <strong class="live-trading-title">Реальная торговля</strong>
 <span class="live-trading-badge" id="live-trading-status">остановлена</span>
@@ -604,7 +609,6 @@ body.calc-running .help-ftr{opacity:.75;}
 </details>
 </div>
 </div>
-<div class="live-trading-leverage"><b>Плечо</b><span id="live-leverage-value">—</span></div>
 </div>
 <p class="live-trading-warn">Реальные заявки на бирже. Тот же счёт T-Bank и токен с правом торговли (не только чтение). Пароль запрашивается при подключении. При активной торговле свечи обновляются по выбранному источнику (T-Bank — актуальнее MOEX ISS); индикаторы и заявки пересчитываются на каждом цикле.</p>
 <p class="live-trading-candle-alert" id="live-candle-delay-alert" hidden role="alert"></p>
@@ -832,11 +836,10 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <p class="note" style="margin:-.15rem 0 .75rem">Спросит, сбрасывать ли также каталог логик к встроенным строкам из кода.</p>
 
-<div class="extra-section-row">
 <p class="extra-section">Объём сделки (как в роботе)</p>
-<div class="volume-leverage-display"><b>Плечо</b><span id="vol-leverage-value">—</span></div>
-</div>
 <div class="calc-grid">
+<div class="calc-field"><label for="vol-leverage-value">Плечо</label>
+<div class="volume-leverage-display volume-leverage-in-grid" id="vol-leverage-wrap"><span id="vol-leverage-value">—</span></div></div>
 <div class="calc-field"><label for="vol-type">Volume type</label>
 <select id="vol-type">
 <option value="Deposit percent" selected>Deposit percent — % депозита</option>
@@ -848,7 +851,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="calc-field" id="vol-deposit-wrap"><label for="vol-deposit">Депозит (Prime), ₽</label>
 <input id="vol-deposit" type="number" value="1000000" min="1" step="1000"></div>
 <div class="calc-field"><label for="vol-maxpos">Max positions (all tabs)</label>
-<input id="vol-maxpos" type="number" value="40" min="0" max="200" step="1"></div>
+<input id="vol-maxpos" type="number" value="100" min="0" max="200" step="1"></div>
 <div class="calc-field"><label for="commission-pct">Commission, %</label>
 <input id="commission-pct" type="number" value="0.04" min="0" max="10" step="0.0001" title="% от суммы сделки (оборота): покупка и продажа. 0.04 = 0.04%."></div>
 </div>
@@ -1067,7 +1070,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-live-logics-badge";
+  const CALC_PAGE_VERSION = "2026-06-14-volume-defaults";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
