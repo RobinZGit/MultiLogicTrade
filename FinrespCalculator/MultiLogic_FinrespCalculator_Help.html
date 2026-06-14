@@ -299,13 +299,13 @@ th{background:#f8fafc;width:28%;}
 <p>Справа от тикера инструмента — кнопка <strong>«Копировать график»</strong>. Копирует <em>текущий видимый</em> фрагмент (с учётом масштаба и сдвига) в буфер обмена как PNG. Нужен HTTPS или localhost и разрешение браузера на доступ к буферу.</p>
 
 <h4>Маркеры входа и выхода</h4>
-<p>Маркеры ставятся при смене позиции в симуляции (в т.ч. flip long↔short и SL с повторным входом на одном баре). Наведите на треугольник — подсказка: <strong>логика</strong> (L1…L5, SMA…) и <strong>сигнал</strong> (Op long, Stop-loss, Take-profit…).</p>
+<p>Маркеры ставятся при смене позиции в симуляции (в т.ч. flip long↔short и SL с повторным входом на одном баре). У △/▲ — <strong>подпись</strong>: первая строка — <strong>имя логики</strong> (L1, UT, SMA…), вторая — фрагмент из парсера (<code>Op(Long(...))</code>, <code>Cl(Short(...))</code>, <code>SL[…×ATR]</code> и т.п.). При наведении — полная подсказка.</p>
 <table>
 <tr><th>Маркер</th><th>Значение</th></tr>
-<tr><td>△ <strong>остриём вниз</strong> над high свечи</td><td><strong>Вход</strong> — зелёный <strong>long</strong>, красный <strong>short</strong>; полупрозрачная заливка и белая обводка</td></tr>
-<tr><td>▲ <strong>остриём вверх</strong> под low свечи</td><td><strong>Выход</strong> — цвет стороны закрываемой позиции; причина (Cl, SL, TP, flip…) — во всплывающей подсказке</td></tr>
+<tr><td>△ <strong>остриём вниз</strong> над high свечи</td><td><strong>Вход</strong> — зелёный <strong>long</strong>, красный <strong>short</strong>; подпись: логика + Op(…)</td></tr>
+<tr><td>▲ <strong>остриём вверх</strong> под low свечи</td><td><strong>Выход</strong> — Cl(…), Op flip, SL/TP или Sma → flat</td></tr>
 </table>
-<p>Размер △/▲ зависит от ширины свечи на экране (удобно при zoom). При сильном отдалении приблизьте участок колёсиком.</p>
+<p>Размер △/▲ зависит от ширины свечи на экране. Подписи скрываются при очень плотном масштабе (узкие свечи); приблизьте участок колёсиком.</p>
 <p>У SMA-логик с непрерывным набором/сбросом объёма маркеры — при переходе позиции через ноль и при SL/TP.</p>
 
 <h4>FINRESP, стопы и портфель</h4>
@@ -322,7 +322,7 @@ th{background:#f8fafc;width:28%;}
 <p>Блок <strong>«Тех. информация»</strong> внизу формы: после открытия графиков — строки <code>chart.ТИКЕР: …</code> (число входов/выходов, posStop, линия FINRESP). Скопируйте и пришлите при сбое отображения.</p>
 
 <h4>Файлы и версия</h4>
-<p>Интерактивная отрисовка — <code>MultiLogic_FinrespCalculator.charts.js</code> (рядом с <code>engine.js</code> и <code>live.js</code>). Версия страницы — бейдж <code>pageVersion</code> на форме (например <code>2026-06-14-chart-fin-badge-v1</code>). После обновления — <strong>Ctrl+Shift+R</strong> (скрипты с параметром <code>?v=</code> в URL).</p>
+<p>Интерактивная отрисовка — <code>MultiLogic_FinrespCalculator.charts.js</code> (рядом с <code>engine.js</code> и <code>live.js</code>). Версия страницы — бейдж <code>pageVersion</code> на форме (например <code>2026-06-14-marker-labels-v1</code>). После обновления — <strong>Ctrl+Shift+R</strong> (скрипты с параметром <code>?v=</code> в URL).</p>
 
 <h3>10.2. Equity портфеля (<code>calc-chart-equity</code>)</h3>
 <p>Отдельный блок ниже: кривая equity выбранного стека, справочные кривые по логикам каталога, портфельный стоппер. Формат — линия по close/equity, без свечей и без pan/zoom.</p>

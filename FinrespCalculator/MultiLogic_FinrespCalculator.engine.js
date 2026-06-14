@@ -1313,17 +1313,71 @@
     return "logic";
   }
 
+  /** Текст одного атома логики для подписи на графике. */
+  function formatAtomRaw(atom) {
+    if (!atom?.kind) return "";
+    const params = atom.params != null && atom.params !== "" ? atom.params : "";
+    const sig = atom.signal != null && atom.signal !== "" ? atom.signal : "";
+    return sig ? `${atom.kind}(${params})(${sig})` : `${atom.kind}(${params})`;
+  }
+
+  /** Фрагмент Op(Long(...)) / Cl(Short(...)) из распарсенных атомов. */
+  function formatBlockExpr(tag, side, atoms) {
+    const cap = String(side || "").charAt(0).toUpperCase() + String(side || "").slice(1).toLowerCase();
+    const inner = (atoms || []).map(formatAtomRaw).filter(Boolean);
+    if (!inner.length) return `${tag}(${cap})`;
+    return `${tag}(${cap}(${inner.join(" AND ")}))`;
+  }
+
+  function markerOpExpr(parsed, side) {
+    const s = side === "short" ? "short" : "long";
+    const atoms = s === "long" ? parsed?.opLongAtoms : parsed?.opShortAtoms;
+    return formatBlockExpr("Op", s, atoms);
+  }
+
+  function markerSlTpLabel(parsed, posStop) {
+    if (posStop === "sl") {
+      const m = parsed?.slAtr > 0 ? `${parsed.slAtr}×ATR` : "";
+      return m ? `SL[${m}]` : "Stop-loss";
+    }
+    if (posStop === "tp") {
+      const m = parsed?.tpAtr > 0 ? `${parsed.tpAtr}×ATR` : "";
+      return m ? `TP[${m}]` : "Take-profit";
+    }
+    return posStop || "";
+  }
+
+  /** Строка Cl/Op/SL для подписи выхода на графике. */
+  function markerExitExpr(parsed, pos, esig, posStop) {
+    if (posStop === "sl" || posStop === "tp") return markerSlTpLabel(parsed, posStop);
+    if (pos > 0) {
+      if (esig?.longClHit && parsed?.clLongAtoms?.length) return formatBlockExpr("Cl", "long", parsed.clLongAtoms);
+      if (esig?.shortOpHit && parsed?.opShortAtoms?.length) return formatBlockExpr("Op", "short", parsed.opShortAtoms);
+      if (esig?.longClHit && parsed?.onFlipClose) return "OnFlip close";
+    } else if (pos < 0) {
+      if (esig?.shortClHit && parsed?.clShortAtoms?.length) return formatBlockExpr("Cl", "short", parsed.clShortAtoms);
+      if (esig?.longOpHit && parsed?.opLongAtoms?.length) return formatBlockExpr("Op", "long", parsed.opLongAtoms);
+      if (esig?.shortClHit && parsed?.onFlipClose) return "OnFlip close";
+    }
+    return tradeSignalHint(logicLineExitSignal(pos, esig || {}));
+  }
+
   /** Поля tradeInLogic / tradeOutLogic для SMA при смене позиции через ноль. */
   function smaTradeMarkerFields(posBefore, posAfter, posStop, logicId) {
     const pb = posBefore ?? 0;
     const pa = posAfter ?? 0;
     const fields = {};
+    const lid = logicId || "SMA";
     if (pb === 0 && pa !== 0) {
-      fields.tradeInLogic = logicId || "SMA";
+      fields.tradeInLogic = lid;
       fields.tradeInSignal = pa > 0 ? "sma_long" : "sma_short";
+      fields.tradeInExpr = pa > 0 ? "Sma → long" : "Sma → short";
     } else if (pb !== 0 && pa === 0) {
-      fields.tradeOutLogic = logicId || "SMA";
+      fields.tradeOutLogic = lid;
       fields.tradeOutSignal = posStop === "sl" || posStop === "tp" ? posStop : "sma_flat";
+      fields.tradeOutExpr = posStop === "sl" || posStop === "tp"
+        ? markerSlTpLabel({ slAtr: 0, tpAtr: 0 }, posStop)
+        : "Sma → flat";
     }
     return fields;
   }
@@ -1342,7 +1396,7 @@
       ...fields,
       ...markers
     };
-    for (const k of ["tradeInLogic", "tradeInSignal", "tradeOutLogic", "tradeOutSignal"]) {
+    for (const k of ["tradeInLogic", "tradeInSignal", "tradeInExpr", "tradeOutLogic", "tradeOutSignal", "tradeOutExpr"]) {
       if (fields?.[k] != null && fields[k] !== "") row[k] = fields[k];
     }
     rows.push(row);
@@ -1611,6 +1665,7 @@
             if (hit) {
               markerMeta.tradeOutLogic = activeLogicId;
               markerMeta.tradeOutSignal = posStop;
+              markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
               sell += flatten(price);
             }
           }
@@ -1622,10 +1677,12 @@
           if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
             markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
             sell += flatten(price);
           } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
             markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
             sell += flatten(price);
           }
         }
@@ -1653,6 +1710,7 @@
           activeIdx = si;
           markerMeta.tradeInLogic = logicSpecs[si]?.logicId || opts.logicId || "?";
           markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
+          markerMeta.tradeInExpr = markerOpExpr(parsedList[si], esig.longOpHit ? "long" : "short");
           const anchor = captureEntryAnchor(cache, parsedList[si], i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -1770,6 +1828,7 @@
           if (hit) {
             markerMeta.tradeOutLogic = logicId;
             markerMeta.tradeOutSignal = posStop;
+            markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
             sell += flatten(price);
           }
         }
@@ -1782,10 +1841,12 @@
       if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
         markerMeta.tradeOutLogic = logicId;
         markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
         sell += flatten(price);
       } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
         markerMeta.tradeOutLogic = logicId;
         markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
+        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
         sell += flatten(price);
       }
       if (pos === 0 && esig.longOpHit !== esig.shortOpHit) {
@@ -1801,6 +1862,7 @@
           else sell = lot;
           markerMeta.tradeInLogic = logicId;
           markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
+          markerMeta.tradeInExpr = markerOpExpr(parsed, esig.longOpHit ? "long" : "short");
           const anchor = captureEntryAnchor(cache, parsed, i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;

@@ -4,7 +4,7 @@
 (function (root) {
   "use strict";
 
-  const CHARTS_MODULE_VERSION = "2026-06-14-chart-fin-badge-v1";
+  const CHARTS_MODULE_VERSION = "2026-06-14-marker-labels-v1";
 
   const PRICE_KEYS = [
     "high", "low", "open", "close",
@@ -62,13 +62,49 @@
     const prefix = kind === "in" ? "Вход" : "Выход";
     const logic = kind === "in" ? r.tradeInLogic : r.tradeOutLogic;
     const signal = kind === "in" ? r.tradeInSignal : r.tradeOutSignal;
+    const expr = kind === "in" ? r.tradeInExpr : r.tradeOutExpr;
     const parts = [`${prefix} ${sideRu}`];
     if (logic) parts.push(String(logic));
-    if (signal) {
+    if (expr) parts.push(String(expr));
+    else if (signal) {
       const hint = SIGNAL_HINT[signal] || signal;
       if (hint) parts.push(hint);
     }
     return esc(parts.join(" · "));
+  }
+
+  function truncateMarkerText(text, maxLen) {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!t) return "";
+    if (t.length <= maxLen) return t;
+    return `${t.slice(0, Math.max(1, maxLen - 1))}…`;
+  }
+
+  /** Строки подписи у △/▲: логика + фрагмент Op/Cl из парсера. */
+  function markerLabelLines(r, kind, maxExprLen) {
+    const logic = kind === "in" ? r.tradeInLogic : r.tradeOutLogic;
+    const expr = kind === "in" ? r.tradeInExpr : r.tradeOutExpr;
+    const signal = kind === "in" ? r.tradeInSignal : r.tradeOutSignal;
+    const lines = [];
+    if (logic) lines.push(String(logic));
+    if (expr) lines.push(truncateMarkerText(expr, maxExprLen));
+    else if (signal) lines.push(truncateMarkerText(SIGNAL_HINT[signal] || signal, maxExprLen));
+    return lines.slice(0, 2);
+  }
+
+  function markerLabelFontSize(candleW, compact) {
+    const barPx = candleW || 8;
+    if (barPx < 5) return 0;
+    if (barPx < 9) return compact ? 6 : 7;
+    return compact ? 7 : 8;
+  }
+
+  function appendMarkerLabels(parts, lines, cx, y, color, fs, anchor) {
+    if (!lines.length || fs <= 0) return;
+    for (let li = 0; li < lines.length; li++) {
+      const ly = y + li * (fs + 2);
+      parts.push(`<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" font-size="${fs}" fill="${color}" font-weight="600" font-family="Consolas,monospace" opacity="0.95">${esc(lines[li])}</text>`);
+    }
   }
 
   function clamp(v, lo, hi) {
@@ -245,7 +281,7 @@
     };
   }
 
-  function tradeMarkerSvg(r, i, x, y, plotTop, plotBottom, triH, triW) {
+  function tradeMarkerSvg(r, i, x, y, plotTop, plotBottom, triH, triW, candleW, compact) {
     const parts = [];
     const cx = x(i);
     const yMin = plotTop + 4;
@@ -253,6 +289,8 @@
     const highY = y(r.high ?? r.close ?? 0);
     const lowY = y(r.low ?? r.close ?? 0);
     const strokeW = triH >= 18 ? 2.2 : 1.8;
+    const labelFs = markerLabelFontSize(candleW, compact);
+    const exprMax = candleW >= 12 ? 52 : (candleW >= 8 ? 38 : 28);
 
     if (r.tradeIn === "long" || r.tradeIn === "short") {
       let tipY = highY - 5;
@@ -267,6 +305,11 @@
       const title = tradeMarkerTitle("in", r.tradeIn, r);
       parts.push(`<polygon points="${pts}" fill="${colors.entry}" fill-opacity="0.35" stroke="#fff" stroke-width="${(strokeW + 0.8).toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
       parts.push(`<polygon points="${pts}" fill="${colors.entry}" fill-opacity="0.35" stroke="${colors.entry}" stroke-width="${strokeW.toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
+      const inLines = markerLabelLines(r, "in", exprMax);
+      if (inLines.length) {
+        const labelStartY = tipY - 4 - (inLines.length - 1) * (labelFs + 2);
+        appendMarkerLabels(parts, inLines, cx, labelStartY, colors.entry, labelFs, "middle");
+      }
     }
 
     if (r.tradeOut) {
@@ -282,6 +325,10 @@
       const pts = `${cx.toFixed(1)},${tipY.toFixed(1)} ${(cx - triW).toFixed(1)},${baseY.toFixed(1)} ${(cx + triW).toFixed(1)},${baseY.toFixed(1)}`;
       parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="#fff" stroke-width="${(strokeW + 0.8).toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
       parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="${colors.exit}" stroke-width="${strokeW.toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
+      const outLines = markerLabelLines(r, "out", exprMax);
+      if (outLines.length) {
+        appendMarkerLabels(parts, outLines, cx, baseY + labelFs + 5, colors.exit, labelFs, "middle");
+      }
     }
 
     return parts.join("");
@@ -406,7 +453,7 @@
     }
 
     const plotBottom = h - bottom;
-    const markers = slice.map((r, j) => tradeMarkerSvg(r, v0 + j, x, y, top, plotBottom, triH, triW)).join("");
+    const markers = slice.map((r, j) => tradeMarkerSvg(r, v0 + j, x, y, top, plotBottom, triH, triW, candleW, compact)).join("");
 
     const stopLines = decor.vLines?.length ? decor.vLines : [];
     const stopLinesSvg = buildStopVLines(stopLines, x, top, h - bottom);
