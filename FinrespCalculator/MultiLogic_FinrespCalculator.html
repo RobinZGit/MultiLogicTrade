@@ -1096,11 +1096,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-chart-fin-badge-v1"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-chart-fin-badge-v1"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-chart-fin-badge-v1"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1114,7 +1114,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-chart-eq-position";
+  const CALC_PAGE_VERSION = "2026-06-14-chart-fin-badge-v1";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1320,7 +1320,9 @@ body.calc-running .help-ftr{opacity:.75;}
       `online=${navigator.onLine}`,
       `engineLoaded=${!!E}`,
       `createCandleCache=${!!E?.createCandleCache}`,
-      `cacheVersion=${E?.CANDLE_CACHE_VERSION ?? "—"}`
+      `cacheVersion=${E?.CANDLE_CACHE_VERSION ?? "—"}`,
+      `chartsModule=${typeof MLInstrumentChart !== "undefined" ? (MLInstrumentChart.version || "legacy") : "missing"}`,
+      `tradeMarkersFromBar=${!!E?.tradeMarkersFromBar}`
     ];
     if (calcState) {
       const selected = typeof selectedInstruments === "function" ? selectedInstruments() : [];
@@ -1482,6 +1484,25 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     lines.push(`liveTradingStatus=${$("live-trading-status")?.textContent || "—"}`);
     lines.push(`statusLine=${st?.textContent || "—"}`);
+    const cd = calcState?.lastChartDiag;
+    if (cd?.instruments?.length) {
+      lines.push(
+        `chartDiagAt=${cd.builtAt || "—"}`,
+        `chartDiagModule=${cd.chartsModule || "—"}`
+      );
+      for (const d of cd.instruments.slice(0, 16)) {
+        lines.push(
+          `chart.${d.sec}: rows=${d.rows} in=${d.tradeIn} out=${d.tradeOut} posStop=${d.posStop} crossNoMarker=${d.crossNoMarker ?? "—"} eqLine=${d.everHeld ? "on" : "off"}`
+        );
+      }
+      const focus = cd.instruments.find((d) => d.sec === "AFLT") || cd.instruments[0];
+      if (focus?.samples?.length) {
+        lines.push(`chart.${focus.sec}.samples:`);
+        for (const s of focus.samples) {
+          lines.push(`  i=${s.i} t=${s.time} in=${s.tradeIn || "—"} out=${s.tradeOut || "—"} pos=${s.pos}`);
+        }
+      }
+    }
     lines.push(`userAgent=${navigator.userAgent}`);
     if (techLog.errors.length) {
       lines.push("errors:");
@@ -4869,7 +4890,9 @@ body.calc-running .help-ftr{opacity:.75;}
     const lines = [];
     rows.forEach((r, idx) => {
       if (r?.posStop === "sl" || r?.posStop === "tp") {
-        lines.push({ idx, kind: r.posStop, scope: "position" });
+        if (r?.tradeIn || r?.tradeOut) {
+          lines.push({ idx, kind: r.posStop, scope: "position" });
+        }
       }
     });
     for (const e of portfolioEvents || []) {
@@ -4934,7 +4957,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return rows.map((r) => {
       const idx = timeToIdx.get(r.time);
       const posAfter = r?.pos ?? 0;
-      const inferred = (!r?.tradeIn && !r?.tradeOut && E.tradeMarkersFromBar)
+      const inferred = E.tradeMarkersFromBar
         ? E.tradeMarkersFromBar(prevPos, posAfter, r?.posStop ?? null)
         : {};
       prevPos = posAfter;
@@ -4952,6 +4975,27 @@ body.calc-running .help-ftr{opacity:.75;}
         ...ind
       };
     });
+  }
+
+  /** Диагностика графика по инструменту (raw vs enriched rows). */
+  function analyzeChartInstrument(sec, rawRows) {
+    const rows = rawRows || [];
+    let rawTradeIn = 0;
+    let rawTradeOut = 0;
+    for (const r of rows) {
+      if (r?.tradeIn) rawTradeIn += 1;
+      if (r?.tradeOut) rawTradeOut += 1;
+    }
+    const enriched = enrichChartRowsForDisplay(rows, sec);
+    const sum = (typeof MLInstrumentChart !== "undefined" && MLInstrumentChart.summarizeChartRows)
+      ? MLInstrumentChart.summarizeChartRows(enriched)
+      : { rows: enriched.length, tradeIn: 0, tradeOut: 0, samples: [] };
+    return {
+      sec,
+      rawTradeIn,
+      rawTradeOut,
+      ...sum
+    };
   }
 
   /** Построение структуры данных: `buildChartSvg`. */
@@ -5564,6 +5608,7 @@ ${referenceBlock}
     syncChartBox(chartBox, note || "");
     const stack = document.createElement("div");
     stack.className = "chart-stack";
+    const chartDiags = [];
     const chartFormat = {
       axisPrice,
       axisTime,
@@ -5590,6 +5635,7 @@ ${referenceBlock}
       }
       const displayFin = liveSession ? liveDisplayFinresp(p.sec, p.finresp) : p.finresp;
       const chartRows = enrichChartRowsForDisplay(rows.length ? rows : p.rows, p.sec);
+      chartDiags.push(analyzeChartInstrument(p.sec, rows.length ? rows : p.rows));
       const stopV = chartStopLines(chartRows, portfolioEvents);
       const orderV = liveSession ? orderMarkersForChart(p.sec, chartRows) : [];
       const vLines = [...stopV, ...orderV];
@@ -5639,6 +5685,15 @@ ${referenceBlock}
     if (stack.childNodes.length) {
       chartBox.appendChild(stack);
       chartBox.hidden = false;
+      if (calcState) {
+        calcState.lastChartDiag = {
+          builtAt: new Date().toISOString(),
+          chartsModule: typeof MLInstrumentChart !== "undefined" ? (MLInstrumentChart.version || "legacy") : "missing",
+          tradeMarkersFromBar: !!E?.tradeMarkersFromBar,
+          instruments: chartDiags
+        };
+        updateTechInfo("charts-drawn");
+      }
     } else if (!note) {
       syncChartBox(chartBox, "<p class=\"note\">Нет данных для графика.</p>");
     }

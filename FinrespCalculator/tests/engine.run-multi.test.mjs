@@ -82,3 +82,18 @@ describe("runPacksOnTimeGrid", () => {
     assert.ok(gross <= portfolioCap.capRub * 1.02 + 1);
   });
 });
+
+describe("tradeMarkersFromBar", () => {
+  it("marks flip long to short on one bar", () => {
+    const m = E.tradeMarkersFromBar(10, -8, null);
+    assert.equal(m.tradeOut, "logic");
+    assert.equal(m.tradeOutSide, "long");
+    assert.equal(m.tradeIn, "short");
+  });
+
+  it("marks SL exit and same-bar re-entry", () => {
+    const m = E.tradeMarkersFromBar(5, 8, "sl");
+    assert.equal(m.tradeOut, "sl");
+    assert.equal(m.tradeIn, "long");
+  });
+});

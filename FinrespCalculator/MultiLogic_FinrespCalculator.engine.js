@@ -1264,10 +1264,20 @@
     let tradeOutSide = null;
     const pb = posBefore ?? 0;
     const pa = posAfter ?? 0;
-    if (pb === 0 && pa !== 0) tradeIn = pa > 0 ? "long" : "short";
     if (pb !== 0 && pa === 0) {
       tradeOut = posStop === "sl" || posStop === "tp" ? posStop : "logic";
       tradeOutSide = pb > 0 ? "long" : "short";
+    } else if (posStop && pb !== 0 && pa !== 0) {
+      // SL/TP и новый вход на одном баре — оба маркера
+      tradeOut = posStop;
+      tradeOutSide = pb > 0 ? "long" : "short";
+      tradeIn = pa > 0 ? "long" : "short";
+    } else if (pb !== 0 && pa !== 0 && Math.sign(pb) !== Math.sign(pa)) {
+      tradeOut = posStop === "sl" || posStop === "tp" ? posStop : "logic";
+      tradeOutSide = pb > 0 ? "long" : "short";
+      tradeIn = pa > 0 ? "long" : "short";
+    } else if (pb === 0 && pa !== 0) {
+      tradeIn = pa > 0 ? "long" : "short";
     }
     return { tradeIn, tradeOut, tradeOutSide };
   }
@@ -2711,6 +2721,12 @@
     return idx >= 0 ? perSecItem.rows[idx].eq : 0;
   }
 
+  /** Позиция инструмента на баре triggerTime (для stopper). */
+  function posAtRowTime(rows, time) {
+    const idx = findRowIdxAtOrBefore(rows, time);
+    return idx >= 0 ? (rows[idx]?.pos ?? 0) : 0;
+  }
+
   /**
    * Оптимизация stopper (вариант 1): equity одного инструмента на каждую свечу times[].
    * Два указателя по отсортированным rows/time — O(rows + times), без повторного линейного поиска
@@ -2778,6 +2794,8 @@
     const affected = [];
     for (let s = 0; s < perSec.length; s++) {
       const sec = perSec[s].sec || packs[s]?.[0]?.sec || "?";
+      const posAtTrigger = posAtRowTime(perSec[s].rows, triggerTime);
+      if (posAtTrigger === 0) continue;
       if (onProgress) {
         onProgress(stopperStep, stopperTotal, triggerTime, {
           resim: true,

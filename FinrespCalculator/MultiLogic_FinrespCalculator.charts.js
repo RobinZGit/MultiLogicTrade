@@ -4,6 +4,8 @@
 (function (root) {
   "use strict";
 
+  const CHARTS_MODULE_VERSION = "2026-06-14-chart-fin-badge-v1";
+
   const PRICE_KEYS = [
     "high", "low", "open", "close",
     "sma", "smaUpper", "smaLower",
@@ -17,7 +19,7 @@
     width: 2,
     dash: null,
     opacity: 0.95,
-    label: "FINRESP инструмента — cash + qty×цена (0 без позиции)"
+    label: "FINRESP инструмента — от первого △/▲ (eq − eq₀, eq₀ на входе)"
   };
 
   const IND_LINE = [
@@ -94,20 +96,23 @@
   }
 
   /**
-   * FINRESP для линии на графике: 0, пока не было позиции (|pos|>0);
-   * после первого входа — eq − eq[0] (cash + qty×цена, как в симуляции).
+   * FINRESP для линии на графике: 0 до первого △/▲; с первого входа/выхода — eq − eq₀
+   * (eq₀ = eq на баре первого события, не сдвиг «для удобства»). Без сделок линии нет.
    */
   function instrumentChartEquitySeries(rows) {
     if (!rows?.length) return { values: [], everHeld: false };
     const values = new Array(rows.length);
-    let everHeld = false;
-    const baseEq = rows[0]?.eq ?? 0;
+    let everTraded = false;
+    let baseEq = 0;
     for (let i = 0; i < rows.length; i++) {
-      const pos = rows[i]?.pos ?? 0;
-      if (pos !== 0) everHeld = true;
-      values[i] = everHeld ? (rows[i]?.eq ?? 0) - baseEq : 0;
+      const r = rows[i];
+      if (!everTraded && (r?.tradeIn || r?.tradeOut)) {
+        baseEq = r?.eq ?? 0;
+        everTraded = true;
+      }
+      values[i] = everTraded ? (r?.eq ?? 0) - baseEq : 0;
     }
-    return { values, everHeld };
+    return { values, everHeld: everTraded };
   }
 
   function rowHasEquity(rows) {
@@ -229,31 +234,54 @@
     }).join("");
   }
 
-  function tradeMarkerSvg(r, i, x, y, hi, lo) {
+  /** Размер △/▲ в px SVG: от ширины свечи, с полом/потолком — одинаково читаемо при zoom. */
+  function tradeMarkerSize(candleW, compact) {
+    const fromBar = (candleW || 8) * 1.45;
+    const floor = compact ? 14 : 16;
+    const cap = compact ? 20 : 24;
+    return {
+      triH: Math.min(cap, Math.max(floor, fromBar)),
+      triW: Math.min(cap * 0.88, Math.max(floor * 0.88, fromBar * 0.88))
+    };
+  }
+
+  function tradeMarkerSvg(r, i, x, y, plotTop, plotBottom, triH, triW) {
     const parts = [];
     const cx = x(i);
-    const span = Math.max((hi - lo) * 0.012, 0.02);
-    const triH = Math.max(span * 2.2, (hi - lo) * 0.018);
-    const triW = triH * 0.85;
+    const yMin = plotTop + 4;
+    const yMax = plotBottom - 4;
     const highY = y(r.high ?? r.close ?? 0);
+    const lowY = y(r.low ?? r.close ?? 0);
+    const strokeW = triH >= 18 ? 2.2 : 1.8;
 
     if (r.tradeIn === "long" || r.tradeIn === "short") {
-      const tipY = highY - triH - 2;
-      const baseY = tipY + triH;
+      let tipY = highY - 5;
+      let baseY = tipY + triH;
+      if (tipY < yMin) {
+        const shift = yMin - tipY;
+        tipY += shift;
+        baseY += shift;
+      }
       const pts = `${cx.toFixed(1)},${tipY.toFixed(1)} ${(cx - triW).toFixed(1)},${baseY.toFixed(1)} ${(cx + triW).toFixed(1)},${baseY.toFixed(1)}`;
       const colors = markerColors(r.tradeIn);
       const title = tradeMarkerTitle("in", r.tradeIn, r);
-      parts.push(`<polygon points="${pts}" fill="none" stroke="${colors.entry}" stroke-width="1.4" opacity="0.95"><title>${title}</title></polygon>`);
+      parts.push(`<polygon points="${pts}" fill="${colors.entry}" fill-opacity="0.35" stroke="#fff" stroke-width="${(strokeW + 0.8).toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
+      parts.push(`<polygon points="${pts}" fill="${colors.entry}" fill-opacity="0.35" stroke="${colors.entry}" stroke-width="${strokeW.toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
     }
 
     if (r.tradeOut) {
       const side = r.tradeOutSide || r.tradeIn || "long";
       const colors = markerColors(side);
       const title = tradeMarkerTitle("out", side, r);
-      const baseY = highY - 3;
-      const tipY = baseY - triH;
+      let baseY = Math.min(yMax, lowY + 5);
+      let tipY = baseY - triH;
+      if (tipY < yMin) {
+        tipY = yMin;
+        baseY = tipY + triH;
+      }
       const pts = `${cx.toFixed(1)},${tipY.toFixed(1)} ${(cx - triW).toFixed(1)},${baseY.toFixed(1)} ${(cx + triW).toFixed(1)},${baseY.toFixed(1)}`;
-      parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="${colors.exit}" stroke-width="0.6" opacity="0.95"><title>${title}</title></polygon>`);
+      parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="#fff" stroke-width="${(strokeW + 0.8).toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
+      parts.push(`<polygon points="${pts}" fill="${colors.exit}" stroke="${colors.exit}" stroke-width="${strokeW.toFixed(1)}" opacity="1"><title>${title}</title></polygon>`);
     }
 
     return parts.join("");
@@ -280,12 +308,14 @@
     const visN = v1 - v0 + 1;
 
     const w = 820;
-    const h = compact ? 210 : 340;
+    const h = compact ? 230 : 360;
     const chartEq = instrumentChartEquitySeries(rows);
     const showEq = chartEq.everHeld;
     const left = 68;
-    const right = showEq ? 58 : 28;
-    const top = compact ? 24 : 28;
+    const right = showEq ? 62 : 28;
+    const finBadgeY = 16;
+    const legendY = compact ? 32 : 36;
+    const top = compact ? 46 : 52;
     const bottom = 58;
     const plotW = w - left - right;
     const plotH = h - top - bottom;
@@ -332,6 +362,7 @@
       v0 + Math.round(k * (visN - 1) / Math.max(1, xTickCount - 1)));
 
     const candleW = Math.max(1.2, Math.min(14, plotW / Math.max(visN, 1) * 0.62));
+    const { triH, triW } = tradeMarkerSize(candleW, compact);
     const candles = slice.map((r, j) => {
       const i = v0 + j;
       if (r?.open == null && r?.close == null) return "";
@@ -374,7 +405,8 @@
       eqLine = `<polyline fill="none" stroke="${EQ_LINE.stroke}" stroke-width="${EQ_LINE.width}" opacity="${EQ_LINE.opacity}" points="${eqPts}"><title>${esc(EQ_LINE.label)}</title></polyline>`;
     }
 
-    const markers = slice.map((r, j) => tradeMarkerSvg(r, v0 + j, x, y, hi, lo)).join("");
+    const plotBottom = h - bottom;
+    const markers = slice.map((r, j) => tradeMarkerSvg(r, v0 + j, x, y, top, plotBottom, triH, triW)).join("");
 
     const stopLines = decor.vLines?.length ? decor.vLines : [];
     const stopLinesSvg = buildStopVLines(stopLines, x, top, h - bottom);
@@ -393,7 +425,6 @@
     const xLabels = xTickIdx.map((i) =>
       `<text x="${x(i).toFixed(1)}" y="${h - 10}" text-anchor="middle" font-size="9" fill="#64748b" font-family="Consolas,monospace">${axisTime(rows[i]?.time)}</text>`).join("");
 
-    const color = finresp < 0 ? "#b91c1c" : "#047857";
     const stopLegend = stopLines.length ? " · SL/TP поз. — тонкая · портф. — жирная" : "";
     const modeLegend = decor.modeRegions?.length
       ? " · зелёная область — песочница · розовая — реальная торговля"
@@ -402,12 +433,24 @@
       ? ` · видно ${visN} из ${rows.length} баров`
       : "";
     const tickerSvg = secTitle
-      ? `<text x="${left + 4}" y="${top + (compact ? 24 : 28)}" font-size="${compact ? 13 : 16}" font-weight="700" fill="#111827" font-family="Consolas,monospace">${esc(secTitle)}</text>`
+      ? `<text x="${left + 4}" y="${finBadgeY + 1}" font-size="${compact ? 13 : 16}" font-weight="700" fill="#111827" font-family="Consolas,monospace">${esc(secTitle)}</text>`
       : "";
     const rightAxis = showEq
       ? `<line x1="${w - right}" y1="${top}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
-<text x="${w - right + 8}" y="${top - 8}" text-anchor="start" font-size="10" fill="#475569" font-weight="600">FINRESP, ₽</text>`
+<text x="${w - right + 8}" y="${top - 10}" text-anchor="start" font-size="10" fill="#475569" font-weight="600">FINRESP, ₽</text>`
       : "";
+
+    const chartFin = showEq ? (chartEq.values[v1] ?? 0) : null;
+    const color = chartFin != null && chartFin < 0 ? "#b91c1c" : "#047857";
+    let finBadgeSvg = "";
+    if (chartFin != null) {
+      const finLabel = `FINRESP ${fmtFin(chartFin)} ₽`;
+      const finFont = compact ? 11 : 13;
+      const estW = Math.max(72, finLabel.length * (finFont * 0.58));
+      const boxX = w - 4 - estW - 8;
+      finBadgeSvg = `<rect x="${boxX.toFixed(1)}" y="5" width="${(estW + 10).toFixed(1)}" height="20" rx="4" fill="#ffffff" stroke="${color}" stroke-width="1.1" opacity="0.98"/>
+<text x="${w - 8}" y="${finBadgeY}" text-anchor="end" fill="${color}" font-size="${finFont}" font-weight="700" font-family="Consolas,monospace">${esc(finLabel)}</text>`;
+    }
 
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}" class="ml-chart-svg">
 <rect width="${w}" height="${h}" fill="#fff"/>
@@ -426,8 +469,8 @@ ${indLines}
 ${candles}
 ${eqLine}
 ${markers}
-<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${color}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace">FINRESP ${fmtFin(finresp)} ₽</text>
-<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико — масштаб · drag — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
+<text x="${left + 4}" y="${legendY}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико — масштаб · drag — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
+${finBadgeSvg}
 </svg>`;
   }
 
@@ -585,5 +628,79 @@ ${markers}
     };
   }
 
-  root.MLInstrumentChart = { mount, renderChartSvg, buildIndicatorLegend, copyChartToClipboard };
+  /** Сводка по строкам графика (маркеры, pos, eq) — для тех. информации. */
+  function summarizeChartRows(rows) {
+    if (!rows?.length) {
+      return {
+        rows: 0, tradeIn: 0, tradeOut: 0, posStop: 0, posStopMarked: 0,
+        posNonZero: 0, posCross: 0, crossNoMarker: 0, maxAbsPos: 0,
+        everHeld: false, eqLast: 0, samples: []
+      };
+    }
+    let tradeIn = 0;
+    let tradeOut = 0;
+    let posStop = 0;
+    let posStopMarked = 0;
+    let posNonZero = 0;
+    let posCross = 0;
+    let crossNoMarker = 0;
+    let maxAbsPos = 0;
+    let prevPos = 0;
+    const samples = [];
+    const chartEq = instrumentChartEquitySeries(rows);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const pos = r?.pos ?? 0;
+      if (r?.tradeIn) tradeIn += 1;
+      if (r?.tradeOut) tradeOut += 1;
+      if (r?.posStop) {
+        posStop += 1;
+        if (r.tradeIn || r.tradeOut) posStopMarked += 1;
+      }
+      if (pos !== 0) posNonZero += 1;
+      maxAbsPos = Math.max(maxAbsPos, Math.abs(pos));
+      if ((prevPos === 0 && pos !== 0) || (prevPos !== 0 && pos === 0)
+        || (prevPos !== 0 && pos !== 0 && Math.sign(prevPos) !== Math.sign(pos))) {
+        posCross += 1;
+        if (!r?.tradeIn && !r?.tradeOut) crossNoMarker += 1;
+      }
+      if ((r?.tradeIn || r?.tradeOut) && samples.length < 6) {
+        samples.push({
+          i,
+          time: r.time,
+          tradeIn: r.tradeIn || "",
+          tradeOut: r.tradeOut || "",
+          pos,
+          posStop: r.posStop || "",
+          eq: r.eq,
+          buy: r.buy,
+          sell: r.sell
+        });
+      }
+      prevPos = pos;
+    }
+    return {
+      rows: rows.length,
+      tradeIn,
+      tradeOut,
+      posStop,
+      posStopMarked,
+      posNonZero,
+      posCross,
+      crossNoMarker,
+      maxAbsPos,
+      everHeld: chartEq.everHeld,
+      eqLast: chartEq.values[rows.length - 1] ?? 0,
+      samples
+    };
+  }
+
+  root.MLInstrumentChart = {
+    mount,
+    renderChartSvg,
+    buildIndicatorLegend,
+    copyChartToClipboard,
+    summarizeChartRows,
+    version: CHARTS_MODULE_VERSION
+  };
 })(typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : this);
