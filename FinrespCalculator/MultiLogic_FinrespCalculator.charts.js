@@ -12,6 +12,14 @@
     "vwap"
   ];
 
+  const EQ_LINE = {
+    stroke: "#111827",
+    width: 2,
+    dash: null,
+    opacity: 0.95,
+    label: "FINRESP инструмента — накопленный результат (₽)"
+  };
+
   const IND_LINE = [
     { key: "sma", stroke: "#d97706", width: 1, dash: "5 4", opacity: 0.85, label: "SMA — скользящая средняя" },
     { key: "smaUpper", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75, label: "SMA — верх коридора (±K×ATR)" },
@@ -85,13 +93,28 @@
     return `<svg class="ml-chart-legend-swatch" width="32" height="10" aria-hidden="true"><line x1="0" y1="5" x2="32" y2="5" stroke="${spec.stroke}" stroke-width="${sw}"${dash} opacity="${spec.opacity ?? 1}"/></svg>`;
   }
 
+  /** Накопленный FINRESP инструмента от нуля на первом баре расчёта. */
+  function instrumentEquityAt(rows, index) {
+    const base = rows[0]?.eq ?? 0;
+    return (rows[index]?.eq ?? 0) - base;
+  }
+
+  function rowHasEquity(rows) {
+    return rowHasKey(rows, "eq");
+  }
+
   /** Легенда линий индикаторов под графиком (только присутствующие в данных). */
   function buildIndicatorLegend(rows) {
+    const items = [];
     const active = IND_LINE.filter((spec) => rowHasKey(rows, spec.key));
-    if (!active.length) return "";
-    const items = active.map((spec) =>
-      `<span class="ml-chart-legend-item">${legendLineSample(spec)}<span>${esc(spec.label)}</span></span>`).join("");
-    return `<div class="ml-chart-ind-legend" role="list">${items}</div>`;
+    for (const spec of active) {
+      items.push(`<span class="ml-chart-legend-item">${legendLineSample(spec)}<span>${esc(spec.label)}</span></span>`);
+    }
+    if (rowHasEquity(rows)) {
+      items.push(`<span class="ml-chart-legend-item">${legendLineSample(EQ_LINE)}<span>${esc(EQ_LINE.label)}</span></span>`);
+    }
+    if (!items.length) return "";
+    return `<div class="ml-chart-ind-legend" role="list">${items.join("")}</div>`;
   }
 
   /** Копирование текущего SVG-графика в буфер как PNG. */
@@ -229,6 +252,7 @@
     const {
       finresp = 0,
       title = "График",
+      secTitle = "",
       compact = false,
       decor = {},
       format = {}
@@ -236,17 +260,19 @@
     const axisPrice = format.axisPrice || ((v) => String(v));
     const axisTime = format.axisTime || ((t) => String(t ?? ""));
     const fmtFin = format.fmtFinresp || ((v) => String(v));
+    const niceTicks = format.niceTicks || ((a, b) => [a, b]);
 
     if (!rows?.length) return "";
 
     const v0 = clamp(Math.floor(view.start), 0, rows.length - 1);
     const v1 = clamp(Math.ceil(view.end), v0, rows.length - 1);
     const visN = v1 - v0 + 1;
+    const showEq = rowHasEquity(rows);
 
     const w = 820;
     const h = compact ? 210 : 340;
     const left = 68;
-    const right = 28;
+    const right = showEq ? 58 : 28;
     const top = compact ? 24 : 28;
     const bottom = 58;
     const plotW = w - left - right;
@@ -264,7 +290,30 @@
     const x = (i) => left + (i - v0) * plotW / Math.max(1, visN - 1);
     const y = (v) => top + (hi - v) * plotH / (hi - lo);
 
-    const niceTicks = format.niceTicks || ((a, b) => [a, b]);
+    let yEq = null;
+    let eqLo = 0;
+    let eqHi = 0;
+    let eqTicks = [];
+    let eqZeroLine = "";
+    if (showEq) {
+      const eqSlice = slice.map((_, j) => instrumentEquityAt(rows, v0 + j));
+      let eqMin = Math.min(...eqSlice);
+      let eqMax = Math.max(...eqSlice);
+      if (eqMin === eqMax) {
+        eqMin -= Math.max(1, Math.abs(eqMin) * 0.05 + 0.5);
+        eqMax += Math.max(1, Math.abs(eqMax) * 0.05 + 0.5);
+      }
+      const eqPad = Math.max((eqMax - eqMin) * 0.08, 0.5);
+      eqLo = eqMin - eqPad;
+      eqHi = eqMax + eqPad;
+      yEq = (v) => top + (eqHi - v) * plotH / (eqHi - eqLo);
+      eqTicks = niceTicks(eqLo, eqHi, compact ? 4 : 5);
+      if (eqLo < 0 && eqHi > 0) {
+        const zy = yEq(0).toFixed(1);
+        eqZeroLine = `<line x1="${left}" y1="${zy}" x2="${w - right}" y2="${zy}" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4 4" opacity="0.85"/>`;
+      }
+    }
+
     const yTicks = niceTicks(lo, hi, 5);
     const xTickCount = Math.min(6, Math.max(2, Math.floor(visN / 12)));
     const xTickIdx = Array.from({ length: xTickCount }, (_, k) =>
@@ -304,6 +353,15 @@
       return `<polyline fill="none" stroke="${spec.stroke}" stroke-width="${spec.width}"${dash} opacity="${spec.opacity}" points="${pts}"/>`;
     }).join("");
 
+    let eqLine = "";
+    if (showEq && yEq) {
+      const eqPts = slice.map((_, j) => {
+        const eqVal = instrumentEquityAt(rows, v0 + j);
+        return `${x(v0 + j).toFixed(1)},${yEq(eqVal).toFixed(1)}`;
+      }).join(" ");
+      eqLine = `<polyline fill="none" stroke="${EQ_LINE.stroke}" stroke-width="${EQ_LINE.width}" opacity="${EQ_LINE.opacity}" points="${eqPts}"><title>${esc(EQ_LINE.label)}</title></polyline>`;
+    }
+
     const markers = slice.map((r, j) => tradeMarkerSvg(r, v0 + j, x, y, hi, lo)).join("");
 
     const stopLines = decor.vLines?.length ? decor.vLines : [];
@@ -316,6 +374,10 @@
       `<line x1="${x(i).toFixed(1)}" y1="${top}" x2="${x(i).toFixed(1)}" y2="${h - bottom}" stroke="#e8edf4" stroke-width="1"/>`).join("");
     const yLabels = yTicks.map((v) =>
       `<text x="${left - 8}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#64748b" font-family="Consolas,monospace">${axisPrice(v)}</text>`).join("");
+    const eqLabels = showEq && yEq
+      ? eqTicks.map((v) =>
+        `<text x="${w - right + 8}" y="${(yEq(v) + 3.5).toFixed(1)}" text-anchor="start" font-size="9" fill="#374151" font-family="Consolas,monospace">${fmtFin(v)}</text>`).join("")
+      : "";
     const xLabels = xTickIdx.map((i) =>
       `<text x="${x(i).toFixed(1)}" y="${h - 10}" text-anchor="middle" font-size="9" fill="#64748b" font-family="Consolas,monospace">${axisTime(rows[i]?.time)}</text>`).join("");
 
@@ -327,19 +389,30 @@
     const zoomHint = visN < rows.length
       ? ` · видно ${visN} из ${rows.length} баров`
       : "";
+    const tickerSvg = secTitle
+      ? `<text x="${left + 4}" y="${top + (compact ? 24 : 28)}" font-size="${compact ? 13 : 16}" font-weight="700" fill="#111827" font-family="Consolas,monospace">${esc(secTitle)}</text>`
+      : "";
+    const rightAxis = showEq
+      ? `<line x1="${w - right}" y1="${top}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
+<text x="${w - right + 8}" y="${top - 8}" text-anchor="start" font-size="10" fill="#475569" font-weight="600">FINRESP, ₽</text>`
+      : "";
 
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(title)}" class="ml-chart-svg">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
 ${gridH}${gridV}
+${eqZeroLine}
 ${stopLinesSvg}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
-${yLabels}${xLabels}
+${rightAxis}
+${yLabels}${eqLabels}${xLabels}
 <text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Цена, ₽</text>
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
+${tickerSvg}
 ${indLines}
 ${candles}
+${eqLine}
 ${markers}
 <text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${color}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace">FINRESP ${fmtFin(finresp)} ₽</text>
 <text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико — масштаб · drag — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
