@@ -2953,7 +2953,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function invalidateFinrespResult(message) {
     if (isOptimizing()) return;
     resetFinrespDisplay();
-    tryRefreshEquityCharts();
+    /* Графики equity не пересчитываем — только «Рассчитать» (applyResult → drawEquityCharts). */
     if (message !== false) {
       $("calc-status").textContent = message || FINRESP_STALE_MSG;
     }
@@ -3664,7 +3664,6 @@ body.calc-running .help-ftr{opacity:.75;}
     saveConfig();
     invalidateFormChange();
     updatePositionSlHint();
-    if (state.packs.length) tryRefreshEquityCharts();
     $("calc-status").textContent = `Логика «${name}» удалена из каталога.`;
   }
 
@@ -3764,7 +3763,6 @@ body.calc-running .help-ftr{opacity:.75;}
     saveConfig();
     invalidateFormChange();
     updatePositionSlHint();
-    if (state.packs.length) tryRefreshEquityCharts();
     $("calc-status").textContent = "Каталог логик восстановлен по умолчанию. Выберите логику для расчёта.";
   }
 
@@ -3794,7 +3792,6 @@ body.calc-running .help-ftr{opacity:.75;}
     saveConfig();
     invalidateFormChange();
     updatePositionSlHint();
-    if (state.packs.length) tryRefreshEquityCharts();
     $("calc-status").textContent = `Загружено ${keys.length} логик из файла. Нажмите «Применить» или «Рассчитать».`;
   }
 
@@ -3993,7 +3990,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function renderFromParams() {
     updateAtParamsSummary();
     syncReverseUi();
-    invalidateFormChange();
+    invalidateFormChange({ skipSave: false });
   }
 
   /** Заполнение select/списка: `fillLogicEditor`. */
@@ -4791,13 +4788,6 @@ ${pointDot}
     const t0 = pack[a]?.time ? axisTime(pack[a].time) : "—";
     const t1 = pack[b]?.time ? axisTime(pack[b].time) : "—";
     return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
-  }
-
-  /** Подпрограмма `tryRefreshEquityCharts`. */
-  function tryRefreshEquityCharts() {
-    if (!state.packs.length || refPack().length < 3) return;
-    const [a, b] = normalizeSliders();
-    drawEquityCharts(a, b);
   }
 
   /** Кривые equity по логикам каталога. */
@@ -5606,7 +5596,7 @@ ${totalBlock}
   $("vol-type").addEventListener("change", () => { syncVolumeFields(); invalidateFormChange(); });
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
-  $("param-reverse")?.addEventListener("change", () => { syncReverseUi(); renderFromParams(); saveConfig(); });
+  $("param-reverse")?.addEventListener("change", renderFromParams);
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
