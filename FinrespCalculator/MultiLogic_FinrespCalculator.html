@@ -1125,6 +1125,14 @@ body.calc-running .help-ftr{opacity:.75;}
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
+  /** Свернуть «Дополнительные параметры», если блок развёрнут (после «Рассчитать»). */
+  function collapseExtraParamsIfOpen() {
+    const details = $("extra-params");
+    if (!details?.open) return;
+    details.open = false;
+    syncCollapsibleToggleLabel(details, "extra-params-toggle");
+  }
+
   /** Привязка ссылки «Развернуть» / «Свернуть» к `<details>`. */
   function bindCollapsibleToggle(detailsId, toggleId) {
     const details = typeof detailsId === "string" ? $(detailsId) : detailsId;
@@ -5312,6 +5320,7 @@ ${totalBlock}
         }
         if (runGen === state.runGeneration) await finishCalcProgress("Расчёт завершён");
       }
+      if (runGen === state.runGeneration) collapseExtraParamsIfOpen();
     } catch (err) {
       if (shouldCancel() || err?.message === "cancelled") {
         await finishIfCancelled(loadedData);
