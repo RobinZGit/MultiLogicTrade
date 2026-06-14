@@ -1029,7 +1029,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-live-limit-order-fix";
+  const CALC_PAGE_VERSION = "2026-06-14-prefix-restore-fix";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1202,6 +1202,14 @@ body.calc-running .help-ftr{opacity:.75;}
     details.addEventListener("toggle", syncLabel);
     syncLabel();
   }
+
+  /** «Тех. информация», доп. параметры, T-Bank — до полной инициализации (повторный вызов безопасен). */
+  function bindCoreCollapsibleToggles() {
+    bindCollapsibleToggle("tech-info-panel", "tech-info-toggle");
+    bindCollapsibleToggle("extra-params", "extra-params-toggle");
+    bindCollapsibleToggle("tbank-settings", "tbank-settings-toggle");
+  }
+  bindCoreCollapsibleToggles();
 
   /** Привязка сворачиваемых блоков live-панели (повторный вызов безопасен). */
   function bindLivePanelCollapsibleToggles() {
@@ -1414,20 +1422,26 @@ body.calc-running .help-ftr{opacity:.75;}
   });
   $("tech-info-copy")?.addEventListener("click", async () => {
     const text = buildTechInfoText();
+    const techEl = $("tech-info-text");
+    const prevTech = techEl?.textContent;
     try {
       await navigator.clipboard.writeText(text);
       techLog.lastEvent = "tech-copied";
       updateTechInfo();
+      const msg = "Тех. информация скопирована в буфер обмена.";
       const prev = $("calc-status")?.textContent;
-      if ($("calc-status")) {
-        $("calc-status").textContent = "Тех. информация скопирована в буфер обмена.";
-        setTimeout(() => {
-          if ($("calc-status") && prev) $("calc-status").textContent = prev;
-          updateTechInfo("tech-copy-done");
-        }, 1800);
-      }
+      if ($("calc-status")) $("calc-status").textContent = msg;
+      if (techEl) techEl.textContent = `${msg}\n\n${text}`;
+      setTimeout(() => {
+        if ($("calc-status") && prev) $("calc-status").textContent = prev;
+        if (techEl && prevTech != null) techEl.textContent = prevTech;
+        updateTechInfo("tech-copy-done");
+      }, 2200);
     } catch (err) {
       noteTechError(`clipboard: ${err.message}`);
+      if (techEl) {
+        techEl.textContent = `Не удалось скопировать: ${err.message}\n\n${text}`;
+      }
     }
   });
   $("tech-info-refresh")?.addEventListener("click", () => updateTechInfo("tech-refresh"));
@@ -1486,6 +1500,7 @@ body.calc-running .help-ftr{opacity:.75;}
     window.__mlSyncAccountMode = () => bootstrapLiveTradingPanelVisibility();
     window.__mlFinrespVersion = `${CALC_PAGE_VERSION} (no-engine)`;
     bootstrapLiveTradingPanelVisibility();
+    bindCoreCollapsibleToggles();
     updateTechInfo("init-fail-no-engine");
     return;
   }
@@ -1499,6 +1514,7 @@ body.calc-running .help-ftr{opacity:.75;}
     window.__mlSyncAccountMode = () => bootstrapLiveTradingPanelVisibility();
     window.__mlFinrespVersion = `${CALC_PAGE_VERSION} (no-live)`;
     bootstrapLiveTradingPanelVisibility();
+    bindCoreCollapsibleToggles();
     updateTechInfo("init-fail-no-live");
     return;
   }
@@ -1879,8 +1895,12 @@ body.calc-running .help-ftr{opacity:.75;}
       if ($("random-price-shift")) {
         $("random-price-shift").checked = !!cfg.randomPriceShift;
       }
-      setValueIfExists("prefix-stocks", cfg.prefixes?.stocks);
-      setValueIfExists("prefix-futures", cfg.prefixes?.futures);
+      if (cfg.prefixes?.stocks != null && String(cfg.prefixes.stocks).trim()) {
+        setValueIfExists("prefix-stocks", cfg.prefixes.stocks);
+      }
+      if (cfg.prefixes?.futures != null && String(cfg.prefixes.futures).trim()) {
+        setValueIfExists("prefix-futures", cfg.prefixes.futures);
+      }
       if (Array.isArray(cfg.indicators)) applyIndicatorSelection(cfg.indicators);
       if (Array.isArray(cfg.hiddenLogicKeys)) {
         state.hiddenLogicKeys = cfg.hiddenLogicKeys.filter(Boolean);
@@ -3410,7 +3430,6 @@ body.calc-running .help-ftr{opacity:.75;}
       return;
     }
     if (state.optim.active) stopOptim();
-    const meta = optimMeta(kind);
     const input = meta.inputId ? $(meta.inputId) : null;
     let startValue;
     let candidates;
@@ -3493,8 +3512,25 @@ body.calc-running .help-ftr{opacity:.75;}
     $("prefix-futures").value = E.DEFAULT_FUTURES_PREFIXES_RAW;
   }
 
+  /** Пустые поля префиксов (часто из localStorage) — подставить встроенный список. */
+  function ensurePrefixFieldsNotEmpty() {
+    const stocksEl = $("prefix-stocks");
+    const futuresEl = $("prefix-futures");
+    let repaired = false;
+    if (stocksEl && !String(stocksEl.value || "").trim()) {
+      stocksEl.value = E.DEFAULT_STOCK_TICKERS_RAW;
+      repaired = true;
+    }
+    if (futuresEl && !String(futuresEl.value || "").trim()) {
+      futuresEl.value = E.DEFAULT_FUTURES_PREFIXES_RAW;
+      repaired = true;
+    }
+    return repaired;
+  }
+
   /** Подпрограмма `reloadShareList`. */
   function reloadShareList() {
+    ensurePrefixFieldsNotEmpty();
     state.shareList = E.listShareTickers($("prefix-stocks").value);
     fillSecSelect();
     updateSecHint();
@@ -3502,6 +3538,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Подпрограмма `reloadFuturesList`. */
   function reloadFuturesList() {
+    ensurePrefixFieldsNotEmpty();
     state.futuresList = E.listFuturesPrefixes($("prefix-futures").value);
     state.futuresFromMoex = false;
     fillSecSelect();
@@ -3849,6 +3886,8 @@ body.calc-running .help-ftr{opacity:.75;}
     document.querySelectorAll("#indicator-toggles input[type=checkbox]").forEach((el) => {
       el.checked = true;
     });
+    initPrefixFields();
+    initInstrumentLists();
     syncVolumeFields();
     syncLeverageDisplay();
   }
@@ -3857,7 +3896,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function restoreCalcDefaultsInteractive() {
     if (!window.confirm(
       "Установить параметры по умолчанию?\n\n"
-      + "@@/@, портфельный Stopper, объём, комиссия, индикаторы."
+      + "@@/@, портфельный Stopper, объём, комиссия, индикаторы и списки MOEX."
     )) {
       return;
     }
@@ -5827,7 +5866,17 @@ ${referenceBlock}
     }
   });
   ["prefix-stocks", "prefix-futures"].forEach((id) => {
-    $(id).addEventListener("change", saveConfig);
+    const onPrefixFieldChange = () => {
+      const repaired = ensurePrefixFieldsNotEmpty();
+      if (id === "prefix-stocks") reloadShareList();
+      else reloadFuturesList();
+      saveConfig();
+      if (repaired) {
+        $("calc-status").textContent =
+          "Список тикеров был пуст — восстановлены значения по умолчанию. Выберите бумаги и нажмите «Рассчитать».";
+      }
+    };
+    $(id).addEventListener("change", onPrefixFieldChange);
     $(id).addEventListener("input", saveConfig);
   });
   $("logic-apply").addEventListener("click", () => {
@@ -5964,9 +6013,7 @@ ${referenceBlock}
     saveWindowAnchor();
     invalidateFormChange();
   });
-  bindCollapsibleToggle("extra-params", "extra-params-toggle");
-  bindCollapsibleToggle("tbank-settings", "tbank-settings-toggle");
-  bindCollapsibleToggle("tech-info-panel", "tech-info-toggle");
+  bindCoreCollapsibleToggles();
   bindLivePanelCollapsibleToggles();
   }
 
@@ -5987,9 +6034,19 @@ ${referenceBlock}
     syncMonthInputFromDates();
     syncVolumeFields();
     syncLeverageDisplay();
+    const prefixesRepaired = ensurePrefixFieldsNotEmpty();
     initInstrumentLists();
     applyRestoredInstrumentSelection();
     updateDateHint(selectedInstrumentCount());
+    if (prefixesRepaired) saveConfig();
+    if (!state.shareList.length && !state.futuresList.length) {
+      $("calc-status").textContent =
+        "Список инструментов пуст — откройте «Дополнительные параметры» → MOEX, проверьте тикеры и нажмите «Подобрать», либо Ctrl+F5.";
+      noteTechError("instrument lists empty after init");
+    } else if (prefixesRepaired) {
+      $("calc-status").textContent =
+        `Восстановлены тикеры по умолчанию (${state.shareList.length} акций). Выберите бумаги и нажмите «Рассчитать».`;
+    }
     bindUiEvents();
     initCandleCache();
     applyUiLocks();
