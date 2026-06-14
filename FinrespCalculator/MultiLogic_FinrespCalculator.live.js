@@ -3481,7 +3481,7 @@
     return st.includes("REJECT");
   }
 
-  /** POST OrdersService/PostOrder — рыночная или лимитная заявка T-Bank. */
+  /** POST OrdersService/PostOrder — рыночная (BESTPRICE/MARKET) или лимитная (LIMIT + price). */
   async function tbankPostOrder(instrumentId, direction, lots, secForPrice, options) {
     const opts = options || {};
     const qty = Math.max(0, Math.floor(+lots || 0));
@@ -3694,6 +3694,12 @@
       if (lots <= 0) throw new Error("Укажите количество лотов больше 0.");
       const orderType = $("live-manual-order-type")?.value === "limit" ? "limit" : "market";
       const limitPrice = $("live-manual-price")?.value || "";
+      if (orderType === "limit") {
+        const px = +String(limitPrice).replace(",", ".");
+        if (!Number.isFinite(px) || px <= 0) {
+          throw new Error("Укажите цену лимитной заявки (поле «Цена»).");
+        }
+      }
       let ti = null;
       if (state.tbank.token && (await ensureTbankTokenUnlocked())) {
         ti = await tbankFindInstrument(sec, market);
@@ -3713,7 +3719,7 @@
       }
       const ticker = String(ti.ticker || sec).toUpperCase();
       if (!sandbox) {
-        const tradable = await tbankValidateTradable(instrumentId, ti);
+        const tradable = await tbankValidateTradable(instrumentId, ti, orderType);
         if (!tradable.ok) throw new Error(`${ticker}: ${tradable.reason}`);
       }
       if (statusEl) statusEl.textContent = `Отправка ${direction === "ORDER_DIRECTION_BUY" ? "покупки" : "продажи"} ${ticker}, ${lots} лот…`;
