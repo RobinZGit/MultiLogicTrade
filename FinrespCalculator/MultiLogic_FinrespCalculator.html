@@ -447,7 +447,27 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-order-book-stats{font-size:.78rem;color:var(--muted);flex:1 1 auto;}
 .live-ob-price-pick{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;}
 .live-ob-price-pick:hover{font-weight:800;}
-.live-page-version-badge{background:#450a0a;font-size:.72rem;font-weight:600;margin-left:.35rem;}
+.live-page-version-badge{background:#450a0a;font-size:.72rem;font-weight:600;}
+.live-banner-badges{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:.2rem 0 .1rem;}
+.live-logics-badge-wrap{position:relative;display:inline-block;}
+.live-logics-badge{
+  list-style:none;cursor:pointer;user-select:none;
+  background:#7f1d1d;font-size:.72rem;font-weight:600;max-width:min(18rem,72vw);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.live-logics-badge::-webkit-details-marker{display:none;}
+.live-logics-badge::marker{content:"";}
+.live-logics-badge-detail{
+  position:absolute;top:calc(100% + .25rem);left:0;z-index:40;min-width:12rem;max-width:min(26rem,92vw);
+  padding:.5rem .65rem;margin:0;background:#fff;border:2px solid #991b1b;border-radius:8px;
+  font-size:.76rem;line-height:1.45;color:#374151;white-space:normal;
+  box-shadow:0 4px 14px rgba(0,0,0,.14);
+}
+.live-logics-badge-detail ol{margin:.15rem 0 0;padding-left:1.15rem;}
+.live-logics-badge-detail li{margin:.12rem 0;}
+.live-logics-badge-detail .live-logics-badge-empty{margin:0;color:var(--muted);}
+.live-trading-panel--sandbox .live-logics-badge{background:#166534;}
+.live-trading-panel--sandbox .live-logics-badge-detail{border-color:#166534;}
 .live-ob-grid{width:100%;border-collapse:collapse;}
 .live-ob-grid th,.live-ob-grid td{padding:.22rem .35rem;text-align:right;border-bottom:1px solid #fecaca;}
 .live-ob-grid th{font-size:.72rem;color:#7f1d1d;font-weight:700;}
@@ -574,7 +594,15 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="live-sandbox-mode"> Песочница (фейк)
 </label>
 </div>
+<div class="live-banner-badges">
 <span class="live-trading-badge live-page-version-badge" id="live-page-version-badge" title="Версия страницы — для проверки обновления"></span>
+<details class="live-logics-badge-wrap" id="live-logics-badge-panel">
+<summary class="live-trading-badge live-logics-badge" id="live-logics-badge-summary" title="Выбранные логики калькулятора (приоритет сверху вниз). Клик — подробности.">
+<span id="live-logics-badge-short">Логики: —</span>
+</summary>
+<div class="live-logics-badge-detail" id="live-logics-badge-detail" role="note"></div>
+</details>
+</div>
 </div>
 <div class="live-trading-leverage"><b>Плечо</b><span id="live-leverage-value">—</span></div>
 </div>
@@ -1039,7 +1067,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-obt-sync";
+  const CALC_PAGE_VERSION = "2026-06-14-live-logics-badge";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -4076,6 +4104,43 @@ body.calc-running .help-ftr{opacity:.75;}
     sel.size = Math.min(12, Math.max(5, selectedN + 1, Math.min(optN, 8)));
   }
 
+  /** Краткая подпись логик для бейджа live-панели. */
+  function liveLogicsBadgeShort(ids) {
+    if (!ids.length) return "Логики: —";
+    if (ids.length === 1) return `Логики: ${ids[0]}`;
+    if (ids.length <= 3) return `Логики: ${ids.join(" → ")}`;
+    return `Логики: ${ids.slice(0, 2).join(" → ")} +${ids.length - 2}`;
+  }
+
+  /** Развёрнутый список логик для бейджа live-панели. */
+  function liveLogicsBadgeDetailHtml(ids) {
+    if (!ids.length) {
+      return '<p class="live-logics-badge-empty">Не выбрано. В блоке «Логика» калькулятора отметьте одну или несколько строк (Ctrl+клик). Порядок сверху вниз — приоритет при live-торговле.</p>';
+    }
+    const items = ids.map((id, i) => {
+      const name = logicDisplayName(id);
+      return name === id
+        ? `<li><strong>${id}</strong></li>`
+        : `<li><strong>${id}</strong> — ${name}</li>`;
+    }).join("");
+    return `<p style="margin:0 0 .25rem;font-weight:600">Выбрано ${ids.length} (порядок приоритета):</p><ol>${items}</ol>`;
+  }
+
+  /** Бейдж «Логики» в баннере «Реальная торговля». */
+  function syncLiveLogicsBadge() {
+    const shortEl = $("live-logics-badge-short");
+    const detailEl = $("live-logics-badge-detail");
+    if (!shortEl && !detailEl) return;
+    const ids = selectedLogicIds();
+    const short = liveLogicsBadgeShort(ids);
+    if (shortEl) shortEl.textContent = short;
+    if (detailEl) detailEl.innerHTML = liveLogicsBadgeDetailHtml(ids);
+    const summary = $("live-logics-badge-summary");
+    if (summary) summary.title = ids.length
+      ? `${short}. Клик — полный список.`
+      : "Логики не выбраны. Клик — подсказка.";
+  }
+
   /** Процедура: текст «Выбрано N (порядок): …» над списком логик. */
   function syncLogicSelectedHint() {
     const el = $("calc-logic-selected");
@@ -4091,6 +4156,7 @@ body.calc-running .help-ftr{opacity:.75;}
       el.textContent = `Выбрано ${ids.length} (порядок): ${names.join(" → ")}`;
     }
     syncLogicSelectSize();
+    syncLiveLogicsBadge();
   }
 
   /** Функция: spec для расчёта — одна логика или multi_logic (engine.resolveLogicSpecStack). */
