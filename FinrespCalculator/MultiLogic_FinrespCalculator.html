@@ -809,7 +809,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 
 <p class="extra-section">Каталог логик</p>
-<p class="note">Список «Логика» = этот каталог. Первая — <strong>UT (Universal Trend)</strong>, затем UCT, L5, L1…L4. Строка Op/Cl, SMA-коридор или объёмная SMA, плюс SL/TP.</p>
+<p class="note">Список «Логика» = этот каталог. Первая — <strong>TBC (test counter-bokovik)</strong>, затем UT, UCT, L5, L1…L4. Строка Op/Cl, SMA-коридор или объёмная SMA, плюс SL/TP.</p>
 <div class="logic-lines-toolbar">
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
 <button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
@@ -1458,7 +1458,7 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
-    logicLineKeys: ["UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLineKeys: ["TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
@@ -1747,7 +1747,7 @@ body.calc-running .help-ftr{opacity:.75;}
       logicLines: visibleLogicLinesConfig(),
       logicLineKeys: state.logicLineKeys.filter((k) => !hiddenLogicKeySet().has(k)),
       hiddenLogicKeys: (state.hiddenLogicKeys || []).slice(),
-      logicCatalogVersion: 3,
+      logicCatalogVersion: 4,
       logicLabels: { ...state.logicLabels },
       randomPriceShift: !!$("random-price-shift")?.checked
     };
@@ -3489,7 +3489,7 @@ body.calc-running .help-ftr{opacity:.75;}
   // === Выбор логики (calc-logic, множественный) ===
 
   const DEFAULT_LOGIC_LINE_KEYS = [
-    "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
+    "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
     "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
   ];
 
@@ -4565,6 +4565,7 @@ ${markers}
   }
 
   const LOGIC_EQUITY_COLORS = {
+    TBC: "#a16207",
     UT: "#b45309",
     UCT: "#be123c",
     L5: "#047857",

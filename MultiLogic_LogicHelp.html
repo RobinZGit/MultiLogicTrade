@@ -68,6 +68,7 @@ a{color:var(--accent);}
 <li><a href="#topic-4">4) SL / TP (на уровне строки, после Cl):</a></li>
 <li><a href="#topic-5">5) Слоты «Логика 1…10»: при изменении любой строки робот перечитывает все 10 параметров.</a></li>
 <li><a href="#topic-6a">6a) Стандартные логики UT, UCT, L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</a></li>
+<li><a href="#def-tbc">TBC — test counter-bokovik (лонг)</a></li>
 <li><a href="#def-ut">UT — Universal Trend (лонг+шорт, тренд)</a></li>
 <li><a href="#def-uct">UCT — Universal Counter Trend (лонг+шорт, контртренд)</a></li>
 <li><a href="#def-l1">L1 — lon-trend (Лонг, тренд)</a></li>
@@ -350,7 +351,7 @@ a{color:var(--accent);}
 </ul>
 <h3 class="sec" id="topic-6a">6a) Стандартные логики UT, UCT, L1…L4 (кнопка «Установить логики по умолчанию», вкладка «Логики»)</h3>
 <ul>
-<li>В FINRESP-калькуляторе в каталоге первой идёт <strong>UT</strong> (Universal Trend), затем <strong>UCT</strong> (Universal Counter Trend), L5 и L1…L4.</li>
+<li>В FINRESP-калькуляторе в каталоге первой идёт <strong>TBC</strong> (test counter-bokovik), затем <strong>UT</strong>, <strong>UCT</strong>, L5 и L1…L4.</li>
 <li>Записывает четыре строки в «Логика 1…4», очищает «Логика 5…10»; индикаторы на графике — сразу.</li>
 <li>Смысл набора L1…L4: на базе TrendMultiIndicator+CCI — два лонга (тренд и боковик) и два шорта (тренд и боковик).</li>
 <li>L1/L3 — Regime MatchSide (вход по наклону LinReg); L2/L4 — Regime FlatOnly (вход во флэте, Stoch от границ).</li>
@@ -359,6 +360,14 @@ a{color:var(--accent);}
 <div class="logic-formula-group">
 <div class="logic-formula"><code class="logic-formula-code"><span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] — кратность ATR из параметров вкладки «Логики»; 0 = без SL/TP по позиции.</code></div>
 </div>
+<h4 id="def-tbc" class="def-logic">TBC — test counter-bokovik (лонг)</h4>
+<div class="logic-formula-group">
+<div class="logic-formula"><span class="logic-formula-label">Строка: </span><code class="logic-formula-code">(<span class="lf-param-ref">@Strict</span>) <span class="lf-regime">Regime</span>(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close) Op(Long(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">Stoch</span>(14-3-3;Lmin=90;Smax=10)(K&lt;=10) <span class="lf-kw">AND</span> <span class="lf-ind">MACD</span>(12,26,9)(Macd&lt;Sig))) Cl(Long(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">Stoch</span>(14-3-3;Lmin=90;Smax=10)(K&gt;=90) <span class="lf-kw">AND</span> <span class="lf-ind">MACD</span>(12,26,9)(Macd&gt;Sig))) <span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] <span class="lf-note-tag">Note</span>(test-counter-bokovik)</code></div>
+</div>
+<ul>
+<li>Только <strong>лонг</strong>; контртренд-боковик: вход ниже SMA (<span class="lf-ind">Bl</span>), Stoch перепродан + MACD&lt;Sig; выход выше SMA (<span class="lf-ind">Ab</span>), Stoch перекуплен + MACD&gt;Sig.</li>
+<li>Regime со <span class="lf-regime">SlopeDead=0.05%</span>, без <code>Entry=FlatOnly</code> (в отличие от L2).</li>
+</ul>
 <h4 id="def-ut" class="def-logic">UT — Universal Trend (лонг + шорт, тренд)</h4>
 <div class="logic-formula-group">
 <div class="logic-formula"><span class="logic-formula-label">Строка: </span><code class="logic-formula-code">(<span class="lf-param-ref">@Strict</span>) <span class="lf-regime">Regime</span>(LinReg;L=@LR;SlopeLb=3;OnFlip=Close) Op(Long(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>)(AbLinK))) Cl(Long(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) Op(Short(<span class="lf-ind">SMA</span>(100)(Bl) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>)(BlLinK))) Cl(Short(<span class="lf-ind">SMA</span>(100)(Ab) <span class="lf-kw">AND</span> <span class="lf-ind">LinReg</span>(@LR;K=<span class="lf-param-ref">@K</span>;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) <span class="lf-sl">SL</span>[<span class="lf-param-ref">@SL</span>] <span class="lf-sl">TP</span>[<span class="lf-param-ref">@TP</span>] <span class="lf-note-tag">Note</span>(universal-trend)</code></div>

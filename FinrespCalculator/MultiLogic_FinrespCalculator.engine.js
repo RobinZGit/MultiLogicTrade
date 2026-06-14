@@ -208,11 +208,17 @@
     "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;OnFlip=Close;Entry=MatchSide) ";
   const BOKOVIK_REGIME =
     "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close;Entry=FlatOnly) ";
+  const TBC_REGIME =
+    "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close) ";
   const UCT_REGIME =
     "Strict(@Strict) Regime(LinReg;L=@LR;SlopeLb=3;OnFlip=Close) ";
   const SLTP = " SL[@SL] TP[@TP] ";
 
   const DEFAULT_LOGIC_LINES = {
+    TBC: TBC_REGIME +
+      "Op(Long(SMA(100)(Bl) AND Stoch(14-3-3;Lmin=90;Smax=10)(K<=10) AND MACD(12,26,9)(Macd<Sig))) " +
+      "Cl(Long(SMA(100)(Ab) AND Stoch(14-3-3;Lmin=90;Smax=10)(K>=90) AND MACD(12,26,9)(Macd>Sig))) " +
+      SLTP + "Note(test-counter-bokovik)",
     UT: UCT_REGIME +
       "Op(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K)(AbLinK))) " +
       "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) " +
@@ -258,6 +264,12 @@
   };
 
   const BUILTIN_META = [
+    {
+      id: "TBC",
+      name: "TBC — test counter-bokovik (лонг)",
+      type: "logic_line",
+      key: "TBC"
+    },
     {
       id: "UT",
       name: "Universal Trend — LinReg K×ATR + RegDrift",

@@ -224,8 +224,8 @@ th{background:#f8fafc;width:28%;}
 <p>Чекбоксы SMA, ATR, Stoch, LinReg, Bollinger, VWAP, CCI, MACD, Momentum. Отключённые удаляются из Op/Cl перед расчётом. SL/TP позиции не зависят от этого списка.</p>
 <p><strong>Оптимизировать</strong> (индикаторы) — перебор непустых комбинаций, остаётся набор с лучшим FINRESP.</p>
 
-<h3>9.6. Каталог логик (UT, UCT, L5, L1…L4, SMA…)</h3>
-<p>Первая — <strong>UT (Universal Trend)</strong>: тренд лонг+шорт, пробой LinReg K×ATR, выход с RegDrift. Вторая — <strong>UCT (Universal Counter Trend)</strong>: контртренд, отскок от края канала.</p>
+<h3>9.6. Каталог логик (TBC, UT, UCT, L5, L1…L4, SMA…)</h3>
+<p>Первая — <strong>TBC (test counter-bokovik)</strong>: лонг, Stoch+MACD, контртренд-боковик (ниже SMA на вход). Далее <strong>UT</strong>, <strong>UCT</strong>, L5, L1…L4.</p>
 <p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code>, <code>@Strict</code> из основного блока и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
 
 <h3>9.7. MOEX — тикеры и префиксы</h3>
