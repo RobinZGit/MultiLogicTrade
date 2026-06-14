@@ -104,6 +104,12 @@ h2:first-child{margin-top:0;}
 .chart-equity-section-title{margin:0 0 .85rem;font-size:1.05rem;font-weight:700;color:#1e3a5f;}
 .chart-equity-total{margin:0 0 .85rem;padding:.75rem;border:2px solid var(--accent);border-radius:10px;background:linear-gradient(180deg,#eef4ff 0%,#fff 70%);}
 .chart-equity-total .chart-sec-title{font-size:1rem;color:#1e3a5f;}
+.chart-equity-total--finresp{border-color:#1d4ed8;background:linear-gradient(180deg,#dbeafe 0%,#fff 72%);box-shadow:0 2px 12px rgba(29,78,216,.12);}
+.chart-equity-total--finresp .chart-sec-title--finresp{font-size:1.05rem;font-weight:800;color:#1e3a5f;}
+.chart-equity-finresp-hint{margin:-.2rem 0 .45rem;font-size:.82rem;color:#1d4ed8;font-weight:600;}
+.chart-equity-total--reference{margin-top:1.1rem;padding:.85rem;border:2px dashed #c2410c;border-radius:10px;background:linear-gradient(180deg,#fff7ed 0%,#fff 75%);}
+.chart-equity-total--reference .chart-sec-title--reference{font-size:1.02rem;font-weight:800;color:#9a3412;}
+.chart-equity-reference-hint{margin:-.15rem 0 .5rem;font-size:.82rem;color:#c2410c;font-weight:600;line-height:1.4;}
 .chart-logic-badge{font-size:.72rem;font-weight:700;padding:.12rem .45rem;border-radius:999px;margin-left:.35rem;vertical-align:middle;}
 .chart-logic-badge--active{background:#dbeafe;color:#1d4ed8;}
 .chart-logic-badge:not(.chart-logic-badge--active){background:#f3f4f6;color:#6b7280;}
@@ -984,7 +990,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-restore-stopper-cache";
+  const CALC_PAGE_VERSION = "2026-06-14-equity-finresp-split";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -2376,6 +2382,8 @@ body.calc-running .help-ftr{opacity:.75;}
     get equityCatalogLogicKeys() { return equityCatalogLogicKeys; },
     get selectedEquityLogicKeys() { return selectedEquityLogicKeys; },
     get totalEquityTitle() { return totalEquityTitle; },
+    get finrespEquityTitle() { return finrespEquityTitle; },
+    get referenceEquityTitle() { return referenceEquityTitle; },
     get currentLimit() { return currentLimit; },
     get commonTimeRange() { return commonTimeRange; },
     get findFirstIndexAtOrAfter() { return findFirstIndexAtOrAfter; },
@@ -4640,6 +4648,28 @@ ${markers}
     return `Общий equity (${keys.map((key) => key).join(" + ")})`;
   }
 
+  /** Заголовок верхнего equity = FINRESP Σ (стек выбранных логик, портф. Stopper). */
+  function finrespEquityTitle() {
+    const ids = selectedLogicIds();
+    const stack = ids.length ? ids.join(" + ") : "—";
+    const sc = stopperConfig();
+    const stopperNote = sc.useSl || sc.useTp ? " · с портф. Stopper" : " · портф. Stopper выкл.";
+    return `Общий equity = FINRESP Σ (${stack}, стек логик${stopperNote})`;
+  }
+
+  /** Заголовок справочной суммы логик без портф. Stopper. */
+  function referenceEquityTitle(keys) {
+    const stack = keys.length ? keys.join(" + ") : "—";
+    return `Справочно: сумма логик по отдельности (${stack}) · без портф. Stopper`;
+  }
+
+  /** Equity портфеля из lastResult — совпадает с FINRESP Σ после «Рассчитать». */
+  function finrespEquityRowsForChart(a, b, times) {
+    const lr = state.lastResult;
+    if (!lr?.perSec?.length || !times?.length || lr.a !== a || lr.b !== b) return null;
+    return E.buildPortfolioEquityRows(lr.perSec, times);
+  }
+
   /** Equity-кривые: `equityConfigFingerprint`. */
   function equityConfigFingerprint() {
     return JSON.stringify({
@@ -4731,7 +4761,7 @@ ${markers}
     const pointDot = rows.length === 1
       ? `<circle cx="${x(0).toFixed(1)}" cy="${y(rows[0].eq).toFixed(1)}" r="4" fill="${color}" opacity="${lineOpacity}"/>`
       : "";
-    const dashLine = faded ? ' stroke-dasharray="5 4"' : "";
+    const dashLine = (faded || decor.dashed) ? ' stroke-dasharray="6 4"' : "";
     const gridH = yTicks.map((v) =>
       `<line x1="${left}" y1="${y(v).toFixed(1)}" x2="${w - right}" y2="${y(v).toFixed(1)}" stroke="#e8edf4" stroke-width="1"/>`).join("");
     const gridV = xTickIdx.map((i) =>
@@ -4744,7 +4774,7 @@ ${markers}
     const zeroLine = zeroY
       ? `<line x1="${left}" y1="${zeroY}" x2="${w - right}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>`
       : "";
-    const strokeW = compact ? 1.8 : 2.2;
+    const strokeW = decor.strokeW ?? (compact ? 1.8 : 2.2);
     const configLines = buildStopVLines(decor.vLines || [], x, top, h - bottom);
     const modeBands = buildModeRegionBands(rows, decor.modeRegions, x, top, h - bottom);
     const configLegend = (decor.vLines || []).some((l) => l.kind === "config")
@@ -4753,9 +4783,10 @@ ${markers}
     const modeLegend = decor.modeRegions?.length
       ? " · зелёная область — песочница · розовая — реальная торговля"
       : "";
-    const caption = faded
+    const caption = decor.caption ?? (faded
       ? "Справочный equity (логика не участвует в торговле / сумме)"
-      : `Equity по выбранным логикам${configLegend}${modeLegend}`;
+      : `Equity по выбранным логикам${configLegend}${modeLegend}`);
+    const finLabelSize = decor.prominentFin ? (compact ? 14 : 16) : (compact ? 12 : 14);
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
@@ -4767,7 +4798,7 @@ ${yLabels}${xLabels}
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
 <polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
 ${pointDot}
-<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${compact ? 12 : 14}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
+<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${finLabelSize}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
 <text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">${caption}</text>
 </svg>`;
   }
@@ -4858,14 +4889,16 @@ ${pointDot}
       syncChartBox(box, "");
       return;
     }
-    if (!catalogKeys.some((key) => data.runs[key]?.rows?.length)) {
+
+    const { runs, times } = data;
+    const hasFinrespSource = !!finrespEquityRowsForChart(a, b, times);
+    const hasPerLogicRuns = catalogKeys.some((key) => runs[key]?.rows?.length);
+    if (!hasPerLogicRuns && !hasFinrespSource) {
       syncChartBox(box, !activeKeys.length
-        ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для общего equity.</p>`
+        ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для equity.</p>`
         : "");
       return;
     }
-
-    const { runs, times } = data;
     const processEquityRows = (rows, key) => {
       let r = liveSession ? (rows || []) : sliceRowsForLiveSession(rows);
       if (liveSession && r.length) r = zeroBaseEquityRows(r, key);
@@ -4876,10 +4909,22 @@ ${pointDot}
     const refKey = catalogKeys.find((key) => runs[key]?.rows?.length);
     const refRows = refKey ? processEquityRows(runs[refKey]?.rows || [], refKey) : [];
 
+    const finrespSource = finrespEquityRowsForChart(a, b, times);
+    const finrespRows = finrespSource?.length ? processEquityRows(finrespSource, "__finresp") : [];
+
     const totalSource = activeKeys.length
       ? buildTotalEquityRows(runs, times, activeKeys)
       : [];
     const totalRows = processEquityRows(totalSource, "__total");
+    const finrespDecor = {
+      ...chartDecorFromRows(
+        finrespRows.length ? finrespRows : refRows,
+        configMarkersForRows(finrespRows)
+      ),
+      prominentFin: true,
+      strokeW: 2.8,
+      caption: "Equity портфеля — совпадает с FINRESP Σ в блоке результатов"
+    };
     const decorBase = chartDecorFromRows(
       refRows.length ? refRows : totalRows,
       configMarkersForRows(totalRows)
@@ -4910,17 +4955,46 @@ ${pointDot}
       return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}${svg}</div>`;
     }).filter(Boolean);
 
-    let totalBlock = "";
+    let finrespBlock = "";
+    if (finrespRows.length) {
+      const finrespFin = finrespRows.at(-1).eq;
+      const finrespColor = finrespFin < 0 ? "#b91c1c" : "#047857";
+      const finrespSvg = buildEquityChartSvg(
+        finrespRows, finrespFin, "Equity портфеля = FINRESP Σ", false, finrespColor, finrespDecor
+      );
+      if (finrespSvg) {
+        const finrespHint = liveSession
+          ? "Совпадает с FINRESP Σ live-сессии (с нуля сессии)."
+          : "Совпадает с FINRESP Σ в блоке результатов (стек выбранных логик, портф. Stopper).";
+        finrespBlock = `<div class="chart-equity-total chart-equity-total--finresp">
+<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>
+<p class="chart-equity-finresp-hint">${finrespHint}</p>
+${finrespSvg}
+</div>`;
+      }
+    }
+
+    let referenceBlock = "";
     if (activeKeys.length && totalRows.length) {
       const totalFin = totalRows.at(-1).eq;
+      const referenceDecor = {
+        ...decorBase,
+        dashed: true,
+        strokeW: 2.6,
+        caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
+      };
       const totalSvg = buildEquityChartSvg(
-        totalRows, totalFin, `Equity Σ ${activeKeys.join("+")}`, false, "#1d4ed8", decorBase
+        totalRows, totalFin, `Equity Σ ${activeKeys.join("+")} (справочно)`, false, "#c2410c", referenceDecor
       );
       if (totalSvg) {
-        totalBlock = `<div class="chart-equity-total"><p class="chart-sec-title">${totalEquityTitle(activeKeys)}</p>${totalSvg}</div>`;
+        referenceBlock = `<div class="chart-equity-total chart-equity-total--reference">
+<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>
+<p class="chart-equity-reference-hint">Не совпадает с FINRESP Σ при нескольких логиках: здесь логики не в стеке, а суммируются независимо.</p>
+${totalSvg}
+</div>`;
       }
     } else if (!activeKeys.length) {
-      totalBlock = `<p class="note">Общий equity: выберите хотя бы одну логику в списке «Логика».</p>`;
+      referenceBlock = `<p class="note">Справочная сумма логик: выберите хотя бы одну логику в списке «Логика».</p>`;
     }
 
     const markerNote = state.equityConfigMarkers?.length
@@ -4930,14 +5004,15 @@ ${pointDot}
       ? `<p class="note">${liveChartSessionNote()}</p>`
       : "";
     const sectionTitle = liveSession
-      ? "Equity по логикам — live-сессия (без портф. Stopper)"
-      : "Equity по логикам (сумма по выбранным инструментам, без портф. Stopper)";
+      ? "Equity по логикам — live-сессия"
+      : "Equity по логикам";
 
     syncChartBox(box, `<div class="chart-equity-section">
 <p class="chart-equity-section-title">${sectionTitle}</p>
 ${equityWindowNote(a, b)}
 ${liveNote}${markerNote}
-${totalBlock}
+${finrespBlock}
+${referenceBlock}
 <div class="chart-stack">${logicBlocks.join("")}</div>
 </div>`);
   }

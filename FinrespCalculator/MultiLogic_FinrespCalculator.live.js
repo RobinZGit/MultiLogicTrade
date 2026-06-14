@@ -89,6 +89,8 @@
     const equityCatalogLogicKeys = (...a) => d.equityCatalogLogicKeys(...a);
     const selectedEquityLogicKeys = (...a) => d.selectedEquityLogicKeys(...a);
     const totalEquityTitle = (...a) => d.totalEquityTitle(...a);
+    const finrespEquityTitle = (...a) => d.finrespEquityTitle(...a);
+    const referenceEquityTitle = (...a) => d.referenceEquityTitle(...a);
     const currentLimit = (...a) => d.currentLimit(...a);
     const commonTimeRange = (...a) => d.commonTimeRange(...a);
     const findFirstIndexAtOrAfter = (...a) => d.findFirstIndexAtOrAfter(...a);
@@ -4238,9 +4240,16 @@
     if (!box) return;
     const catalogKeys = equityCatalogLogicKeys();
     const activeKeys = selectedEquityLogicKeys();
-    const totalBlock = activeKeys.length
-      ? `<div class="chart-equity-total"><p class="chart-sec-title">${totalEquityTitle(activeKeys)}</p><div class="chart-mini-empty">Общий equity — ждём свечи…</div></div>`
-      : `<p class="note">Общий equity: выберите хотя бы одну логику в списке «Логика».</p>`;
+    const finrespBlock = `<div class="chart-equity-total chart-equity-total--finresp">
+<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>
+<div class="chart-mini-empty">Equity = FINRESP Σ — ждём свечи…</div>
+</div>`;
+    const referenceBlock = activeKeys.length
+      ? `<div class="chart-equity-total chart-equity-total--reference">
+<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>
+<div class="chart-mini-empty">Справочная сумма логик — ждём свечи…</div>
+</div>`
+      : `<p class="note">Справочная сумма логик: выберите хотя бы одну логику в списке «Логика».</p>`;
     const logicBlocks = catalogKeys.map((key) => {
       const selected = activeKeys.includes(key);
       const heading = logicChartHeading(key, selected);
@@ -4253,7 +4262,8 @@
     syncChartBox(box, `<div class="chart-equity-section">
 <p class="chart-equity-section-title">Equity по логикам — live-сессия</p>
 <p class="note">${liveChartSessionNote()}</p>
-${totalBlock}
+${finrespBlock}
+${referenceBlock}
 <div class="chart-stack">${logicBlocks}</div>
 </div>`);
   }
@@ -4468,7 +4478,7 @@ ${totalBlock}
   function logicAbsentNote(liveSession) {
     return liveSession
       ? "В торговле не участвует · equity справочно, от нуля live-сессии"
-      : "Не участвует в общем equity и FINRESP";
+      : "Не участвует в справочной сумме (FINRESP Σ — стек выбранных логик сверху)";
   }
 
   /** Логика FINRESP: `logicChartHeading`. */
