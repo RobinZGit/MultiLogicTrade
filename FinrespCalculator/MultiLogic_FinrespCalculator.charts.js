@@ -17,7 +17,7 @@
     width: 2,
     dash: null,
     opacity: 0.95,
-    label: "FINRESP инструмента — накопленный результат (₽)"
+    label: "FINRESP инструмента — cash + qty×цена (0 без позиции)"
   };
 
   const IND_LINE = [
@@ -93,14 +93,25 @@
     return `<svg class="ml-chart-legend-swatch" width="32" height="10" aria-hidden="true"><line x1="0" y1="5" x2="32" y2="5" stroke="${spec.stroke}" stroke-width="${sw}"${dash} opacity="${spec.opacity ?? 1}"/></svg>`;
   }
 
-  /** Накопленный FINRESP инструмента от нуля на первом баре расчёта. */
-  function instrumentEquityAt(rows, index) {
-    const base = rows[0]?.eq ?? 0;
-    return (rows[index]?.eq ?? 0) - base;
+  /**
+   * FINRESP для линии на графике: 0, пока не было позиции (|pos|>0);
+   * после первого входа — eq − eq[0] (cash + qty×цена, как в симуляции).
+   */
+  function instrumentChartEquitySeries(rows) {
+    if (!rows?.length) return { values: [], everHeld: false };
+    const values = new Array(rows.length);
+    let everHeld = false;
+    const baseEq = rows[0]?.eq ?? 0;
+    for (let i = 0; i < rows.length; i++) {
+      const pos = rows[i]?.pos ?? 0;
+      if (pos !== 0) everHeld = true;
+      values[i] = everHeld ? (rows[i]?.eq ?? 0) - baseEq : 0;
+    }
+    return { values, everHeld };
   }
 
   function rowHasEquity(rows) {
-    return rowHasKey(rows, "eq");
+    return rowHasKey(rows, "eq") && instrumentChartEquitySeries(rows).everHeld;
   }
 
   /** Легенда линий индикаторов под графиком (только присутствующие в данных). */
@@ -267,10 +278,11 @@
     const v0 = clamp(Math.floor(view.start), 0, rows.length - 1);
     const v1 = clamp(Math.ceil(view.end), v0, rows.length - 1);
     const visN = v1 - v0 + 1;
-    const showEq = rowHasEquity(rows);
 
     const w = 820;
     const h = compact ? 210 : 340;
+    const chartEq = instrumentChartEquitySeries(rows);
+    const showEq = chartEq.everHeld;
     const left = 68;
     const right = showEq ? 58 : 28;
     const top = compact ? 24 : 28;
@@ -296,7 +308,7 @@
     let eqTicks = [];
     let eqZeroLine = "";
     if (showEq) {
-      const eqSlice = slice.map((_, j) => instrumentEquityAt(rows, v0 + j));
+      const eqSlice = slice.map((_, j) => chartEq.values[v0 + j] ?? 0);
       let eqMin = Math.min(...eqSlice);
       let eqMax = Math.max(...eqSlice);
       if (eqMin === eqMax) {
@@ -356,7 +368,7 @@
     let eqLine = "";
     if (showEq && yEq) {
       const eqPts = slice.map((_, j) => {
-        const eqVal = instrumentEquityAt(rows, v0 + j);
+        const eqVal = chartEq.values[v0 + j] ?? 0;
         return `${x(v0 + j).toFixed(1)},${yEq(eqVal).toFixed(1)}`;
       }).join(" ");
       eqLine = `<polyline fill="none" stroke="${EQ_LINE.stroke}" stroke-width="${EQ_LINE.width}" opacity="${EQ_LINE.opacity}" points="${eqPts}"><title>${esc(EQ_LINE.label)}</title></polyline>`;
