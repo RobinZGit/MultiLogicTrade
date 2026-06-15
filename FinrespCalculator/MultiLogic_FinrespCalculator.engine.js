@@ -265,12 +265,12 @@
       "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
     sma_corridor_anti:
       "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
-    CM:
-      "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab))) "
-      + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
-      + "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl))) "
-      + "Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) OnFlip(Close))) "
-      + "SL[@SL] TP[@TP] Note(custom-sma-CM-trend)",
+    CM: TREND_REGIME +
+      "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) " +
+      "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo) OnFlip(Close))) " +
+      "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo))) " +
+      "Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp) OnFlip(Close))) " +
+      SLTP + "Note(custom-sma-CM-trend-LinReg)",
   };
 
   const BUILTIN_META = [
@@ -319,7 +319,7 @@
     },
     {
       id: "CM",
-      name: "Стратегия с кастомным SMA (CM) — тренд, Op/Cl long+short",
+      name: "Стратегия CM (CMA + LinReg Regime) — тренд, Op/Cl long+short",
       type: "logic_line",
       key: "CM"
     }

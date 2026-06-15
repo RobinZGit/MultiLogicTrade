@@ -36,24 +36,39 @@ test("CMA: power 0 equals SMA", () => {
   }
 });
 
-test("CM logic: Op/Cl long and short vs CMA", () => {
+test("CM logic: CMA + LinReg Regime, Op/Cl long and short", () => {
   const line = E.DEFAULT_LOGIC_LINES.CM;
-  assert.match(line, /Op\(Long\(CMA/);
-  assert.match(line, /Op\(Short\(CMA/);
-  assert.match(line, /Cl\(Long\(CMA[^)]*\)\(Bl\)/);
-  assert.match(line, /Cl\(Short\(CMA[^)]*\)\(Ab\)/);
+  assert.match(line, /Regime\(LinReg/i);
+  assert.ok(line.includes("Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))"));
+  assert.ok(line.includes("Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo))"));
+  assert.ok(line.includes("Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo)"));
+  assert.ok(line.includes("Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp)"));
   const candles = makeCandles("GAZP", 300);
   const spec = E.resolveLogicSpec("CM", {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
   assert.equal(spec.type, "logic_line");
   const p = spec.parsed;
+  assert.equal(p.opLongAtoms.length, 2);
   assert.equal(p.opLongAtoms[0]?.kind, "cma");
   assert.match(p.opLongAtoms[0]?.signal || "", /Ab/i);
+  assert.equal(p.opLongAtoms[1]?.kind, "linreg");
+  assert.match(p.opLongAtoms[1]?.signal || "", /AbUp/i);
+  assert.equal(p.clLongAtoms.length, 2);
   assert.equal(p.clLongAtoms[0]?.kind, "cma");
   assert.match(p.clLongAtoms[0]?.signal || "", /Bl/i);
+  assert.equal(p.clLongAtoms[1]?.kind, "linreg");
+  assert.match(p.clLongAtoms[1]?.signal || "", /BlLo/i);
+  assert.equal(p.opShortAtoms.length, 2);
   assert.equal(p.opShortAtoms[0]?.kind, "cma");
   assert.match(p.opShortAtoms[0]?.signal || "", /Bl/i);
+  assert.equal(p.opShortAtoms[1]?.kind, "linreg");
+  assert.match(p.opShortAtoms[1]?.signal || "", /BlLo/i);
+  assert.equal(p.clShortAtoms.length, 2);
   assert.equal(p.clShortAtoms[0]?.kind, "cma");
   assert.match(p.clShortAtoms[0]?.signal || "", /Ab/i);
+  assert.equal(p.clShortAtoms[1]?.kind, "linreg");
+  assert.match(p.clShortAtoms[1]?.signal || "", /AbUp/i);
+  assert.equal(p.regimeLinLen, 20);
+  assert.equal(p.onFlipClose, true);
   const r = E.runOnCandles(candles, spec, 50, 290, E.DEFAULT_PARAMS, E.DEFAULT_VOLUME, { sec: "GAZP" });
   assert.ok(r.rows.length > 0);
   const probe = E.probeLogicSignalsAtBar(candles, spec, E.DEFAULT_PARAMS, { barIndex: 150, pos: 0 });
