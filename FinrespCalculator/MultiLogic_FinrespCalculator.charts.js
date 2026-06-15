@@ -539,6 +539,9 @@ ${finBadgeSvg}
     let drag = null;
     let touch = null;
     let lastTapAt = 0;
+    let panPreviewPx = 0;
+    let pinchRaf = 0;
+    let pendingPinchView = null;
 
     host.innerHTML = "";
     const wrap = document.createElement("div");
@@ -568,30 +571,31 @@ ${finBadgeSvg}
     const legendHost = document.createElement("div");
     legendHost.className = "ml-chart-legend-host";
 
-    function render() {
+    function normalizeView() {
       view.start = clamp(view.start, 0, rows.length - 1);
       view.end = clamp(view.end, view.start, rows.length - 1);
       if (view.end - view.start + 1 < minBars) {
         view.end = Math.min(rows.length - 1, view.start + minBars - 1);
       }
-      viewport.innerHTML = renderChartSvg(rows, view, options);
-      legendHost.innerHTML = buildIndicatorLegend(rows);
     }
 
-    if (copyBtn) wireCopyButton(copyBtn, viewport);
-
-    function applyViewRange(ns, ne) {
-      view.start = clamp(ns, 0, rows.length - 1);
-      view.end = clamp(ne, view.start, rows.length - 1);
-      if (view.end - view.start + 1 < minBars) {
-        view.end = Math.min(rows.length - 1, view.start + minBars - 1);
-      }
-      render();
+    function chartSvgEl() {
+      return viewport.querySelector("svg.ml-chart-svg");
     }
 
-    function panByBars(delta) {
-      let ns = view.start + delta;
-      let ne = view.end + delta;
+    function setPanPreview(px) {
+      panPreviewPx = px;
+      const svg = chartSvgEl();
+      if (svg) svg.style.transform = px ? `translate3d(${px}px,0,0)` : "";
+    }
+
+    function clearPanPreview() {
+      panPreviewPx = 0;
+      const svg = chartSvgEl();
+      if (svg) svg.style.transform = "";
+    }
+
+    function clampPanRange(ns, ne) {
       if (ns < 0) {
         ne -= ns;
         ns = 0;
@@ -603,7 +607,64 @@ ${finBadgeSvg}
       ns = clamp(ns, 0, rows.length - 1);
       ne = clamp(ne, ns, rows.length - 1);
       if (ne - ns + 1 < minBars) ne = Math.min(rows.length - 1, ns + minBars - 1);
-      applyViewRange(ns, ne);
+      return { start: ns, end: ne };
+    }
+
+    function commitPanPreview(state, px) {
+      if (!state || !px) return false;
+      const rect = viewport.getBoundingClientRect();
+      const span = state.end0 - state.start0;
+      const barsPerPx = span / Math.max(rect.width, 1);
+      const delta = Math.round(-px * barsPerPx);
+      const next = clampPanRange(state.start0 + delta, state.end0 + delta);
+      view.start = next.start;
+      view.end = next.end;
+      return true;
+    }
+
+    function renderChartOnly() {
+      normalizeView();
+      viewport.innerHTML = renderChartSvg(rows, view, options);
+    }
+
+    function render() {
+      renderChartOnly();
+      legendHost.innerHTML = buildIndicatorLegend(rows);
+    }
+
+    if (copyBtn) wireCopyButton(copyBtn, viewport);
+
+    function applyViewRange(ns, ne) {
+      const next = clampPanRange(ns, ne);
+      view.start = next.start;
+      view.end = next.end;
+      renderChartOnly();
+    }
+
+    function panByBars(delta) {
+      const next = clampPanRange(view.start + delta, view.end + delta);
+      view.start = next.start;
+      view.end = next.end;
+      renderChartOnly();
+    }
+
+    function endPanGesture(state, px) {
+      clearPanPreview();
+      if (!state || Math.abs(px) < 1) return;
+      if (commitPanPreview(state, px)) renderChartOnly();
+    }
+
+    function schedulePinchRender(ns, ne) {
+      pendingPinchView = clampPanRange(ns, ne);
+      if (pinchRaf) return;
+      pinchRaf = requestAnimationFrame(() => {
+        pinchRaf = 0;
+        if (!pendingPinchView) return;
+        view.start = pendingPinchView.start;
+        view.end = pendingPinchView.end;
+        pendingPinchView = null;
+        renderChartOnly();
+      });
     }
 
     function zoomAround(frac, factor) {
@@ -645,26 +706,25 @@ ${finBadgeSvg}
 
     viewport.addEventListener("mousedown", (ev) => {
       if (ev.button !== 0) return;
-      drag = { x0: ev.clientX, start0: view.start, end0: view.end };
+      clearPanPreview();
+      drag = { x0: ev.clientX, start0: view.start, end0: view.end, lastPx: 0 };
       viewport.classList.add("ml-chart-dragging");
       ev.preventDefault();
     });
 
     const onMove = (ev) => {
       if (!drag) return;
-      const rect = viewport.getBoundingClientRect();
-      const span = drag.end0 - drag.start0;
-      const barsPerPx = span / Math.max(rect.width, 1);
-      const delta = Math.round(-(ev.clientX - drag.x0) * barsPerPx);
-      view.start = drag.start0 + delta;
-      view.end = drag.end0 + delta;
-      render();
+      const px = ev.clientX - drag.x0;
+      drag.lastPx = px;
+      setPanPreview(px);
     };
 
     const onUp = () => {
       if (!drag) return;
+      const state = drag;
       drag = null;
       viewport.classList.remove("ml-chart-dragging");
+      endPanGesture(state, state.lastPx || 0);
     };
 
     window.addEventListener("mousemove", onMove);
@@ -676,16 +736,20 @@ ${finBadgeSvg}
     });
 
     const onTouchStart = (ev) => {
+      pendingPinchView = null;
       if (ev.touches.length === 1) {
+        clearPanPreview();
         touch = {
           mode: "pan",
           x0: ev.touches[0].clientX,
           start0: view.start,
-          end0: view.end
+          end0: view.end,
+          lastPx: 0
         };
         drag = null;
         viewport.classList.add("ml-chart-dragging");
       } else if (ev.touches.length >= 2) {
+        clearPanPreview();
         const rect = viewport.getBoundingClientRect();
         const span0 = view.end - view.start;
         touch = {
@@ -706,12 +770,9 @@ ${finBadgeSvg}
       ev.preventDefault();
       const rect = viewport.getBoundingClientRect();
       if (touch.mode === "pan" && ev.touches.length === 1) {
-        const span = touch.end0 - touch.start0;
-        const barsPerPx = span / Math.max(rect.width, 1);
-        const delta = Math.round(-(ev.touches[0].clientX - touch.x0) * barsPerPx);
-        view.start = touch.start0 + delta;
-        view.end = touch.end0 + delta;
-        render();
+        const px = ev.touches[0].clientX - touch.x0;
+        touch.lastPx = px;
+        setPanPreview(px);
       } else if (touch.mode === "pinch" && ev.touches.length >= 2) {
         const dist = touchDistance(ev.touches[0], ev.touches[1]);
         const ratio = dist / Math.max(touch.dist0, 1);
@@ -721,34 +782,37 @@ ${finBadgeSvg}
         const anchor = touch.start0 + touch.span0 * touch.midFrac0;
         let ns = Math.round(anchor - newSpan * frac);
         let ne = ns + newSpan;
-        if (ns < 0) {
-          ne -= ns;
-          ns = 0;
-        }
-        if (ne > rows.length - 1) {
-          ns -= ne - (rows.length - 1);
-          ne = rows.length - 1;
-        }
-        applyViewRange(ns, ne);
+        schedulePinchRender(ns, ne);
       }
     };
 
     const onTouchEnd = (ev) => {
       if (ev.touches.length === 0) {
         const now = Date.now();
-        if (touch?.mode === "pan" && ev.changedTouches.length === 1 && now - lastTapAt < 350) {
+        const wasPan = touch?.mode === "pan";
+        const px = touch?.lastPx || 0;
+        if (wasPan && ev.changedTouches.length === 1 && now - lastTapAt < 350) {
+          clearPanPreview();
           view = { start: 0, end: rows.length - 1 };
-          render();
+          renderChartOnly();
+        } else if (wasPan) {
+          endPanGesture(touch, px);
+        } else {
+          clearPanPreview();
+          pendingPinchView = null;
         }
         lastTapAt = now;
         touch = null;
         viewport.classList.remove("ml-chart-dragging");
       } else if (ev.touches.length === 1 && touch?.mode === "pinch") {
+        clearPanPreview();
+        pendingPinchView = null;
         touch = {
           mode: "pan",
           x0: ev.touches[0].clientX,
           start0: view.start,
-          end0: view.end
+          end0: view.end,
+          lastPx: 0
         };
       }
     };
@@ -779,6 +843,7 @@ ${finBadgeSvg}
         viewport.removeEventListener("touchmove", onTouchMove);
         viewport.removeEventListener("touchend", onTouchEnd);
         viewport.removeEventListener("touchcancel", onTouchEnd);
+        if (pinchRaf) cancelAnimationFrame(pinchRaf);
         host.innerHTML = "";
       }
     };
