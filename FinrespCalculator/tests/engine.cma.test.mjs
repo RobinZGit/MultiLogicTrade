@@ -5,6 +5,26 @@ import { makeCandles, ALL_INDICATORS } from "./helpers/candles.mjs";
 
 const E = loadEngine();
 
+test("CMA: weights from normalized prices sum to 1", () => {
+  const closes = [80, 100, 120, 90, 110];
+  const len = 3;
+  const pow = 2;
+  const i = 4;
+  let priceSum = 0;
+  for (let j = i - len + 1; j <= i; j++) priceSum += closes[j];
+  const raw = [];
+  for (let j = i - len + 1; j <= i; j++) {
+    const norm = closes[j] / priceSum;
+    raw.push(Math.pow(norm, pow));
+  }
+  const sumRaw = raw.reduce((s, r) => s + r, 0);
+  const weights = raw.map((r) => r / sumRaw);
+  assert.ok(Math.abs(weights.reduce((s, w) => s + w, 0) - 1) < 1e-12);
+  const manual = weights.reduce((s, w, k) => s + w * closes[i - len + 1 + k], 0);
+  const cma = E.cmaSeries(closes, len, pow)[i];
+  assert.ok(Math.abs(manual - cma) < 1e-9);
+});
+
 test("CMA: power 0 equals SMA", () => {
   const closes = [100, 101, 102, 103, 104, 105, 106, 107];
   const len = 3;
