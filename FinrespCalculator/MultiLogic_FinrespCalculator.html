@@ -122,6 +122,16 @@ h2:first-child{margin-top:0;}
 .chart-equity-total--reference{margin-top:1.1rem;padding:.85rem;border:2px dashed #c2410c;border-radius:10px;background:linear-gradient(180deg,#fff7ed 0%,#fff 75%);}
 .chart-equity-total--reference .chart-sec-title--reference{font-size:1.02rem;font-weight:800;color:#9a3412;}
 .chart-equity-reference-hint{margin:-.15rem 0 .5rem;font-size:.82rem;color:#c2410c;font-weight:600;line-height:1.4;}
+.chart-equity-avg-price{
+  position:sticky;top:0;z-index:25;margin:0 0 .9rem;padding:.75rem;
+  border:2px solid #0d9488;border-radius:10px;
+  background:linear-gradient(180deg,#ccfbf1 0%,#f0fdfa 45%,#fff 78%);
+  box-shadow:0 2px 14px rgba(13,148,136,.18);
+}
+.chart-equity-avg-price .chart-sec-title{font-size:1.02rem;font-weight:800;color:#115e59;}
+.chart-equity-avg-price-hint{margin:-.15rem 0 .45rem;font-size:.82rem;color:#0f766e;font-weight:600;line-height:1.4;}
+.chart-equity-logic-scroll{max-height:58vh;overflow-y:auto;overflow-x:auto;padding-right:.15rem;}
+.chart-equity-logic-scroll .chart-stack{max-height:none;overflow:visible;}
 .chart-logic-badge{font-size:.72rem;font-weight:700;padding:.12rem .45rem;border-radius:999px;margin-left:.35rem;vertical-align:middle;}
 .chart-logic-badge--active{background:#dbeafe;color:#1d4ed8;}
 .chart-logic-badge:not(.chart-logic-badge--active){background:#f3f4f6;color:#6b7280;}
@@ -1169,11 +1179,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-logic-panel-split"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-equity-avg-price"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-logic-panel-split"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-equity-avg-price"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-logic-panel-split"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-equity-avg-price"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1190,7 +1200,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-logic-panel-split";
+  const CALC_PAGE_VERSION = "2026-06-15-equity-avg-price";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -5982,9 +5992,12 @@ ${rects}
     if (!vals.length) return "";
     let min = Math.min(...vals);
     let max = Math.max(...vals);
-    if (min > 0) min = 0;
-    if (max < 0) max = 0;
-    const pad = Math.max((max - min) * 0.08, 1);
+    const priceChart = !!decor.priceChart;
+    if (!priceChart) {
+      if (min > 0) min = 0;
+      if (max < 0) max = 0;
+    }
+    const pad = Math.max((max - min) * 0.08, priceChart ? (max - min) * 0.02 || 1 : 1);
     const lo = min - pad;
     const hi = max + pad;
     const x = (i) => left + i * plotW / Math.max(1, rows.length - 1);
@@ -5997,8 +6010,7 @@ ${rects}
     const sample = rows.map((_, i) => i).filter((i) => i % step === 0 || i === rows.length - 1);
     const eqLine = sample.map((i) => `${x(i).toFixed(1)},${y(rows[i].eq).toFixed(1)}`).join(" ");
     const faded = !!decor.faded;
-    const color = faded ? "#9ca3af" : (strokeColor || (finresp < 0 ? "#b91c1c" : "#047857"));
-    const finColor = faded ? "#9ca3af" : (finresp < 0 ? "#b91c1c" : "#047857");
+    const color = faded ? "#9ca3af" : (strokeColor || (priceChart ? "#0d9488" : (finresp < 0 ? "#b91c1c" : "#047857")));
     const lineOpacity = faded ? 0.55 : 1;
     const pointDot = rows.length === 1
       ? `<circle cx="${x(0).toFixed(1)}" cy="${y(rows[0].eq).toFixed(1)}" r="4" fill="${color}" opacity="${lineOpacity}"/>`
@@ -6012,7 +6024,7 @@ ${rects}
       `<text x="${left - 8}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#64748b" font-family="Consolas,monospace">${axisPrice(v)}</text>`).join("");
     const xLabels = xTickIdx.map((i) =>
       `<text x="${x(i).toFixed(1)}" y="${h - 10}" text-anchor="middle" font-size="9" fill="#64748b" font-family="Consolas,monospace">${axisTime(rows[i]?.time)}</text>`).join("");
-    const zeroY = lo < 0 && hi > 0 ? y(0).toFixed(1) : null;
+    const zeroY = !priceChart && lo < 0 && hi > 0 ? y(0).toFixed(1) : null;
     const zeroLine = zeroY
       ? `<line x1="${left}" y1="${zeroY}" x2="${w - right}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>`
       : "";
@@ -6034,15 +6046,17 @@ ${rects}
     const titleSvg = titleLines.map((line, i) =>
       `<text x="${left + 4}" y="${titleStartY + i * (titleFont + 3)}" font-size="${titleFont}" font-weight="700" fill="${titleColor}" font-family="Consolas,monospace" opacity="${lineOpacity}">${escSvgText(line)}</text>`
     ).join("");
-    const finLabel = `FINRESP ${fmt(finresp)} ₽`;
+    const finLabel = priceChart ? `Ср. ${axisPrice(finresp)} ₽` : `FINRESP ${fmt(finresp)} ₽`;
     const finFont = decor.prominentFin ? (compact ? 12 : 14) : (compact ? 11 : 12);
     const finBadgeY = compact ? 17 : 18;
     const estW = Math.max(84, finLabel.length * (finFont * 0.58));
     const boxW = estW + 12;
     const boxX = Math.max(left + 8, w - 8 - boxW);
+    const finColor = faded ? "#9ca3af" : (priceChart ? (strokeColor || "#0d9488") : (finresp < 0 ? "#b91c1c" : "#047857"));
     const finBadgeSvg = `<rect x="${boxX.toFixed(1)}" y="4" width="${boxW.toFixed(1)}" height="${compact ? 18 : 20}" rx="4" fill="#ffffff" stroke="${finColor}" stroke-width="1.1" opacity="0.98"/>
 <text x="${(w - 8).toFixed(1)}" y="${finBadgeY}" text-anchor="end" fill="${finColor}" font-size="${finFont}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">${escSvgText(finLabel)}</text>`;
     const captionY = titleRows > 1 ? top + 6 : top + 10;
+    const yAxisLabel = priceChart ? "Ср. цена, ₽" : "Equity, ₽";
     return `<svg viewBox="0 0 ${w} ${h}" class="chart-equity-main-svg" role="img" aria-label="${escSvgText(title)}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
@@ -6052,12 +6066,76 @@ ${gridH}${gridV}${zeroLine}${configLines}
 ${yLabels}${xLabels}
 ${titleSvg}
 ${finBadgeSvg}
-<text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, ₽</text>
+<text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">${yAxisLabel}</text>
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
 <polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
 ${pointDot}
 <text x="${left + 4}" y="${captionY}" font-size="9" fill="#64748b">${escSvgText(caption)}</text>
 </svg>`;
+  }
+
+  /** Close на свече с точным временем (пакеты синхронизированы по time). */
+  function closeAtPackTime(pack, timeStr) {
+    if (!pack?.length || !timeStr) return null;
+    for (let i = 0; i < pack.length; i++) {
+      if (pack[i]?.time === timeStr) {
+        const c = pack[i].close;
+        return Number.isFinite(c) ? c : null;
+      }
+    }
+    return null;
+  }
+
+  /** Средняя цена close выбранных инструментов по каждой свече окна ползунков. */
+  function buildAvgClosePriceRows(a, b) {
+    const packs = state.packs || [];
+    if (!packs.length || a == null || b == null) return [];
+    const ref = refPack();
+    if (!ref.length) return [];
+    const rows = [];
+    const end = Math.min(b, ref.length - 1);
+    for (let i = a; i <= end; i++) {
+      const time = ref[i]?.time;
+      if (!time) continue;
+      let sum = 0;
+      let n = 0;
+      for (const pack of packs) {
+        const c = closeAtPackTime(pack, time);
+        if (c != null) {
+          sum += c;
+          n += 1;
+        }
+      }
+      if (!n) continue;
+      rows.push({ time, eq: sum / n, instCount: n });
+    }
+    return rows;
+  }
+
+  /** HTML блока средней цены рынка (закреплён сверху equity). */
+  function buildEquityAvgPriceBlockHtml(ctx) {
+    const rows = ctx.avgPriceRows || [];
+    if (!rows.length) return "";
+    const last = rows.at(-1).eq;
+    const nInst = state.packs?.length || 0;
+    const decor = {
+      priceChart: true,
+      strokeW: 2.5,
+      chartTitleLines: [`Средняя цена close · ${nInst} инстр.`],
+      caption: "На каждой свече: Σ close выбранных инструментов / N (простое среднее)"
+    };
+    const svg = buildEquityChartSvg(
+      rows, last, "Средняя цена выбранных инструментов", false, "#0d9488", decor
+    );
+    if (!svg) return "";
+    const instNote = rows.at(-1).instCount < nInst
+      ? ` На последней свече данных: ${rows.at(-1).instCount}/${nInst} инстр.`
+      : "";
+    return `<div class="chart-equity-avg-price" data-equity-copy-block>
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title">Средневзвешенная цена рынка (close)</p>`)}
+<p class="chart-equity-avg-price-hint">Как двигался рынок по выбранным бумагам: среднее арифметическое цен закрытия.${instNote}</p>
+${svg}
+</div>`;
   }
 
   /** Расчёт: `calcLogicEquityRuns`. */
@@ -6145,9 +6223,10 @@ ${pointDot}
     }
     const incTf = equityDeltaTf();
     const { runs, times } = data;
+    const avgPriceRows = buildAvgClosePriceRows(a, b);
     const hasFinrespSource = !!finrespEquityRowsForChart(a, b, times);
     const hasPerLogicRuns = catalogKeys.some((key) => runs[key]?.rows?.length);
-    if (!hasPerLogicRuns && !hasFinrespSource) {
+    if (!hasPerLogicRuns && !hasFinrespSource && !avgPriceRows.length) {
       return {
         ok: false,
         box,
@@ -6217,6 +6296,7 @@ ${pointDot}
         selectedSet,
         runs,
         incTf,
+        avgPriceRows,
         processEquityRows,
         finrespRows,
         totalRows,
@@ -6336,14 +6416,16 @@ ${totalSvg}
       .filter(Boolean);
     const finrespBlock = buildEquityFinrespBlockHtml(ctx);
     const referenceBlock = buildEquityReferenceBlockHtml(ctx);
+    const avgPriceBlock = buildEquityAvgPriceBlockHtml(ctx);
     syncChartBox(box, `<div class="chart-equity-section">
+${avgPriceBlock}
 <p class="chart-equity-section-title">${ctx.sectionTitle}</p>
 ${ctx.deltaBarHtml}
 ${ctx.windowNoteHtml}
 ${ctx.liveNoteHtml}${ctx.markerNoteHtml}
 ${finrespBlock}
 ${referenceBlock}
-<div class="chart-stack">${logicBlocks.join("")}</div>
+<div class="chart-equity-logic-scroll"><div class="chart-stack">${logicBlocks.join("")}</div></div>
 </div>`);
   }
 
@@ -6365,6 +6447,13 @@ ${referenceBlock}
 
     const section = document.createElement("div");
     section.className = "chart-equity-section";
+
+    const avgPriceBlock = buildEquityAvgPriceBlockHtml(ctx);
+    if (avgPriceBlock) {
+      section.insertAdjacentHTML("beforeend", avgPriceBlock);
+      if (onProgress) await yieldToUi();
+    }
+
     section.insertAdjacentHTML("beforeend", `<p class="chart-equity-section-title">${ctx.sectionTitle}</p>`);
     section.insertAdjacentHTML("beforeend", ctx.deltaBarHtml);
     section.insertAdjacentHTML("beforeend", ctx.windowNoteHtml);
@@ -6383,9 +6472,12 @@ ${referenceBlock}
       if (onProgress) await yieldToUi();
     }
 
+    const stackWrap = document.createElement("div");
+    stackWrap.className = "chart-equity-logic-scroll";
     const stack = document.createElement("div");
     stack.className = "chart-stack";
-    section.appendChild(stack);
+    stackWrap.appendChild(stack);
+    section.appendChild(stackWrap);
 
     for (let i = 0; i < ctx.catalogKeys.length; i++) {
       const key = ctx.catalogKeys[i];

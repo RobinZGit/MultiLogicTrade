@@ -5157,6 +5157,10 @@
 <p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>
 <div class="chart-mini-empty">Equity = FINRESP Σ — ждём свечи…</div>
 </div>`;
+    const avgPriceBlock = `<div class="chart-equity-avg-price">
+<p class="chart-sec-title">Средневзвешенная цена рынка (close)</p>
+<div class="chart-mini-empty">Средняя цена close — ждём свечи…</div>
+</div>`;
     const referenceBlock = activeKeys.length
       ? `<div class="chart-equity-total chart-equity-total--reference">
 <p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>
@@ -5173,11 +5177,12 @@
       return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Equity с начала live-сессии…</div></div>`;
     }).join("");
     syncChartBox(box, `<div class="chart-equity-section">
+${avgPriceBlock}
 <p class="chart-equity-section-title">Equity по логикам — live-сессия</p>
 <p class="note">${liveChartSessionNote()}</p>
 ${finrespBlock}
 ${referenceBlock}
-<div class="chart-stack">${logicBlocks}</div>
+<div class="chart-equity-logic-scroll"><div class="chart-stack">${logicBlocks}</div></div>
 </div>`);
   }
 
