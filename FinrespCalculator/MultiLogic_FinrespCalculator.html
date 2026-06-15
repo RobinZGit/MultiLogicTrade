@@ -104,8 +104,10 @@ h2:first-child{margin-top:0;}
 .chart-fail{min-height:4.5rem;display:flex;flex-direction:column;justify-content:center;}
 .chart-fail .chart-fail-msg{margin:0;font-size:.85rem;color:#b91c1c;}
 .chart-sec-title{margin:0 0 .4rem;font-size:.88rem;font-weight:600;color:#374151;font-family:Consolas,monospace;}
-.chart-equity-delta-tf-note{margin:0 0 .9rem;padding:.5rem .7rem;border:1px solid #c7d2fe;border-radius:8px;background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 100%);font-size:.88rem;color:#1e3a5f;line-height:1.45;}
-.chart-equity-delta-tf-note strong{font-weight:700;color:#1d4ed8;}
+.chart-equity-delta-bar{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;padding:.55rem .7rem;border:1px solid #c7d2fe;border-radius:8px;background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 100%);}
+.chart-equity-delta-bar--section{margin:0 0 .9rem;border-color:#a5b4fc;}
+.chart-equity-delta-bar label{font-size:.9rem;font-weight:600;color:#1e3a5f;}
+.chart-equity-delta-bar select{font-size:.9rem;padding:.3rem .5rem;border-radius:6px;border:1px solid #a5b4fc;background:#fff;min-width:7.5rem;}
 .chart-equity-delta-panel{margin:.2rem 0 0;padding:.15rem 0 0;border-top:1px dashed #e5e7eb;}
 .chart-equity-delta-panel--inactive{border-top-color:#e0e7ff;opacity:.88;}
 .chart-equity-delta-panel .chart-equity-delta-svg{display:block;min-width:720px;max-width:100%;height:auto;}
@@ -1102,11 +1104,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-live-equity-baseline"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-equity-delta-select"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-live-equity-baseline"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-equity-delta-select"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-live-equity-baseline"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-equity-delta-select"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1123,7 +1125,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-live-equity-baseline";
+  const CALC_PAGE_VERSION = "2026-06-15-equity-delta-select";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1689,6 +1691,7 @@ body.calc-running .help-ftr{opacity:.75;}
     restoringConfig: false,
     restoredSelectedInstruments: [],
     restoredLogicIds: null,
+    savedEquityDeltaPeriod: null,
     accountMode: "paper",
     tbank: {
       token: null,
@@ -1956,7 +1959,10 @@ body.calc-running .help-ftr{opacity:.75;}
       hiddenLogicKeys: (state.hiddenLogicKeys || []).slice(),
       logicCatalogVersion: 4,
       logicLabels: { ...state.logicLabels },
-      randomPriceShift: !!$("random-price-shift")?.checked
+      randomPriceShift: !!$("random-price-shift")?.checked,
+      charts: {
+        equityDeltaPeriod: equityDeltaPeriod()
+      }
     };
   }
 
@@ -2062,6 +2068,8 @@ body.calc-running .help-ftr{opacity:.75;}
       if ($("random-price-shift")) {
         $("random-price-shift").checked = !!cfg.randomPriceShift;
       }
+      state.savedEquityDeltaPeriod = cfg.charts?.equityDeltaPeriod ?? null;
+      setValueIfExists("equity-delta-period", normalizeEquityDeltaTf(state.savedEquityDeltaPeriod));
       if (cfg.prefixes?.stocks != null && String(cfg.prefixes.stocks).trim()) {
         setValueIfExists("prefix-stocks", cfg.prefixes.stocks);
       }
@@ -5293,9 +5301,53 @@ ${markers}
     "24": "1 день"
   };
 
-  /** Таймфрейм расчёта (= период баров Δ под equity). */
+  const LEGACY_EQUITY_DELTA_TF = {
+    "1h": "60",
+    "4h": "60",
+    "1d": "24",
+    "1w": "24",
+    "1mo": "24"
+  };
+
+  /** Опции таймфрейма — те же, что в #calc-tf. */
+  function calcTfSelectOptions() {
+    const sel = $("calc-tf");
+    if (!sel?.options?.length) {
+      return Object.entries(CALC_TF_LABELS).map(([value, label]) => ({ value, label }));
+    }
+    return Array.from(sel.options).map((o) => ({
+      value: o.value,
+      label: (o.textContent || "").trim()
+    }));
+  }
+
+  /** Нормализация сохранённого периода Δ (в т.ч. старые id 1d/1h → минуты calc-tf). */
+  function normalizeEquityDeltaTf(v) {
+    const s = String(v ?? "").trim();
+    if (CALC_TF_LABELS[s]) return s;
+    if (LEGACY_EQUITY_DELTA_TF[s]) return LEGACY_EQUITY_DELTA_TF[s];
+    const allowed = new Set(calcTfSelectOptions().map((o) => o.value));
+    const fallback = $("calc-tf")?.value || "60";
+    return allowed.has(fallback) ? fallback : "60";
+  }
+
+  /** Выбранный таймфрейм баров Δ под equity (может отличаться от расчётного). */
+  function equityDeltaPeriod() {
+    const el = $("equity-delta-period");
+    if (el?.value) return normalizeEquityDeltaTf(el.value);
+    if (state.savedEquityDeltaPeriod != null) {
+      return normalizeEquityDeltaTf(state.savedEquityDeltaPeriod);
+    }
+    const cfg = readSavedConfig();
+    if (cfg?.charts?.equityDeltaPeriod) {
+      return normalizeEquityDeltaTf(cfg.charts.equityDeltaPeriod);
+    }
+    return normalizeEquityDeltaTf($("calc-tf")?.value || "60");
+  }
+
+  /** Таймфрейм бакетов превращения FINRESP под equity. */
   function equityDeltaTf() {
-    return $("calc-tf")?.value || "60";
+    return equityDeltaPeriod();
   }
 
   /** Подпись таймфрейма для превращений FINRESP. */
@@ -5304,10 +5356,18 @@ ${markers}
     return CALC_TF_LABELS[tf] || `${tf} мин`;
   }
 
-  /** Примечание над equity: период Δ = таймфрейм расчёта. */
-  function equityDeltaPeriodNoteHtml() {
-    const label = equityDeltaPeriodLabel();
-    return `<p class="chart-equity-delta-tf-note">Показывать превращения FINRESP ниже графика equity за <strong>${label}</strong> — тот же таймфрейм, что в поле «Таймфрейм» расчёта.</p>`;
+  /** Выбор периода Δ над блоком equity (опции = #calc-tf). */
+  function equityDeltaPeriodBarHtml() {
+    const period = equityDeltaPeriod();
+    const opts = calcTfSelectOptions().map((o) =>
+      `<option value="${o.value}"${o.value === period ? " selected" : ""}>${o.label}</option>`
+    ).join("");
+    return `<div class="chart-equity-delta-bar chart-equity-delta-bar--section">
+<label for="equity-delta-period">Показывать превращения FINRESP ниже графика equity за</label>
+<select id="equity-delta-period" title="Таймфрейм баров Δ (можно отличаться от таймфрейма расчёта)">
+${opts}
+</select>
+</div>`;
   }
 
   /** Разбор времени свечи equity (МСК, YYYY-MM-DD HH:MM:SS). */
@@ -5539,6 +5599,18 @@ ${rects}
       if (!btn) return;
       ev.stopPropagation();
       void onEquityChartCopyClick(btn);
+    });
+  }
+
+  /** Делегирование смены таймфрейма Δ под equity (select пересоздаётся при отрисовке). */
+  function bindEquityDeltaPeriodUi() {
+    if (bindEquityDeltaPeriodUi._done) return;
+    bindEquityDeltaPeriodUi._done = true;
+    document.addEventListener("change", (ev) => {
+      if (ev.target?.id !== "equity-delta-period") return;
+      state.savedEquityDeltaPeriod = ev.target.value;
+      saveConfig();
+      redrawEquityChartsFromCache();
     });
   }
 
@@ -5884,7 +5956,7 @@ ${totalSvg}
 
     syncChartBox(box, `<div class="chart-equity-section">
 <p class="chart-equity-section-title">${sectionTitle}</p>
-${equityDeltaPeriodNoteHtml()}
+${equityDeltaPeriodBarHtml()}
 ${equityWindowNote(a, b)}
 ${liveNote}${markerNote}
 ${finrespBlock}
@@ -6696,6 +6768,7 @@ ${referenceBlock}
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("param-reverse-toggle")?.addEventListener("click", toggleReverseInteractive);
   bindEquityChartCopyUi();
+  bindEquityDeltaPeriodUi();
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
