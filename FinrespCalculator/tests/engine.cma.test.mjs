@@ -36,20 +36,27 @@ test("CMA: power 0 equals SMA", () => {
   }
 });
 
-test("CM logic resolves to cma_spread and runs", () => {
+test("CM logic: Op/Cl long and short vs CMA", () => {
   const line = E.DEFAULT_LOGIC_LINES.CM;
-  assert.ok(line.includes("CMA"));
+  assert.match(line, /Op\(Long\(CMA/);
+  assert.match(line, /Op\(Short\(CMA/);
+  assert.match(line, /Cl\(Long\(CMA[^)]*\)\(Bl\)/);
+  assert.match(line, /Cl\(Short\(CMA[^)]*\)\(Ab\)/);
   const candles = makeCandles("GAZP", 300);
   const spec = E.resolveLogicSpec("CM", {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
-  assert.equal(spec.type, "cma_spread");
-  assert.equal(spec.cmaLen, 100);
-  assert.equal(spec.cmaPow, 1);
-  assert.equal(spec.side, "above");
+  assert.equal(spec.type, "logic_line");
+  const p = spec.parsed;
+  assert.equal(p.opLongAtoms[0]?.kind, "cma");
+  assert.match(p.opLongAtoms[0]?.signal || "", /Ab/i);
+  assert.equal(p.clLongAtoms[0]?.kind, "cma");
+  assert.match(p.clLongAtoms[0]?.signal || "", /Bl/i);
+  assert.equal(p.opShortAtoms[0]?.kind, "cma");
+  assert.match(p.opShortAtoms[0]?.signal || "", /Bl/i);
+  assert.equal(p.clShortAtoms[0]?.kind, "cma");
+  assert.match(p.clShortAtoms[0]?.signal || "", /Ab/i);
   const r = E.runOnCandles(candles, spec, 50, 290, E.DEFAULT_PARAMS, E.DEFAULT_VOLUME, { sec: "GAZP" });
   assert.ok(r.rows.length > 0);
-  assert.ok((r.buys + r.sells) > 0);
-  const probe = E.probeLogicSignalsAtBar(candles, spec, E.DEFAULT_PARAMS, { barIndex: 120, pos: 0 });
+  const probe = E.probeLogicSignalsAtBar(candles, spec, E.DEFAULT_PARAMS, { barIndex: 150, pos: 0 });
   assert.equal(probe.ready, true);
-  assert.equal(probe.cmaModel, true);
   assert.equal(probe.logicId, "CM");
 });

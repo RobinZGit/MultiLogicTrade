@@ -266,7 +266,11 @@
     sma_corridor_anti:
       "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
     CM:
-      "CMA(@CmaLen;P=@CmaPow;Vol)(Ab) SL[@SL] TP[@TP] Note(custom-sma-CM)"
+      "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab))) "
+      + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
+      + "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl))) "
+      + "Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) OnFlip(Close))) "
+      + "SL[@SL] TP[@TP] Note(custom-sma-CM-trend)",
   };
 
   const BUILTIN_META = [
@@ -315,7 +319,7 @@
     },
     {
       id: "CM",
-      name: "Стратегия с кастомным SMA (CM) — лонг выше / шорт ниже CMA",
+      name: "Стратегия с кастомным SMA (CM) — тренд, Op/Cl long+short",
       type: "logic_line",
       key: "CM"
     }
