@@ -2120,10 +2120,11 @@
         return false;
       }
       if (state.packs.length && !state.lastResult?.perSec?.length) {
-        const quick = await tryLiveFinrespCalc({ silent: true, ...ro });
+        const quick = await tryLiveFinrespCalc({ silent: true, chartMode: true, ...ro });
         if (quick?.perSec?.length) {
-          state.lastResult = quick;
-          applyResult(quick, { redrawCharts: true, liveSession: true, silent: true });
+          const { perSec, stopper } = quick;
+          drawCharts(perSec, stopper, { liveSession: true });
+          refreshLiveEquityChartsUi();
           return true;
         }
       }
@@ -4256,6 +4257,16 @@
     cs.sessionBarAnchored = true;
   }
 
+  /** Сброс baseline FINRESP/equity live-сессии перед новым расчётом/отрисовкой. */
+  function resetLiveSessionChartBaselines() {
+    const cs = state.live.chartSession;
+    if (!cs) return;
+    cs.finrespBaseline = null;
+    cs.commissionBaseline = null;
+    cs.equityBaselines = {};
+    cs.perSecBaselines = {};
+  }
+
   /** Подпрограмма `pinLiveSessionEquityWindow`. */
   function pinLiveSessionEquityWindow() {
     const pack = refPack();
@@ -4560,6 +4571,8 @@ ${referenceBlock}
       drawLiveEquityPlaceholders();
       return;
     }
+    const cs = state.live.chartSession;
+    if (cs) cs.equityBaselines = {};
     drawEquityCharts(win[0], win[1], { liveSession: true });
   }
 
@@ -4911,18 +4924,23 @@ ${referenceBlock}
   async function tryLiveFinrespCalc(runOptions) {
     const ro = runOptions || {};
     if (isLiveTradingSession()) {
-      pinLiveSessionEquityWindow();
-      if (ro.preferTail) {
-        const tailFast = await calcLiveSignalsPerInstrument(ro);
-        noteLiveFinrespDiagnostics(tailFast);
-        if (tailFast?.perSec?.length) return tailFast;
+      if (ro.chartMode) {
+        pinLiveSessionEquityWindow();
+        let result = await calcResultAsync(null, ro);
+        noteLiveFinrespDiagnostics(result);
+        if (result?.perSec?.length) return { ...result, finrespMode: "window" };
+        const tailChart = await calcLiveSignalsPerInstrument(ro);
+        noteLiveFinrespDiagnostics(tailChart);
+        if (tailChart?.perSec?.length) return tailChart;
+        return null;
       }
+      const tailResult = await calcLiveSignalsPerInstrument(ro);
+      noteLiveFinrespDiagnostics(tailResult);
+      pinLiveSessionEquityWindow();
+      if (tailResult?.perSec?.length) return tailResult;
       let result = await calcResultAsync(null, ro);
       noteLiveFinrespDiagnostics(result);
       if (result?.perSec?.length) return { ...result, finrespMode: "window" };
-      const tailResult = await calcLiveSignalsPerInstrument(ro);
-      noteLiveFinrespDiagnostics(tailResult);
-      if (tailResult?.perSec?.length) return tailResult;
       return null;
     }
     pinLiveWindowForAllInstruments();
