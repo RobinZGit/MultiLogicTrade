@@ -567,17 +567,31 @@
 
   /** T-Bank REST API: `tbankOpTradeSide`. */
   function tbankOpTradeSide(op) {
-    const ot = String(op?.operationType || op?.type || "").toUpperCase();
+    const raw = op?.operationType ?? op?.operation_type ?? op?.type;
+    const n = typeof raw === "number" ? raw : Number.parseInt(String(raw || "").replace(/\D/g, ""), 10);
+    if (n === 22 || n === 29 || n === 18) return "sell";
+    if (n === 15 || n === 16 || n === 20 || n === 28) return "buy";
+    const ot = String(raw || "").toUpperCase();
     if (!ot) return null;
-    if (ot.includes("SELL")) return "sell";
-    if (ot.includes("BUY")) return "buy";
+    if (ot.includes("SELL") || ot.includes("ПРОДА")) return "sell";
+    if (ot.includes("BUY") || ot.includes("ПОКУП")) return "buy";
     return null;
+  }
+
+  /** Доходность сделки (yield) в ₽ из операции брокера. */
+  function tbankOpYieldRub(op) {
+    if (!op) return NaN;
+    let y = moneyValueRub(op.yield);
+    if (Number.isFinite(y)) return y;
+    y = moneyValueRub(op.paymentYield);
+    if (Number.isFinite(y)) return y;
+    return NaN;
   }
 
   /** Комиссия по одной операции T-Bank (поле commission или отдельная OPERATION_TYPE_*_FEE). */
   function tbankOpCommissionRub(op) {
     if (!op) return 0;
-    const ot = String(op.operationType || op.type || "").toUpperCase();
+    const ot = String(op.operationType || op.operation_type || op.type || "").toUpperCase();
     const isFeeOp = ot.includes("BROKER_FEE") || ot.includes("SERVICE_FEE") || ot.includes("CASH_FEE")
       || ot.includes("MARGIN_FEE") || ot.includes("SUCCESS_FEE") || ot.includes("ADVICE_FEE")
       || ot.includes("OTHER_FEE") || ot.includes("OVER_COM");
@@ -671,7 +685,7 @@
         : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
       if (!Number.isFinite(price) || price <= 0) continue;
       const fee = tbankOpCommissionRub(op);
-      const brokerYield = moneyValueRub(op.yield);
+      const brokerYield = tbankOpYieldRub(op);
       const posMeta = {
         ticker,
         sec: ticker,
@@ -732,6 +746,7 @@
         h.sourceOrder.tradePnl = m.pnlTotal;
         if (Number.isFinite(m.brokerYield)) h.sourceOrder.brokerYield = m.brokerYield;
         if (Number.isFinite(m.fee)) h.sourceOrder.fee = m.fee;
+        if (Number.isFinite(m.finresp)) h.sourceOrder.finresp = m.finresp;
       }
     }
   }
@@ -759,7 +774,7 @@
     const price = Number.isFinite(op._histPrice) ? op._histPrice : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
     const payment = moneyValueRub(op.payment);
     const commission = Math.abs(moneyValueRub(op.commission) || 0);
-    const brokerYield = moneyValueRub(op.yield);
+    const brokerYield = tbankOpYieldRub(op);
     const ticker = op._histTicker || String(op.ticker || op.figi || "—").toUpperCase();
     const lot = Math.max(1, +op._histLot || 1);
     const lots = op._histLots ?? Math.max(1, piecesToLots(pieces, lot) || 1);
@@ -891,8 +906,24 @@
     const entry = tradeHistoryEntryFromOrder(o, mode);
     if (!entry.id) return;
     const idx = hist.findIndex((h) => h.id === entry.id);
-    if (idx >= 0) hist[idx] = { ...hist[idx], ...entry };
-    else hist.unshift(entry);
+    if (idx >= 0) {
+      const prev = hist[idx];
+      const merged = { ...prev, ...entry };
+      if (!Number.isFinite(entry.finresp)) {
+        if (Number.isFinite(prev.finresp)) merged.finresp = prev.finresp;
+        else if (Number.isFinite(o.finresp)) merged.finresp = o.finresp;
+        else if (!entry.isBuy && Number.isFinite(entry.brokerYield)) merged.finresp = entry.brokerYield;
+        else if (!entry.isBuy && Number.isFinite(prev.brokerYield)) merged.finresp = prev.brokerYield;
+      }
+      if (!entry.tradeRole && prev.tradeRole) merged.tradeRole = prev.tradeRole;
+      if ((!entry.tradeMatches || !entry.tradeMatches.length) && prev.tradeMatches?.length) {
+        merged.tradeMatches = prev.tradeMatches;
+      }
+      if (!Number.isFinite(entry.tradePnl) && Number.isFinite(prev.tradePnl)) merged.tradePnl = prev.tradePnl;
+      hist[idx] = merged;
+    } else {
+      hist.unshift(entry);
+    }
     if (hist.length > 500) hist.length = 500;
   }
 
@@ -985,7 +1016,9 @@
       for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
       return;
     }
-    for (const op of state.live.brokerOperations || []) upsertTradeHistoryFromTbankOperation(op);
+    const brokerOps = state.live.brokerOperations || [];
+    for (const op of brokerOps) upsertTradeHistoryFromTbankOperation(op);
+    reconcileRealBrokerTradeFinresp(brokerOps);
     for (const o of state.live.orders || []) {
       if (isLiveOrderActive(o)) upsertTradeHistoryFromOrder(o, "real");
     }
