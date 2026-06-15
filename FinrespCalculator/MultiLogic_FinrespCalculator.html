@@ -371,9 +371,24 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-trading-panel--sandbox .pos-row-closed{opacity:.72;font-style:italic;}
 .live-trading-panel--sandbox .pos-row-closed td{color:#4b5563;}
 .calc-logic-row{margin:.35rem 0 .65rem;}
-.calc-logic-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.35rem .75rem;margin-bottom:.35rem;}
-.calc-logic-head label{font-weight:600;margin:0;}
-.calc-logic-selected{flex:1 1 100%;font-size:.82rem;color:var(--muted);line-height:1.45;}
+.calc-logic-picker{width:100%;}
+.calc-logic-picker-collapsed{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .55rem;width:100%;padding:.55rem .65rem;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,#f8fafc 0%,#fff 100%);cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+.calc-logic-picker-collapsed:hover{border-color:#93c5fd;}
+.calc-logic-picker-collapsed:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.2);}
+.calc-logic-picker-label{font-weight:700;font-size:.9rem;color:#1e3a5f;flex:0 0 auto;}
+.calc-logic-chips{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:.35rem .4rem;flex:1 1 14rem;min-width:0;}
+.calc-logic-chip{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .58rem;border:2px solid var(--logic-color,#64748b);border-radius:8px;background:color-mix(in srgb,var(--logic-color,#64748b) 14%,#fff);font-size:.88rem;font-weight:600;color:#0f172a;line-height:1.25;max-width:100%;}
+.calc-logic-chip--empty{border-style:dashed;border-color:#cbd5e1;background:#f8fafc;color:var(--muted);font-weight:500;}
+.calc-logic-chip-ord{display:inline-flex;align-items:center;justify-content:center;min-width:1.15rem;height:1.15rem;border-radius:999px;background:var(--logic-color,#64748b);color:#fff;font-size:.68rem;font-weight:800;line-height:1;}
+.calc-logic-chip-key{font-family:Consolas,monospace;color:var(--logic-color,#334155);font-weight:800;}
+.calc-logic-chip-name{font-weight:500;color:#334155;font-size:.82rem;white-space:normal;}
+.calc-logic-chip-arrow{color:#94a3b8;font-weight:800;font-size:.95rem;line-height:1;flex:0 0 auto;}
+.calc-logic-picker-edit{margin-left:auto;font-size:.8rem;color:var(--muted);font-weight:600;white-space:nowrap;}
+.calc-logic-picker-panel{margin-top:.45rem;padding:.55rem .65rem;border:2px solid #93c5fd;border-radius:10px;background:#fff;}
+.calc-logic-picker-panel[hidden]{display:none!important;}
+.calc-logic-picker-panel-hint{margin:0 0 .4rem;font-size:.82rem;color:var(--muted);line-height:1.4;}
+.calc-logic-picker-actions{margin-top:.5rem;display:flex;justify-content:flex-end;}
+.calc-logic-picker--open .calc-logic-picker-collapsed{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.12);}
 .calc-logic-multi{width:100%;min-height:5rem;padding:.35rem .45rem;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:.92rem;line-height:1.35;}
 .calc-logic-multi option{padding:.28rem .35rem;border-radius:4px;}
 .calc-logic-multi option:checked{background:#dbeafe;color:#1e3a8a;font-weight:600;}
@@ -787,12 +802,21 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="calc-sec-hint" id="calc-date-hint"></p>
 
 <div class="calc-field calc-field-wide calc-logic-row">
-<div class="calc-logic-head">
-<label for="calc-logic">Логика (Ctrl+клик — несколько; приоритет сверху вниз)</label>
+<div class="calc-logic-picker" id="calc-logic-picker">
+<div class="calc-logic-picker-collapsed" id="calc-logic-picker-collapsed" role="button" tabindex="0" aria-expanded="false" aria-controls="calc-logic-picker-panel">
+<span class="calc-logic-picker-label">Логика</span>
+<div class="calc-logic-chips" id="calc-logic-chips" aria-live="polite"></div>
+<span class="calc-logic-picker-edit">Изменить</span>
 </div>
-<p class="calc-logic-selected" id="calc-logic-selected">—</p>
-<select id="calc-logic" class="calc-logic-multi" multiple size="9"></select>
-<p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в «Дополнительных параметрах» ниже. При нескольких логиках — приоритет сверху вниз.</p>
+<div class="calc-logic-picker-panel" id="calc-logic-picker-panel" hidden>
+<p class="calc-logic-picker-panel-hint">Несколько логик: Ctrl+клик. Порядок в списке сверху вниз — приоритет при расчёте и live-торговле.</p>
+<select id="calc-logic" class="calc-logic-multi" multiple size="9" aria-label="Выбор логик"></select>
+<div class="calc-logic-picker-actions">
+<button type="button" class="calc-btn" id="calc-logic-ok">OK</button>
+</div>
+</div>
+</div>
+<p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в «Дополнительных параметрах» ниже.</p>
 </div>
 
 <div class="calc-at-params" id="calc-at-params">
@@ -1104,11 +1128,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-equity-delta-select"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-logic-picker"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-equity-delta-select"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-logic-picker"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-equity-delta-select"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-logic-picker"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1125,7 +1149,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-equity-delta-select";
+  const CALC_PAGE_VERSION = "2026-06-15-logic-picker";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1692,6 +1716,7 @@ body.calc-running .help-ftr{opacity:.75;}
     restoredSelectedInstruments: [],
     restoredLogicIds: null,
     savedEquityDeltaPeriod: null,
+    logicPickerSnapshot: null,
     accountMode: "paper",
     tbank: {
       token: null,
@@ -4201,13 +4226,35 @@ body.calc-running .help-ftr{opacity:.75;}
     syncLogicSelectedHint();
   }
 
-  /** Процедура: атрибут size у select — чтобы были видны все выбранные строки. */
+  /** Процедура: атрибут size у select — когда панель выбора открыта. */
   function syncLogicSelectSize() {
     const sel = $("calc-logic");
     if (!sel) return;
-    const selectedN = selectedLogicIds().length;
+    const picker = $("calc-logic-picker");
+    if (!picker?.classList.contains("calc-logic-picker--open")) return;
     const optN = sel.options.length || 1;
-    sel.size = Math.min(12, Math.max(5, selectedN + 1, Math.min(optN, 8)));
+    sel.size = Math.min(12, Math.max(5, Math.min(optN, 9)));
+  }
+
+  /** Сворачиваемый выбор логик: клик — развернуть, OK — применить и свернуть. */
+  function bindLogicPickerUi() {
+    if (bindLogicPickerUi._done) return;
+    bindLogicPickerUi._done = true;
+    const collapsed = $("calc-logic-picker-collapsed");
+    const okBtn = $("calc-logic-ok");
+    collapsed?.addEventListener("click", () => openLogicPicker());
+    collapsed?.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        openLogicPicker();
+      }
+    });
+    okBtn?.addEventListener("click", () => closeLogicPicker(true));
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && $("calc-logic-picker")?.classList.contains("calc-logic-picker--open")) {
+        closeLogicPicker(false);
+      }
+    });
   }
 
   /** Краткая подпись логик для бейджа live-панели. */
@@ -4247,20 +4294,103 @@ body.calc-running .help-ftr{opacity:.75;}
       : "Логики не выбраны. Клик — подсказка.";
   }
 
-  /** Процедура: текст «Выбрано N (порядок): …» над списком логик. */
-  function syncLogicSelectedHint() {
-    const el = $("calc-logic-selected");
-    const sel = $("calc-logic");
-    if (!el || !sel) return;
+  /** Процедура: цветные чипы выбранных логик (свёрнутый вид). */
+  function renderLogicSelectedChips() {
+    const chipsEl = $("calc-logic-chips");
+    const collapsed = $("calc-logic-picker-collapsed");
+    if (!chipsEl) return;
+    chipsEl.replaceChildren();
     const ids = selectedLogicIds();
     if (!ids.length) {
-      el.textContent = state.logicSelectionCleared ? "— не выбрано" : "— не выбрано (по умолчанию UT)";
-    } else if (ids.length === 1) {
-      el.textContent = `Выбрана: ${logicDisplayName(ids[0])}`;
-    } else {
-      const names = ids.map((id) => logicDisplayName(id));
-      el.textContent = `Выбрано ${ids.length} (порядок): ${names.join(" → ")}`;
+      const empty = document.createElement("span");
+      empty.className = "calc-logic-chip calc-logic-chip--empty";
+      empty.textContent = state.logicSelectionCleared ? "— не выбрано" : "— не выбрано (по умолчанию UT)";
+      chipsEl.appendChild(empty);
+      if (collapsed) {
+        collapsed.setAttribute("aria-label", "Логика не выбрана. Нажмите, чтобы выбрать.");
+      }
+      return;
     }
+    ids.forEach((id, i) => {
+      if (i > 0) {
+        const arrow = document.createElement("span");
+        arrow.className = "calc-logic-chip-arrow";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+        chipsEl.appendChild(arrow);
+      }
+      const chip = document.createElement("span");
+      chip.className = "calc-logic-chip";
+      chip.style.setProperty("--logic-color", equityLogicColor(id));
+      const ord = document.createElement("span");
+      ord.className = "calc-logic-chip-ord";
+      ord.textContent = String(i + 1);
+      chip.appendChild(ord);
+      const key = document.createElement("span");
+      key.className = "calc-logic-chip-key";
+      key.textContent = id;
+      chip.appendChild(key);
+      const name = logicDisplayName(id);
+      if (name && name !== id) {
+        const nameEl = document.createElement("span");
+        nameEl.className = "calc-logic-chip-name";
+        nameEl.textContent = name;
+        chip.appendChild(nameEl);
+      }
+      chip.title = name !== id ? `${id} — ${name}` : id;
+      chipsEl.appendChild(chip);
+    });
+    if (collapsed) {
+      const names = ids.map((id) => logicDisplayName(id));
+      const summary = ids.length === 1
+        ? names[0]
+        : `Выбрано ${ids.length}, порядок: ${names.join(" → ")}`;
+      collapsed.setAttribute("aria-label", `${summary}. Нажмите, чтобы изменить.`);
+    }
+  }
+
+  function openLogicPicker() {
+    const picker = $("calc-logic-picker");
+    const panel = $("calc-logic-picker-panel");
+    const collapsed = $("calc-logic-picker-collapsed");
+    const sel = $("calc-logic");
+    if (!picker || !panel || picker.classList.contains("calc-logic-picker--open")) return;
+    state.logicPickerSnapshot = selectedLogicIds().slice();
+    picker.classList.add("calc-logic-picker--open");
+    panel.hidden = false;
+    collapsed?.setAttribute("aria-expanded", "true");
+    syncLogicSelectSize();
+    sel?.focus();
+  }
+
+  function closeLogicPicker(apply) {
+    const picker = $("calc-logic-picker");
+    const panel = $("calc-logic-picker-panel");
+    const collapsed = $("calc-logic-picker-collapsed");
+    const sel = $("calc-logic");
+    if (!picker || !panel) return;
+    if (!apply && state.logicPickerSnapshot && sel) {
+      const snap = new Set(state.logicPickerSnapshot);
+      for (const o of sel.options) o.selected = snap.has(o.value);
+    }
+    if (apply && sel) {
+      if ([...sel.selectedOptions].length) state.logicSelectionCleared = false;
+      updatePositionSlHint();
+      syncLogicSelectedHint();
+      invalidateFormChange();
+    } else {
+      renderLogicSelectedChips();
+    }
+    state.logicPickerSnapshot = null;
+    picker.classList.remove("calc-logic-picker--open");
+    panel.hidden = true;
+    collapsed?.setAttribute("aria-expanded", "false");
+    collapsed?.focus();
+  }
+
+  /** Процедура: текст «Выбрано N (порядок): …» над списком логик. */
+  function syncLogicSelectedHint() {
+    renderLogicSelectedChips();
     syncLogicSelectSize();
     syncLiveLogicsBadge();
   }
@@ -6759,9 +6889,6 @@ ${referenceBlock}
   $("calc-logic").addEventListener("change", () => {
     const sel = $("calc-logic");
     if (sel && [...sel.selectedOptions].length) state.logicSelectionCleared = false;
-    updatePositionSlHint();
-    syncLogicSelectedHint();
-    invalidateFormChange();
   });
   $("vol-type").addEventListener("change", () => { syncVolumeFields(); invalidateFormChange(); });
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
@@ -6769,6 +6896,7 @@ ${referenceBlock}
   $("param-reverse-toggle")?.addEventListener("click", toggleReverseInteractive);
   bindEquityChartCopyUi();
   bindEquityDeltaPeriodUi();
+  bindLogicPickerUi();
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
