@@ -568,8 +568,9 @@
       if (Number.isFinite(o.finresp)) return o.finresp;
       if (Number.isFinite(o.brokerYield)) return o.brokerYield;
       if (Number.isFinite(o.tradePnl)) return o.tradePnl;
+    } else {
       const role = o.tradeRole;
-      if (role === "close_long" || role === "close_short" || role === "flip") {
+      if (role === "close_short" || role === "flip") {
         return sandboxCloseFinrespNet(o);
       }
     }
@@ -679,6 +680,7 @@
     );
     const ctx = createSandboxReplayCtx({ startPortfolio: 0 });
     seedRealBrokerLegCtx(ctx);
+    state.live.brokerReplayLegFees = new Map();
     const metaByOpId = new Map();
     const matchMode = sandboxMatchMode();
 
@@ -714,6 +716,7 @@
       if (fee > 0 && meta?.legIds?.length) {
         const perLegFee = fee / meta.legIds.length;
         for (const legId of meta.legIds) {
+          state.live.brokerReplayLegFees.set(legId, (state.live.brokerReplayLegFees.get(legId) || 0) + perLegFee);
           for (const legs of ctx.openLegs?.values() || []) {
             const leg = legs.find((l) => l.legId === legId);
             if (leg) leg.fee = (leg.fee || 0) + perLegFee;
@@ -921,6 +924,18 @@
     };
   }
 
+  /** FINRESP после merge: песочница — engine; реал — явная FIFO-формула при наличии матчей. */
+  function applyTradeHistoryFinrespOnMerge(entry) {
+    if (!entry) return;
+    if (entry.fake || entry.mode === "sandbox") {
+      const fin = tradeHistoryFinrespForOrder(entry);
+      if (Number.isFinite(fin)) entry.finresp = fin;
+      return;
+    }
+    const explicit = tradeHistoryCloseFinrespExplicit(entry);
+    if (Number.isFinite(explicit)) entry.finresp = explicit;
+  }
+
   /** Подпрограмма `upsertTradeHistoryFromOrder`. */
   function upsertTradeHistoryFromOrder(o, mode) {
     if (!o) return;
@@ -944,16 +959,10 @@
         merged.tradeMatches = prev.tradeMatches;
       }
       if (!Number.isFinite(entry.tradePnl) && Number.isFinite(prev.tradePnl)) merged.tradePnl = prev.tradePnl;
-      if (merged.fake || merged.mode === "sandbox") {
-        const fin = tradeHistoryFinrespForOrder(merged);
-        if (Number.isFinite(fin)) merged.finresp = fin;
-      }
+      applyTradeHistoryFinrespOnMerge(merged);
       hist[idx] = merged;
     } else {
-      if (entry.fake || entry.mode === "sandbox") {
-        const fin = tradeHistoryFinrespForOrder(entry);
-        if (Number.isFinite(fin)) entry.finresp = fin;
-      }
+      applyTradeHistoryFinrespOnMerge(entry);
       hist.unshift(entry);
     }
     if (hist.length > 500) hist.length = 500;
@@ -1160,7 +1169,7 @@
       const nReal = hist.filter((h) => !h.fake).length;
       metaEl.textContent = isLiveSandbox()
         ? `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ = продажи − покупки (FIFO) − комиссии · Источник — робот / ручная / закрытие.`
-        : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ = продажи − покупки (FIFO) − комиссии · Источник — логика робота или ручная заявка.`;
+        : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★/☆ · FINRESPΔ = продажи − покупки (FIFO) − комиссии (брокер) · позиции до старта сессии — без комиссии покупки в журнале.`;
     }
     const active = hist.filter((h) => h.active);
     const done = hist.filter((h) => !h.active);
@@ -3017,7 +3026,7 @@
     if (Number.isFinite(openFee) && openFee > 0 && openPieces > 0) {
       return openFee * (closed / openPieces);
     }
-    const openFill = match.legId != null ? sandboxOpenFillForLeg(match.legId) : null;
+    const openFill = !isLiveSandbox() ? null : (match.legId != null ? sandboxOpenFillForLeg(match.legId) : null);
     if (openFill) {
       const opened = Math.abs(Math.trunc(+openFill.signedPieces || 0));
       if (opened > 0) {
@@ -3025,6 +3034,14 @@
         const fillFee = Number.isFinite(openFill.fee) ? +openFill.fee : sandboxCommissionFee(opened * px);
         return fillFee * (closed / opened);
       }
+    }
+    if (!isLiveSandbox() && match.legId != null) {
+      const replayFee = state.live.brokerReplayLegFees?.get(match.legId);
+      const pieces = Math.max(0, Math.trunc(+match.openPieces || 0));
+      if (Number.isFinite(replayFee) && replayFee > 0 && pieces > 0) {
+        return replayFee * (closed / pieces);
+      }
+      return 0;
     }
     return sandboxCommissionFee(openPrice * closed);
   }
