@@ -943,7 +943,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="calc-field" id="vol-deposit-wrap"><label for="vol-deposit">Депозит (Prime), ₽</label>
 <input id="vol-deposit" type="number" value="1000000" min="1" step="1000"></div>
 <div class="calc-field"><label for="commission-pct">Commission, %</label></label>
-<input id="commission-pct" type="number" value="0.04" min="0" max="10" step="0.0001" title="% от суммы сделки (оборота): покупка и продажа. 0.04 = 0.04%."></div>
+<input id="commission-pct" type="number" value="0.02" min="0" max="10" step="0.0001" title="% от суммы сделки (оборота): покупка и продажа. 0.02 = 0.02%."></div>
 </div>
 <p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. <strong>Максимальное количество позиций</strong> (<code>@@MaxPos</code>) — в блоке «Параметры управления» выше.</p>
 <p class="note">Комиссия: <strong>Commission, %</strong> от суммы каждой сделки (|цена × объём|); удерживается при покупке и продаже. FINRESP и % годовых в блоке выше уже <strong>с учётом комиссии</strong>.</p>
@@ -1029,7 +1029,8 @@ body.calc-running .help-ftr{opacity:.75;}
 
 <div class="calc-result-hero" aria-label="Итог FINRESP">
 <div class="calc-metric-primary calc-metric-finresp"><b>FINRESP Σ (с комиссией)</b><span id="calc-finresp">—</span></div>
-<div class="calc-metric-primary calc-metric-commission"><b>Комиссии уплачено</b><span id="calc-commission">—</span></div>
+<div class="calc-metric-primary calc-metric-gross"><b title="Сумма FINRESP и комиссий — справочно, не складывать с FINRESP">До комиссий (справочно)</b><span id="calc-finresp-gross">—</span></div>
+<div class="calc-metric-primary calc-metric-commission"><b title="Уже вычтены из FINRESP выше">Комиссии (в FINRESP)</b><span id="calc-commission">—</span></div>
 <div class="calc-metric-primary"><b>% годовых, простой (с комиссией)</b><span id="calc-ann-simple">—</span></div>
 <div class="calc-metric-primary"><b>% годовых, сложный (с комиссией)</b><span id="calc-ann-compound">—</span></div>
 </div>
@@ -1144,11 +1145,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-trade-history-protocol-html"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-random-trades-logic"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-trade-history-protocol-html"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-random-trades-logic"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-trade-history-protocol-html"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-random-trades-logic"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1165,7 +1166,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-trade-history-protocol-html";
+  const CALC_PAGE_VERSION = "2026-06-15-default-commission-0-02";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1702,7 +1703,7 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
-    logicLineKeys: ["TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLineKeys: ["RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
@@ -1957,7 +1958,7 @@ body.calc-running .help-ftr{opacity:.75;}
         value: $("vol-value")?.value || "",
         deposit: $("vol-deposit")?.value || "",
         maxPositions: $("vol-maxpos")?.value || "",
-        commissionPct: $("commission-pct")?.value || "0.04"
+        commissionPct: $("commission-pct")?.value || "0.02"
       },
       live: {
         orderType: $("live-order-type")?.value || "market",
@@ -3247,6 +3248,11 @@ body.calc-running .help-ftr{opacity:.75;}
     syncChartBox($("calc-chart-equity"), "");
     $("calc-finresp").textContent = "—";
     $("calc-finresp").style.color = "";
+    const grossReset = $("calc-finresp-gross");
+    if (grossReset) {
+      grossReset.textContent = "—";
+      grossReset.style.color = "";
+    }
     setCommissionMetric("calc-commission", 0);
     $("calc-ann-simple").textContent = "—";
     $("calc-ann-compound").textContent = "—";
@@ -3840,7 +3846,7 @@ body.calc-running .help-ftr{opacity:.75;}
   // === Выбор логики (calc-logic, множественный) ===
 
   const DEFAULT_LOGIC_LINE_KEYS = [
-    "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
+    "RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
     "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
   ];
 
@@ -4225,16 +4231,16 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Функция: id выбранных логик в порядке приоритета (верх списка = первая). */
   function selectedLogicIds() {
     const sel = $("calc-logic");
-    if (!sel) return state.logicSelectionCleared ? [] : ["UT"];
+    if (!sel) return state.logicSelectionCleared ? [] : ["RND"];
     const ids = [...sel.selectedOptions].map((o) => o.value).filter(Boolean);
     if (ids.length) return ids;
     if (state.logicSelectionCleared) return [];
-    return sel.value ? [sel.value] : ["UT"];
+    return sel.value ? [sel.value] : ["RND"];
   }
 
   /** Функция: первая логика в списке (для @OBT, подсказок, live). */
   function primaryLogicId() {
-    return selectedLogicIds()[0] || "UT";
+    return selectedLogicIds()[0] || "RND";
   }
 
   /** Процедура: восстановить selectedOptions из config.logics / config.logic. */
@@ -4253,7 +4259,7 @@ body.calc-running .help-ftr{opacity:.75;}
       if (Array.isArray(cfg?.logics) && cfg.logics.length === 0) {
         state.logicSelectionCleared = true;
       } else if (sel.options.length) {
-        const fallback = allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0].value));
+        const fallback = allowed.has("RND") ? "RND" : (allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0].value)));
         for (const o of sel.options) o.selected = o.value === fallback;
         state.logicSelectionCleared = false;
       }
@@ -4462,7 +4468,7 @@ body.calc-running .help-ftr{opacity:.75;}
       for (const o of sel.options) o.selected = false;
       syncLogicSelectedHint();
     } else if (!pick.length) {
-      const fallback = allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0]?.value));
+      const fallback = allowed.has("RND") ? "RND" : (allowed.has("UT") ? "UT" : (allowed.has("UCT") ? "UCT" : (allowed.has("L5") ? "L5" : sel.options[0]?.value)));
       for (const o of sel.options) o.selected = o.value === fallback;
       syncLogicSelectedHint();
     } else {
@@ -5290,6 +5296,7 @@ ${markers}
   }
 
   const LOGIC_EQUITY_COLORS = {
+    RND: "#9333ea",
     TBC: "#a16207",
     UT: "#b45309",
     UCT: "#be123c",
@@ -6352,6 +6359,12 @@ ${referenceBlock}
       : perSec.reduce((m, p) => Math.max(m, p.rows?.length ?? 0), 0);
     $("calc-finresp").textContent = `${fmt(agg.finresp)} ₽`;
     $("calc-finresp").style.color = agg.finresp < 0 ? "#b91c1c" : "#047857";
+    const grossEl = $("calc-finresp-gross");
+    const grossFin = (agg.finresp || 0) + (agg.commission || 0);
+    if (grossEl) {
+      grossEl.textContent = `${fmt(grossFin)} ₽`;
+      grossEl.style.color = grossFin < 0 ? "#b91c1c" : grossFin > 0 ? "#047857" : "";
+    }
     setCommissionMetric("calc-commission", agg.commission || 0);
     $("calc-count").textContent = String(winLen);
     $("calc-pos").textContent = fmt(agg.pos, 4);

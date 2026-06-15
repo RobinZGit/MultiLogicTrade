@@ -600,19 +600,74 @@
     return NaN;
   }
 
+  /** Отдельная fee-операция T-Bank (не buy/sell). */
+  function tbankOpIsFeeOp(op) {
+    if (!op) return false;
+    const raw = op.operationType ?? op.operation_type ?? op.type;
+    const n = typeof raw === "number" ? raw : Number.parseInt(String(raw || "").replace(/\D/g, ""), 10);
+    if (n === 19) return true; // OPERATION_TYPE_BROKER_FEE
+    const ot = String(raw || "").toUpperCase();
+    return ot.includes("BROKER_FEE") || ot.includes("SERVICE_FEE") || ot.includes("CASH_FEE")
+      || ot.includes("MARGIN_FEE") || ot.includes("SUCCESS_FEE") || ot.includes("ADVICE_FEE")
+      || ot.includes("OTHER_FEE") || ot.includes("OVER_COM");
+  }
+
   /** Комиссия по одной операции T-Bank (поле commission или отдельная OPERATION_TYPE_*_FEE). */
   function tbankOpCommissionRub(op) {
     if (!op) return 0;
-    const ot = String(op.operationType || op.operation_type || op.type || "").toUpperCase();
-    const isFeeOp = ot.includes("BROKER_FEE") || ot.includes("SERVICE_FEE") || ot.includes("CASH_FEE")
-      || ot.includes("MARGIN_FEE") || ot.includes("SUCCESS_FEE") || ot.includes("ADVICE_FEE")
-      || ot.includes("OTHER_FEE") || ot.includes("OVER_COM");
-    if (isFeeOp) {
+    if (tbankOpIsFeeOp(op)) {
       const pay = moneyValueRub(op.payment);
       return Number.isFinite(pay) ? Math.abs(pay) : 0;
     }
     const fee = moneyValueRub(op.commission);
     return Number.isFinite(fee) && fee !== 0 ? Math.abs(fee) : 0;
+  }
+
+  /**
+   * Сумма дочерних BROKER_FEE по parentOperationId (T-Bank часто не кладёт commission в сделку).
+   * @param {object[]} operations
+   * @returns {Map<string, number>}
+   */
+  function buildBrokerCommissionByParentOpId(operations) {
+    const map = new Map();
+    for (const op of operations || []) {
+      if (tbankOpTradeSide(op)) continue;
+      const parentRaw = op.parentOperationId ?? op.parent_operation_id;
+      if (parentRaw == null || parentRaw === "" || String(parentRaw) === "-1") continue;
+      const fee = tbankOpCommissionRub(op);
+      if (!(fee > 0)) continue;
+      const key = String(parentRaw);
+      map.set(key, (map.get(key) || 0) + fee);
+    }
+    return map;
+  }
+
+  /** Комиссия сделки: commission на строке + дочерние fee-операции с parentOperationId. */
+  function tbankOpTradeTotalCommissionRub(op, feeByParent) {
+    let total = tbankOpCommissionRub(op);
+    const opId = op?.id != null && String(op.id) !== "" && String(op.id) !== "-1"
+      ? String(op.id) : "";
+    if (opId && feeByParent instanceof Map) {
+      total += feeByParent.get(opId) || 0;
+    }
+    return total;
+  }
+
+  /** Сохранить сырой ответ GetOperations и карту комиссий по parent id. */
+  function storeBrokerOperationsRaw(raw) {
+    state.live.brokerOperationsRaw = raw || [];
+    state.live.brokerOpCommissionByParentId = buildBrokerCommissionByParentOpId(state.live.brokerOperationsRaw);
+  }
+
+  function brokerOpCommissionByParentMap() {
+    if (state.live.brokerOpCommissionByParentId instanceof Map) {
+      return state.live.brokerOpCommissionByParentId;
+    }
+    if (Array.isArray(state.live.brokerOperationsRaw) && state.live.brokerOperationsRaw.length) {
+      storeBrokerOperationsRaw(state.live.brokerOperationsRaw);
+      return state.live.brokerOpCommissionByParentId;
+    }
+    return new Map();
   }
 
   /** Сумма комиссий по списку операций (сделки + отдельные fee-операции). */
@@ -683,6 +738,7 @@
     state.live.brokerReplayLegFees = new Map();
     const metaByOpId = new Map();
     const matchMode = sandboxMatchMode();
+    const feeByParent = brokerOpCommissionByParentMap();
 
     for (const op of sorted) {
       const side = op._histSide || tbankOpTradeSide(op);
@@ -697,7 +753,7 @@
         ? op._histPrice
         : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
       if (!Number.isFinite(price) || price <= 0) continue;
-      const fee = tbankOpCommissionRub(op);
+      const fee = tbankOpTradeTotalCommissionRub(op, feeByParent);
       const brokerYield = tbankOpYieldRub(op);
       const posMeta = {
         ticker,
@@ -796,7 +852,7 @@
     if (!pieces) return;
     const price = Number.isFinite(op._histPrice) ? op._histPrice : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
     const payment = moneyValueRub(op.payment);
-    const commission = Math.abs(moneyValueRub(op.commission) || 0);
+    const commission = tbankOpTradeTotalCommissionRub(op, brokerOpCommissionByParentMap());
     const brokerYield = tbankOpYieldRub(op);
     const ticker = op._histTicker || String(op.ticker || op.figi || "—").toUpperCase();
     const lot = Math.max(1, +op._histLot || 1);
@@ -869,7 +925,8 @@
         to: new Date().toISOString(),
         state: "OPERATION_STATE_EXECUTED"
       });
-      const enriched = await enrichBrokerOperationsForHistory(data.operations || []);
+      storeBrokerOperationsRaw(data.operations || []);
+      const enriched = await enrichBrokerOperationsForHistory(state.live.brokerOperationsRaw);
       state.live.brokerOperations = enriched;
       for (const op of enriched) upsertTradeHistoryFromTbankOperation(op);
       reconcileRealBrokerTradeFinresp(enriched);
@@ -4581,11 +4638,12 @@
         to: new Date().toISOString(),
         state: "OPERATION_STATE_EXECUTED"
       });
-      const enriched = await enrichBrokerOperationsForHistory(ops.operations || []);
+      storeBrokerOperationsRaw(ops.operations || []);
+      const enriched = await enrichBrokerOperationsForHistory(state.live.brokerOperationsRaw);
       state.live.brokerOperations = enriched;
       for (const op of enriched) upsertTradeHistoryFromTbankOperation(op);
       reconcileRealBrokerTradeFinresp(enriched);
-      state.live.commissionPaid = sumTbankOperationsCommission(ops.operations || []);
+      state.live.commissionPaid = sumTbankOperationsCommission(state.live.brokerOperationsRaw);
       await recalcLivePortfolioMtmFromCandles();
       snapshotLiveSessionPortfolioBaseline();
       await refreshLiveOpenPositions();

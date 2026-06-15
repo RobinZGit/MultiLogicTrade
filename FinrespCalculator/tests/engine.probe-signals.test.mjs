@@ -44,4 +44,21 @@ describe("probeLogicSignalsAtBar", () => {
     assert.equal(probe.ready, true);
     assert.equal(probe.smaModel, true);
   });
+
+  it("RND parses positional SL/TP and runs trades", () => {
+    const line = E.DEFAULT_LOGIC_LINES.RND;
+    assert.ok(line);
+    const parsed = E.parseLogicLine(line, E.DEFAULT_PARAMS, ALL_INDICATORS);
+    assert.equal(parsed.slPct, 0.01);
+    assert.equal(parsed.tpPct, 0.05);
+    assert.equal(parsed.slTpMode, "pct");
+    const candles = makeCandles("GAZP", 400);
+    const spec = E.resolveLogicSpec("RND", {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
+    const b = candles.length - 1;
+    const r = E.runOnCandles(candles, spec, 0, b, E.DEFAULT_PARAMS, E.DEFAULT_VOLUME, { sec: "GAZP" });
+    assert.ok((r.buys + r.sells) > 0);
+    const probe = E.probeLogicSignalsAtBar(candles, spec, E.DEFAULT_PARAMS, { barIndex: 50, pos: 0 });
+    assert.equal(probe.ready, true);
+    assert.equal(probe.logicId, "RND");
+  });
 });

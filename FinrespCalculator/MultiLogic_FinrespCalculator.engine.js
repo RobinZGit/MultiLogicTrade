@@ -32,7 +32,7 @@
     maxPositions: 10,
     commissionPct: 0
   };
-  const DEFAULT_COMMISSION = { type: "Percent", value: 0.04 };
+  const DEFAULT_COMMISSION = { type: "Percent", value: 0.02 };
 
   // === Комиссия и объём сделки ===
 
@@ -65,7 +65,8 @@
     { key: "cci", label: "CCI" },
     { key: "bollinger", label: "Bollinger" },
     { key: "momentum", label: "Momentum" },
-    { key: "vwap", label: "VWAP" }
+    { key: "vwap", label: "VWAP" },
+    { key: "rand", label: "Rand" }
   ]);
   const INDICATOR_KEYS = INDICATOR_OPTIONS.map((x) => x.key);
   const INDICATOR_KEY_SET = new Set(INDICATOR_KEYS);
@@ -215,6 +216,8 @@
   const SLTP = " SL[@SL] TP[@TP] ";
 
   const DEFAULT_LOGIC_LINES = {
+    RND:
+      "Op(Long(Rand(P=12%)(IsOk))) Op(Short(Rand(P=12%)(IsOk))) SL[1%] TP[5%] Note(Случайные сделки)",
     TBC: TBC_REGIME +
       "Op(Long(SMA(100)(Bl) AND Stoch(14-3-3;Lmin=90;Smax=10)(K<=10) AND MACD(12,26,9)(Macd<Sig))) " +
       "Cl(Long(SMA(100)(Ab) AND Stoch(14-3-3;Lmin=90;Smax=10)(K>=90) AND MACD(12,26,9)(Macd>Sig))) " +
@@ -264,6 +267,12 @@
   };
 
   const BUILTIN_META = [
+    {
+      id: "RND",
+      name: "Случайные сделки — random long/short, SL 1% / TP 5%",
+      type: "logic_line",
+      key: "RND"
+    },
     {
       id: "TBC",
       name: "TBC — test counter-bokovik (лонг)",
@@ -455,17 +464,90 @@
       .trim();
   }
 
+  /** Доля из «12%» или «0.12». */
+  function parsePercentFraction(raw) {
+    if (raw == null || raw === "") return 0;
+    const t = String(raw).trim();
+    const n = parseFloat(t.replace("%", ""));
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return t.includes("%") || n > 1 ? n / 100 : n;
+  }
+
+  /** Токен SL[…]/TP[…]: ×ATR или позиционный %. */
+  function parseSlTpToken(raw) {
+    if (!raw) return { mode: null, value: 0 };
+    const t = String(raw).trim().toUpperCase();
+    if (t.includes("%")) {
+      const pct = parsePercentFraction(raw);
+      return pct > 0 ? { mode: "pct", value: pct } : { mode: null, value: 0 };
+    }
+    const n = parseFloat(t.replace(/ATR/gi, ""));
+    return Number.isFinite(n) && n > 0 ? { mode: "atr", value: n } : { mode: null, value: 0 };
+  }
+
   /** Разбор строки/времени/ключа: `parseSlTp`. */
   function parseSlTp(line) {
     const slM = line.match(/SL\[([^\]]+)\]/i);
     const tpM = line.match(/TP\[([^\]]+)\]/i);
-    const parseAtrMult = (raw) => {
-      if (!raw) return 0;
-      const t = raw.trim().toUpperCase().replace("ATR", "");
-      const n = parseFloat(t);
-      return Number.isFinite(n) && n > 0 ? n : 0;
+    const sl = parseSlTpToken(slM?.[1]);
+    const tp = parseSlTpToken(tpM?.[1]);
+    const slTpMode = sl.mode === "pct" || tp.mode === "pct" ? "pct" : "atr";
+    return {
+      slAtr: sl.mode === "atr" ? sl.value : 0,
+      tpAtr: tp.mode === "atr" ? tp.value : 0,
+      slPct: sl.mode === "pct" ? sl.value : 0,
+      tpPct: tp.mode === "pct" ? tp.value : 0,
+      slTpMode
     };
-    return { slAtr: parseAtrMult(slM?.[1]), tpAtr: parseAtrMult(tpM?.[1]) };
+  }
+
+  /** Проверка позиционного SL/TP: ATR-кратность и/или % от цены входа. */
+  function checkPositionSlTp(pos, entryPrice, price, parsed, atrValue) {
+    if (!pos || entryPrice == null || !Number.isFinite(price)) return null;
+    const slPct = Math.max(0, +parsed?.slPct || 0);
+    const tpPct = Math.max(0, +parsed?.tpPct || 0);
+    const slAtr = Math.max(0, +parsed?.slAtr || 0);
+    const tpAtr = Math.max(0, +parsed?.tpAtr || 0);
+    const a = Number.isFinite(atrValue) && atrValue > 0 ? atrValue : null;
+    if (pos > 0) {
+      if (slPct > 0 && price <= entryPrice * (1 - slPct)) return "sl";
+      if (tpPct > 0 && price >= entryPrice * (1 + tpPct)) return "tp";
+      if (a != null && slAtr > 0 && price <= entryPrice - slAtr * a) return "sl";
+      if (a != null && tpAtr > 0 && price >= entryPrice + tpAtr * a) return "tp";
+    } else if (pos < 0) {
+      if (slPct > 0 && price >= entryPrice * (1 + slPct)) return "sl";
+      if (tpPct > 0 && price <= entryPrice * (1 - tpPct)) return "tp";
+      if (a != null && slAtr > 0 && price >= entryPrice + slAtr * a) return "sl";
+      if (a != null && tpAtr > 0 && price <= entryPrice - tpAtr * a) return "tp";
+    }
+    return null;
+  }
+
+  function positionStopsEnabled(parsed) {
+    if (!parsed) return false;
+    return (parsed.slAtr > 0 || parsed.tpAtr > 0 || parsed.slPct > 0 || parsed.tpPct > 0);
+  }
+
+  /** Детерминированный [0,1) для Rand на баре (воспроизводимый бэктест). */
+  function deterministic01(idx, salt) {
+    let x = ((idx + 1) * 374761393 + (salt | 0) * 668265263) >>> 0;
+    x = Math.imul(x ^ (x >>> 13), 1274126177) >>> 0;
+    return (x >>> 0) / 4294967296;
+  }
+
+  /** Состояние Rand на баре: попытка входа и сторона long/short. */
+  function randBarRoll(cache, idx, pm) {
+    if (!cache._randRolls) cache._randRolls = new Map();
+    const seed = parseInt(pm.Seed || pm.seed || "0", 10) || 0;
+    const pRaw = pm.P ?? pm.p ?? "12%";
+    const key = `${idx}|${seed}|${pRaw}`;
+    if (!cache._randRolls.has(key)) {
+      const p = parsePercentFraction(pRaw);
+      const h1 = deterministic01(idx, seed);
+      const h2 = deterministic01(idx + 9973, seed + 17);
+      cache._randRolls.set(key, { open: h1 < p, long: h2 < 0.5 });
+    }
+    return cache._randRolls.get(key);
   }
 
   /** Подпрограмма `extractBlock`. */
@@ -610,6 +692,7 @@
     if (k === "bolinger" || k === "boll" || k === "bb" || k === "polenger") return "bollinger";
     if (k === "mom") return "momentum";
     if (k === "vwma") return "vwap";
+    if (k === "random") return "rand";
     return k;
   }
 
@@ -617,7 +700,7 @@
   function parseLogicLine(line, params, indicatorSelection) {
     const raw = substituteParams(line, params || DEFAULT_PARAMS);
     const regime = parseRegimeFromLine(raw);
-    const { slAtr, tpAtr } = parseSlTp(raw);
+    const sltp = parseSlTp(raw);
     const body = stripDecor(raw);
     const opBlocks = extractBlocks(body, "Op");
     const clBlocks = extractBlocks(body, "Cl");
@@ -633,8 +716,11 @@
     const clLongOnFlip = clBlocks.filter((b) => b.side === "long").some((b) => exprHasOnFlipClose(b.expr));
     const clShortOnFlip = clBlocks.filter((b) => b.side === "short").some((b) => exprHasOnFlipClose(b.expr));
     return {
-      slAtr,
-      tpAtr,
+      slAtr: sltp.slAtr,
+      tpAtr: sltp.tpAtr,
+      slPct: sltp.slPct,
+      tpPct: sltp.tpPct,
+      slTpMode: sltp.slTpMode,
       opSide: firstOp?.side || "long",
       clSide: firstCl?.side || firstOp?.side || "long",
       opAtoms: [...opLongAtoms, ...opShortAtoms],
@@ -865,6 +951,7 @@
       this._vwap = new Map();
       this._cci = new Map();
       this._macd = new Map();
+      this._randRolls = new Map();
     }
     sma(len) {
       const k = len;
@@ -935,7 +1022,7 @@
   }
 
   /** Подпрограмма `evaluateAtom`. */
-  function evaluateAtom(atom, cache, idx, posCtx) {
+  function evaluateAtom(atom, cache, idx, posCtx, evalOpts) {
     const c = cache.candles[idx];
     const close = c.close;
     const pm = parseParamsMap(atom.params);
@@ -1066,13 +1153,26 @@
       if (v == null) return false;
       return evalThreshold(sig, v, close);
     }
+    if (kind === "rand") {
+      const roll = randBarRoll(cache, idx, pm);
+      if (sigU === "LONG") return roll.open && roll.long;
+      if (sigU === "SHORT") return roll.open && !roll.long;
+      if (sigU === "ISOK" || sigU === "OK") {
+        if (!roll.open) return false;
+        const side = evalOpts?.tradeSide;
+        if (side === "long") return roll.long;
+        if (side === "short") return !roll.long;
+        return roll.open;
+      }
+      return false;
+    }
     return false;
   }
 
   /** Подпрограмма `evaluateExpr`. */
-  function evaluateExpr(atoms, cache, idx, posCtx) {
+  function evaluateExpr(atoms, cache, idx, posCtx, evalOpts) {
     if (!atoms.length) return false;
-    return atoms.every((a) => evaluateAtom(a, cache, idx, posCtx));
+    return atoms.every((a) => evaluateAtom(a, cache, idx, posCtx, evalOpts));
   }
 
   /** Подпрограмма `captureEntryAnchor`. */
@@ -1106,6 +1206,21 @@
   /** Подпрограмма `warmupBars`. */
   function warmupBars() {
     return 120;
+  }
+
+  /** Прогрев для Rand-only логик — без индикаторов. */
+  function parsedUsesRandOnly(parsed) {
+    const atoms = [
+      ...(parsed?.opLongAtoms || []),
+      ...(parsed?.opShortAtoms || []),
+      ...(parsed?.clLongAtoms || []),
+      ...(parsed?.clShortAtoms || [])
+    ];
+    return atoms.length > 0 && atoms.every((a) => indicatorKey(a?.kind) === "rand");
+  }
+
+  function logicWarmupBars(parsed) {
+    return parsedUsesRandOnly(parsed) ? 1 : warmupBars();
   }
 
   /** Расчёт: `calcTradeVolume`. */
@@ -1337,10 +1452,12 @@
 
   function markerSlTpLabel(parsed, posStop) {
     if (posStop === "sl") {
+      if (parsed?.slPct > 0) return `SL[${(parsed.slPct * 100).toFixed(2).replace(/\.?0+$/, "")}%]`;
       const m = parsed?.slAtr > 0 ? `${parsed.slAtr}×ATR` : "";
       return m ? `SL[${m}]` : "Stop-loss";
     }
     if (posStop === "tp") {
+      if (parsed?.tpPct > 0) return `TP[${(parsed.tpPct * 100).toFixed(2).replace(/\.?0+$/, "")}%]`;
       const m = parsed?.tpAtr > 0 ? `${parsed.tpAtr}×ATR` : "";
       return m ? `TP[${m}]` : "Take-profit";
     }
@@ -1562,8 +1679,8 @@
     const shortClHit = evaluateExpr(clShortAtoms, cache, i, posCtx)
       || (pos < 0 && evalOnFlipClose(parsed, cache, i, pos));
     return {
-      longOpHit: evaluateExpr(opLongAtoms, cache, i, posCtx),
-      shortOpHit: evaluateExpr(opShortAtoms, cache, i, posCtx),
+      longOpHit: evaluateExpr(opLongAtoms, cache, i, posCtx, { tradeSide: "long" }),
+      shortOpHit: evaluateExpr(opShortAtoms, cache, i, posCtx, { tradeSide: "short" }),
       longClHit,
       shortClHit
     };
@@ -1609,7 +1726,10 @@
     let entryMid = initial.entryMid ?? null;
     let entryBeta = initial.entryBeta ?? null;
     const rows = [];
-    const w = Math.max(warmupBars(), 2);
+    const stackWarmup = parsedList.length
+      ? Math.max(...parsedList.map((x) => logicWarmupBars(x)), 1)
+      : warmupBars();
+    const w = Math.max(stackWarmup, 2);
     const from = opts.skipWarmup ? Math.max(startIdx, 0) : Math.max(startIdx, w);
     const to = Math.min(endIdx, candles.length - 1);
     const barSpan = Math.max(1, to - from + 1);
@@ -1650,33 +1770,16 @@
       if (pos !== 0 && activeIdx >= 0 && activeIdx < parsedList.length) {
         const parsed = parsedList[activeIdx];
         const activeLogicId = logicSpecs[activeIdx]?.logicId || opts.logicId || "?";
-        if (parsed.slAtr > 0 || parsed.tpAtr > 0) {
-          const a = atrByLen.get(parsed.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen)?.[i];
-          if (a != null && a > 0 && entryPrice != null) {
-            let hit = false;
-            if (pos > 0) {
-              if (parsed.slAtr > 0 && price <= entryPrice - parsed.slAtr * a) {
-                hit = true;
-                posStop = "sl";
-              } else if (parsed.tpAtr > 0 && price >= entryPrice + parsed.tpAtr * a) {
-                hit = true;
-                posStop = "tp";
-              }
-            } else {
-              if (parsed.slAtr > 0 && price >= entryPrice + parsed.slAtr * a) {
-                hit = true;
-                posStop = "sl";
-              } else if (parsed.tpAtr > 0 && price <= entryPrice - parsed.tpAtr * a) {
-                hit = true;
-                posStop = "tp";
-              }
-            }
-            if (hit) {
-              markerMeta.tradeOutLogic = activeLogicId;
-              markerMeta.tradeOutSignal = posStop;
-              markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
-              sell += flatten(price);
-            }
+        if (positionStopsEnabled(parsed) && entryPrice != null) {
+          const needAtr = (parsed.slAtr > 0 || parsed.tpAtr > 0);
+          const a = needAtr ? atrByLen.get(parsed.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen)?.[i] : null;
+          const stop = checkPositionSlTp(pos, entryPrice, price, parsed, a);
+          if (stop) {
+            posStop = stop;
+            markerMeta.tradeOutLogic = activeLogicId;
+            markerMeta.tradeOutSignal = posStop;
+            markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
+            sell += flatten(price);
           }
         }
         if (pos !== 0) {
@@ -1713,8 +1816,8 @@
           cash -= comm;
           commissionPaid += comm;
           entryPrice = price;
-          if (pos > 0) buy = lot;
-          else sell = lot;
+          if (pos > 0) buy += lot;
+          else sell += lot;
           activeIdx = si;
           markerMeta.tradeInLogic = logicSpecs[si]?.logicId || opts.logicId || "?";
           markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
@@ -1764,7 +1867,8 @@
     const signalCandles = opts.signalCandles || candles;
     const cache = opts.indicatorCache || new IndicatorCache(signalCandles);
     const atrLen = parsed.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen;
-    const atrSlTp = cache.atr(atrLen);
+    const needAtrStops = (parsed.slAtr > 0 || parsed.tpAtr > 0);
+    const atrSlTp = needAtrStops ? cache.atr(atrLen) : null;
     const initial = opts.initial || {};
     let pos = initial.pos || 0;
     let cash = initial.cash || 0;
@@ -1774,7 +1878,7 @@
     let entryBeta = initial.entryBeta ?? null;
     let commissionPaid = initial.commission || 0;
     const rows = [];
-    const w = Math.max(warmupBars(), 2);
+    const w = Math.max(logicWarmupBars(parsed), 2);
     const from = opts.skipWarmup ? Math.max(startIdx, 0) : Math.max(startIdx, w);
     const to = Math.min(endIdx, candles.length - 1);
 
@@ -1812,33 +1916,15 @@
 
       let posStop = null;
       const markerMeta = {};
-      if (pos !== 0 && (parsed.slAtr > 0 || parsed.tpAtr > 0)) {
-        const a = atrSlTp[i];
-        if (a != null && a > 0 && entryPrice != null) {
-          let hit = false;
-          if (pos > 0) {
-            if (parsed.slAtr > 0 && price <= entryPrice - parsed.slAtr * a) {
-              hit = true;
-              posStop = "sl";
-            } else if (parsed.tpAtr > 0 && price >= entryPrice + parsed.tpAtr * a) {
-              hit = true;
-              posStop = "tp";
-            }
-          } else {
-            if (parsed.slAtr > 0 && price >= entryPrice + parsed.slAtr * a) {
-              hit = true;
-              posStop = "sl";
-            } else if (parsed.tpAtr > 0 && price <= entryPrice - parsed.tpAtr * a) {
-              hit = true;
-              posStop = "tp";
-            }
-          }
-          if (hit) {
-            markerMeta.tradeOutLogic = logicId;
-            markerMeta.tradeOutSignal = posStop;
-            markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
-            sell += flatten(price);
-          }
+      if (pos !== 0 && positionStopsEnabled(parsed) && entryPrice != null) {
+        const a = needAtrStops ? atrSlTp[i] : null;
+        const stop = checkPositionSlTp(pos, entryPrice, price, parsed, a);
+        if (stop) {
+          posStop = stop;
+          markerMeta.tradeOutLogic = logicId;
+          markerMeta.tradeOutSignal = posStop;
+          markerMeta.tradeOutExpr = markerSlTpLabel(parsed, posStop);
+          sell += flatten(price);
         }
       }
 
@@ -1866,8 +1952,8 @@
           cash -= comm;
           commissionPaid += comm;
           entryPrice = price;
-          if (pos > 0) buy = lot;
-          else sell = lot;
+          if (pos > 0) buy += lot;
+          else sell += lot;
           markerMeta.tradeInLogic = logicId;
           markerMeta.tradeInSignal = entrySig.longOpHit ? "op_long" : "op_short";
           markerMeta.tradeInExpr = markerOpExpr(parsed, entrySig.longOpHit ? "long" : "short");
@@ -2186,8 +2272,13 @@
   /** Применение настроек/результата: `applySlTpParams`. */
   function applySlTpParams(parsed, params) {
     const p = { ...DEFAULT_PARAMS, ...params };
-    parsed.slAtr = Math.max(0, Number(p.SL) || 0);
-    parsed.tpAtr = Math.max(0, Number(p.TP) || 0);
+    if (parsed.slTpMode !== "pct") {
+      parsed.slAtr = Math.max(0, Number(p.SL) || 0);
+      parsed.tpAtr = Math.max(0, Number(p.TP) || 0);
+      parsed.slPct = 0;
+      parsed.tpPct = 0;
+      parsed.slTpMode = "atr";
+    }
     parsed.slTpAtrLen = Math.max(2, Number(p.slTpAtrLen) || DEFAULT_PARAMS.slTpAtrLen);
     return parsed;
   }
@@ -2343,7 +2434,15 @@
     if (!candles?.length || !spec) return { ready: false, reason: "no_data" };
     const p = { ...DEFAULT_PARAMS, ...params };
     const b = Math.min(candles.length - 1, Math.max(0, opts.barIndex ?? candles.length - 1));
-    const w = warmupBars();
+    let w = warmupBars();
+    if (spec.type === "logic_line" && spec.parsed) {
+      w = logicWarmupBars(applySlTpParams({ ...spec.parsed }, p));
+    } else if (spec.type === "multi_logic") {
+      const parsedList = (spec.specs || [])
+        .filter((s) => s?.type === "logic_line" && !s.disabled)
+        .map((s) => applySlTpParams({ ...s.parsed }, p));
+      if (parsedList.length) w = Math.max(...parsedList.map((x) => logicWarmupBars(x)), 1);
+    }
     if (b < w) return { ready: false, reason: "warmup", barIndex: b, needBars: w };
     const cache = new IndicatorCache(candles);
     const pos = +opts.pos || 0;

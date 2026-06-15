@@ -32,5 +32,6 @@ export const ALL_INDICATORS = {
   cci: true,
   bollinger: true,
   momentum: true,
-  vwap: true
+  vwap: true,
+  rand: true
 };
