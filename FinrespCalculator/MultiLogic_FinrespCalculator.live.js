@@ -138,9 +138,18 @@
       const portTxt = Number.isFinite(fin)
         ? ` · портфель Δ: ${fmtSignedRub(fin, 2)} ₽`
         : "";
+      const histFin = (() => {
+        try {
+          const done = (state.live.tradeHistory || []).filter((h) => !h.active);
+          return computeTradeHistoryCloseTotals(done).sumFin;
+        } catch (_) { return NaN; }
+      })();
+      const histTxt = Number.isFinite(histFin)
+        ? ` · Σ закрытий (FIFO): ${fmtSignedRub(histFin, 2)} ₽`
+        : "";
       el.textContent =
         `Портфель = деньги + позиции: ${fmt(cash, 2)} + ${fmt(mtm, 2)} = ${fmt(pv, 2)} ₽`
-        + ` · «Деньги, свободно» — не в бумагах (старт − комиссии ± сделки)${commTxt}${modelTxt}${portTxt}`;
+        + ` · «Деньги, свободно» — не в бумагах (старт − комиссии ± сделки)${commTxt}${modelTxt}${portTxt}${histTxt}`;
       return;
     }
     if (isLiveSandbox()) {
@@ -546,6 +555,8 @@
 
   /** Сделка/комиссия: `tradeHistoryFinrespForOrder`. */
   function tradeHistoryFinrespForOrder(o) {
+    const explicit = tradeHistoryCloseFinrespExplicit(o);
+    if (Number.isFinite(explicit)) return explicit;
     if (o.fake) {
       const role = o.tradeRole;
       if (role === "close_long" || role === "close_short" || role === "flip") {
@@ -712,19 +723,18 @@
       let finresp = null;
       const isClose = meta.role === "close_long" || meta.role === "close_short" || meta.role === "flip";
       if (isClose) {
-        if (Number.isFinite(brokerYield)) {
-          finresp = brokerYield;
-        } else {
-          finresp = sandboxCloseFinrespNet({
-            tradeRole: meta.role,
-            price,
-            tradeMatches: meta.matches,
-            tradePnl: meta.pnlTotal,
-            fee,
-            notional: pieces * price,
-            signedPieces: -Math.abs(signedPieces)
-          });
-        }
+        const closeEntry = {
+          tradeRole: meta.role,
+          tradeMatches: meta.matches,
+          price,
+          fee,
+          isBuy: side === "buy",
+          notional: pieces * price,
+          signedPieces: side === "buy" ? pieces : -pieces
+        };
+        finresp = tradeHistoryCloseFinrespExplicit(closeEntry);
+        if (!Number.isFinite(finresp) && Number.isFinite(brokerYield)) finresp = brokerYield;
+        else if (!Number.isFinite(finresp)) finresp = sandboxCloseFinrespNet(closeEntry);
       }
       if (op.id != null) {
         metaByOpId.set(String(op.id), {
@@ -1064,7 +1074,7 @@
       ? '<span class="trade-mode-fake">фейк</span>'
       : '<span class="trade-mode-real">реал</span>';
     const { buyFee: buyFeeRub, sellFee: sellFeeRub } = tradeHistoryRowFeeColumns(entry);
-    const finrespVal = Number.isFinite(entry.finresp) ? entry.finresp : tradeHistoryFinrespForOrder(entry);
+    const finrespVal = tradeHistoryCloseFinrespExplicit(entry) ?? tradeHistoryFinrespForOrder(entry);
     let finrespCell = "—";
     if (Number.isFinite(finrespVal)) {
       const cls = finrespVal >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
@@ -1084,22 +1094,35 @@
     return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${feeBuyCell}</td><td>${feeSellCell}</td><td>${sourceCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
   }
 
-  /** Суммы по закрытиям для строки итогов истории. */
+  /** Суммы по закрытиям для строки итогов истории (явная формула FIFO). */
   function computeTradeHistoryCloseTotals(done) {
     let sumFin = 0;
     let sumBuyFee = 0;
     let sumSellFee = 0;
+    let sumSale = 0;
+    let sumPurchase = 0;
     for (const e of done) {
       const closeKind = tradeHistoryCloseKind(e);
-      const isClose = closeKind === "close_long" || closeKind === "close_short" || closeKind === "flip";
-      if (!isClose) continue;
-      const finresp = Number.isFinite(e.finresp) ? e.finresp : tradeHistoryFinrespForOrder(e);
+      if (closeKind !== "close_long" && closeKind !== "close_short" && closeKind !== "flip") continue;
+      const finresp = tradeHistoryCloseFinrespExplicit(e);
       if (Number.isFinite(finresp)) sumFin += finresp;
       const fees = tradeHistoryRowFeeColumns(e);
       if (Number.isFinite(fees.buyFee)) sumBuyFee += fees.buyFee;
       if (Number.isFinite(fees.sellFee)) sumSellFee += fees.sellFee;
+      const amounts = tradeHistoryCloseFifoAmounts(e);
+      if (amounts) {
+        sumSale += amounts.saleSum;
+        sumPurchase += amounts.purchaseSum;
+      }
     }
-    return { sumFin, sumBuyFee, sumSellFee };
+    return {
+      sumFin,
+      sumBuyFee,
+      sumSellFee,
+      sumSale,
+      sumPurchase,
+      portfolioDelta: liveFinResultRub()
+    };
   }
 
   /** Закреплённый футер итогов — вне прокрутки таблицы. */
@@ -1107,9 +1130,16 @@
     const sumFin = totals?.sumFin ?? 0;
     const sumBuyFee = totals?.sumBuyFee ?? 0;
     const sumSellFee = totals?.sumSellFee ?? 0;
+    const sumSale = totals?.sumSale ?? 0;
+    const sumPurchase = totals?.sumPurchase ?? 0;
+    const portDelta = totals?.portfolioDelta;
     const finCls = sumFin > 0 ? "trade-finresp-pos" : sumFin < 0 ? "trade-finresp-neg" : "";
     const finStr = `${sumFin >= 0 ? "+" : ""}${fmt(sumFin, 2)} ₽`;
-    return `<div class="live-trade-history-totals" role="status" aria-label="Итоги закрытий"><span class="live-trade-history-totals-label">Итоги (закрытия):</span> <span class="live-trade-history-totals-fin ${finCls}">FINRESPΔ ${finStr}</span> <span class="live-trade-history-totals-sep">·</span> <span class="live-trade-history-totals-buy">buy-комиссия −${fmt(sumBuyFee, 2)} ₽</span> <span class="live-trade-history-totals-sep">·</span> <span class="live-trade-history-totals-sell">sell-комиссия −${fmt(sumSellFee, 2)} ₽</span></div>`;
+    const formula = `прод ${fmt(sumSale, 2)} − покуп ${fmt(sumPurchase, 2)} − buy ${fmt(sumBuyFee, 2)} − sell ${fmt(sumSellFee, 2)}`;
+    const portStr = Number.isFinite(portDelta)
+      ? ` · портфель Δ ${portDelta >= 0 ? "+" : ""}${fmt(portDelta, 2)} ₽`
+      : "";
+    return `<div class="live-trade-history-totals" role="status" aria-label="Итоги закрытий FIFO" title="FINRESPΔ = Σ продажи − Σ покупки (FIFO) − комиссии buy − sell. Портфель Δ = текущий портфель − старт сессии (включает нереализованное по открытым позициям). FINRESP Σ (модель) вверху — по сигналам расчёта, не по журналу сделок."><span class="live-trade-history-totals-label">Итоги (закрытия FIFO):</span> <span class="live-trade-history-totals-fin ${finCls}">FINRESPΔ ${finStr}</span> <span class="live-trade-history-totals-sep">=</span> <span class="live-trade-history-totals-formula">${formula}</span>${portStr}</div>`;
   }
 
   /** Отрисовка элемента live-панели: `renderLiveOrdersPanel`. */
@@ -1129,8 +1159,8 @@
       const nFake = hist.filter((h) => h.fake).length;
       const nReal = hist.filter((h) => !h.fake).length;
       metaEl.textContent = isLiveSandbox()
-        ? `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — P/L закрытия с комиссией (фейк) · Источник — робот / ручная / закрытие.`
-        : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — yield брокера на продаже · Источник — логика робота или ручная заявка.`;
+        ? `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ = продажи − покупки (FIFO) − комиссии · Источник — робот / ручная / закрытие.`
+        : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ = продажи − покупки (FIFO) − комиссии · Источник — логика робота или ручная заявка.`;
     }
     const active = hist.filter((h) => h.active);
     const done = hist.filter((h) => !h.active);
@@ -3010,10 +3040,49 @@
     if (role === "close_long" || role === "close_short" || role === "flip") return role;
     const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
     if (!matches.length) return null;
+    const isBuy = entry.isBuy != null ? !!entry.isBuy : isOrderBuy(entry);
     const openSide = matches[0]?.side;
-    if (openSide === "long" && !entry.isBuy) return "close_long";
-    if (openSide === "short" && entry.isBuy) return "close_short";
+    if (openSide === "long" && !isBuy) return "close_long";
+    if (openSide === "short" && isBuy) return "close_short";
     return null;
+  }
+
+  /** Суммы продажи и покупки по FIFO-матчам закрытия (₽, без комиссий). */
+  function tradeHistoryCloseFifoAmounts(entry) {
+    const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
+    if (!matches.length) return null;
+    const closePrice = +entry.price || 0;
+    let saleSum = 0;
+    let purchaseSum = 0;
+    for (const m of matches) {
+      const qty = Math.max(0, Math.trunc(+m.pieces || 0));
+      if (!qty) continue;
+      const openPx = +m.openPrice || 0;
+      const closePx = +m.closePrice || closePrice;
+      if (m.side === "short") {
+        saleSum += openPx * qty;
+        purchaseSum += closePx * qty;
+      } else {
+        purchaseSum += openPx * qty;
+        saleSum += closePx * qty;
+      }
+    }
+    return { saleSum, purchaseSum };
+  }
+
+  /**
+   * FINRESPΔ закрытия: Σ продажи − Σ покупки (FIFO-пакеты) − комиссия buy − комиссия sell.
+   * Лонг: продажа закрытия − покупки списанных лотов; шорт: продажи открытия − покупка закрытия.
+   */
+  function tradeHistoryCloseFinrespExplicit(entry) {
+    const closeKind = tradeHistoryCloseKind(entry);
+    if (closeKind !== "close_long" && closeKind !== "close_short" && closeKind !== "flip") return null;
+    const amounts = tradeHistoryCloseFifoAmounts(entry);
+    if (!amounts) return null;
+    const fees = tradeHistoryRowFeeColumns(entry);
+    const buyFee = Number.isFinite(fees.buyFee) ? fees.buyFee : 0;
+    const sellFee = Number.isFinite(fees.sellFee) ? fees.sellFee : 0;
+    return amounts.saleSum - amounts.purchaseSum - buyFee - sellFee;
   }
 
   /** Колонки комиссий строки журнала: buy / sell с учётом FIFO открытий при закрытии. */
@@ -3045,47 +3114,22 @@
   }
 
   /**
-   * FINRESPΔ закрытия (фейк), по каждому списанному лоту FIFO/LIFO:
-   *   Σ (цена_прод − цена_покуп_лота) × шт_продано
-   *   − Σ комиссия_покупки_взвешенная(шт_продано)
-   *   − комиссия_продажи_полная(на весь объём закрытия)
+   * FINRESPΔ закрытия без FIFO-матчей (запасной путь).
    */
   function sandboxCloseFinrespNet(o) {
     if (!o) return null;
+    const explicit = tradeHistoryCloseFinrespExplicit(o);
+    if (Number.isFinite(explicit)) return explicit;
     const role = o.tradeRole;
     if (role !== "close_long" && role !== "close_short" && role !== "flip") return null;
-
-    const matches = Array.isArray(o.tradeMatches) ? o.tradeMatches : [];
+    if (!Number.isFinite(o.tradePnl)) return null;
     const closePrice = +o.price || 0;
-    let net = 0;
-    let closedPieces = 0;
-
-    if (matches.length) {
-      for (const m of matches) {
-        const sold = Math.max(0, Math.trunc(+m.pieces || 0));
-        if (!sold) continue;
-        const openPrice = +m.openPrice || 0;
-        const sellPx = +m.closePrice || closePrice;
-        const pricePnl = m.side === "short"
-          ? (openPrice - sellPx) * sold
-          : (sellPx - openPrice) * sold;
-        net += pricePnl - sandboxWeightedOpenLegFeeForMatch(m);
-        closedPieces += sold;
-      }
-    } else if (Number.isFinite(o.tradePnl)) {
-      net = o.tradePnl;
-      closedPieces = Math.abs(Math.trunc(+o.signedPieces || 0));
-    } else {
-      return null;
-    }
-
-    if (closedPieces <= 0) return null;
-
+    const closedPieces = Math.abs(Math.trunc(+o.signedPieces || 0));
     const closeNotional = Number.isFinite(o.notional)
       ? Math.abs(+o.notional)
       : closedPieces * closePrice;
     const closeFee = Number.isFinite(o.fee) ? +o.fee : sandboxCommissionFee(closeNotional);
-    return net - closeFee;
+    return o.tradePnl - closeFee;
   }
 
   /** Функция: фейк-позиции в формате tbankPositionsByTicker для reconcile робота. */

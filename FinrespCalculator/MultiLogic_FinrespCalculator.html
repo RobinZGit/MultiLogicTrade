@@ -343,7 +343,7 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-trade-history-totals{flex:0 0 auto;border-top:2px solid #fcd34d;background:#fffbeb;padding:.45rem .5rem;font-size:.78rem;font-weight:700;color:#7c2d12;line-height:1.35;}
 .live-trade-history-totals-buy{color:#b45309;}
 .live-trade-history-totals-sell{color:#b91c1c;}
-.live-trade-history-totals-sep{color:#a8a29e;font-weight:500;}
+.live-trade-history-totals-formula{font-size:.72rem;font-weight:600;color:#92400e;}
 .live-trade-history-panel .live-trading-orders-scroll thead th{position:sticky;top:0;z-index:2;background:#fffbeb;box-shadow:0 1px 0 #fcd34d;}
 .live-trading-panel--sandbox .live-trade-history-panel .live-trading-orders-scroll thead th{background:#f0fdf4;box-shadow:0 1px 0 #86efac;}
 .live-trading-panel--sandbox .live-trade-history-totals{border-top-color:#86efac;background:#f0fdf4;color:#14532d;}
@@ -1136,11 +1136,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-trade-history-fifo-fees-fix"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-trade-history-fifo-finresp-formula"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-trade-history-fifo-fees-fix"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-trade-history-fifo-finresp-formula"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-trade-history-fifo-fees-fix"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-trade-history-fifo-finresp-formula"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1157,7 +1157,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-trade-history-fifo-fees-fix";
+  const CALC_PAGE_VERSION = "2026-06-15-trade-history-fifo-finresp-formula";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
