@@ -699,8 +699,8 @@
         skipNotify: true,
         skipClosedJournal: true
       });
-      // Привязать комиссию покупки к leg (чтобы потом взвесить при закрытии).
-      if (signedPieces > 0 && fee > 0 && meta?.legIds?.length) {
+      // Привязать комиссию открытия к leg (покупка лонга / продажа шорта — для FIFO при закрытии).
+      if (fee > 0 && meta?.legIds?.length) {
         const perLegFee = fee / meta.legIds.length;
         for (const legId of meta.legIds) {
           for (const legs of ctx.openLegs?.values() || []) {
@@ -1049,15 +1049,7 @@
     const modeLabel = entry.fake
       ? '<span class="trade-mode-fake">фейк</span>'
       : '<span class="trade-mode-real">реал</span>';
-    const buyFeeRub = (() => {
-      if (entry.isBuy) return Number.isFinite(entry.fee) ? +entry.fee : NaN;
-      const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
-      if (!matches.length) return NaN;
-      let sum = 0;
-      for (const m of matches) sum += sandboxWeightedBuyFeeForMatch(m);
-      return Number.isFinite(sum) && sum > 0 ? sum : NaN;
-    })();
-    const sellFeeRub = (!entry.isBuy && Number.isFinite(entry.fee) && +entry.fee > 0) ? +entry.fee : NaN;
+    const { buyFee: buyFeeRub, sellFee: sellFeeRub } = tradeHistoryRowFeeColumns(entry);
     let finrespCell = "—";
     if (Number.isFinite(entry.finresp)) {
       const cls = entry.finresp >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
@@ -1077,19 +1069,20 @@
     return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${feeBuyCell}</td><td>${feeSellCell}</td><td>${sourceCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
   }
 
-  /** Суммы по закрытиям (продажи с FINRESPΔ) для строки итогов истории. */
+  /** Суммы по закрытиям для строки итогов истории. */
   function computeTradeHistoryCloseTotals(done) {
     let sumFin = 0;
     let sumBuyFee = 0;
     let sumSellFee = 0;
     for (const e of done) {
-      if (e.isBuy) continue;
-      if (!Number.isFinite(e.finresp)) continue;
-      sumFin += e.finresp;
-      sumSellFee += Number.isFinite(e.fee) ? Math.max(0, +e.fee) : 0;
-      for (const m of Array.isArray(e.tradeMatches) ? e.tradeMatches : []) {
-        sumBuyFee += sandboxWeightedBuyFeeForMatch(m);
-      }
+      const role = e.tradeRole;
+      const isClose = role === "close_long" || role === "close_short" || role === "flip";
+      if (!isClose) continue;
+      const finresp = Number.isFinite(e.finresp) ? e.finresp : tradeHistoryFinrespForOrder(e);
+      if (Number.isFinite(finresp)) sumFin += finresp;
+      const fees = tradeHistoryRowFeeColumns(e);
+      if (Number.isFinite(fees.buyFee)) sumBuyFee += fees.buyFee;
+      if (Number.isFinite(fees.sellFee)) sumSellFee += fees.sellFee;
     }
     return { sumFin, sumBuyFee, sumSellFee };
   }
@@ -2701,8 +2694,8 @@
       matchMode: fill.matchMode || sandboxMatchMode(),
       skipNotify: true
     });
-    // Привязать комиссию покупки к открытому leg (для взвешивания при закрытии).
-    if (signedPieces > 0 && fee > 0 && meta?.legIds?.length) {
+    // Привязать комиссию открытия к leg (покупка лонга / продажа шорта).
+    if (fee > 0 && meta?.legIds?.length) {
       const perLegFee = fee / meta.legIds.length;
       for (const legId of meta.legIds) {
         for (const legs of ctx.openLegs?.values() || []) {
@@ -2889,8 +2882,15 @@
       });
       pnlTotal += legPnl;
       remaining -= take;
-      if (take >= leg.pieces) pool.splice(idx, 1);
-      else leg.pieces -= take;
+      if (take >= leg.pieces) {
+        pool.splice(idx, 1);
+      } else {
+        const legPiecesBefore = leg.pieces;
+        leg.pieces -= take;
+        if (Number.isFinite(leg.fee) && leg.fee > 0 && legPiecesBefore > 0) {
+          leg.fee *= leg.pieces / legPiecesBefore;
+        }
+      }
     }
 
     if (!pool.length) sb.openLegs.delete(key);
@@ -2949,41 +2949,72 @@
     return Math.abs(+notional || 0) * (commissionPctValue() / 100);
   }
 
-  /** Исполнение-покупка в ledger, открывшее leg (для взвешивания комиссии). */
+  /** Исполнение, открывшее leg (покупка лонга или продажа шорта). */
   function sandboxOpenFillForLeg(legId) {
     if (legId == null) return null;
     for (const fill of ensureSandboxState().ledger || []) {
-      if (!(fill.openLegIds || []).includes(legId)) continue;
-      if (Math.trunc(+fill.signedPieces || 0) <= 0) continue;
-      return fill;
+      if ((fill.openLegIds || []).includes(legId)) return fill;
     }
     return null;
   }
 
   /**
-   * Доля комиссии покупки на закрытые штуки: fee_покупки × (продано_из_лота / куплено_в_лоте).
-   * Если продали не всё — в FINRESP попадает только пропорциональная часть комиссии покупки.
+   * Доля комиссии открытия leg на закрытые штуки (FIFO/LIFO):
+   * fee_открытия × (закрыто_из_лота / открыто_в_лоте); при полном закрытии лота — вся комиссия.
+   * Лонг: комиссия покупки; шорт: комиссия продажи при открытии.
    */
-  function sandboxWeightedBuyFeeForMatch(match) {
-    const sold = Math.max(0, Math.trunc(+match.pieces || 0));
-    if (!sold) return 0;
+  function sandboxWeightedOpenLegFeeForMatch(match) {
+    const closed = Math.max(0, Math.trunc(+match.pieces || 0));
+    if (!closed) return 0;
     const openPrice = +match.openPrice || 0;
-    // Новый путь: комиссия покупки пришита прямо к leg / match.
     const openFee = +match.openFee;
     const openPieces = Math.max(0, Math.trunc(+match.openPieces || 0));
     if (Number.isFinite(openFee) && openFee > 0 && openPieces > 0) {
-      return openFee * (sold / openPieces);
+      return openFee * (closed / openPieces);
     }
     const openFill = match.legId != null ? sandboxOpenFillForLeg(match.legId) : null;
     if (openFill) {
-      const bought = Math.abs(Math.trunc(+openFill.signedPieces || 0));
-      if (bought > 0) {
-        const openNotional = bought * (+openFill.price || openPrice);
-        const openFee = Number.isFinite(openFill.fee) ? +openFill.fee : sandboxCommissionFee(openNotional);
-        return openFee * (sold / bought);
+      const opened = Math.abs(Math.trunc(+openFill.signedPieces || 0));
+      if (opened > 0) {
+        const px = +openFill.price || openPrice;
+        const fillFee = Number.isFinite(openFill.fee) ? +openFill.fee : sandboxCommissionFee(opened * px);
+        return fillFee * (closed / opened);
       }
     }
-    return sandboxCommissionFee(openPrice * sold);
+    return sandboxCommissionFee(openPrice * closed);
+  }
+
+  /** @deprecated alias */
+  function sandboxWeightedBuyFeeForMatch(match) {
+    return sandboxWeightedOpenLegFeeForMatch(match);
+  }
+
+  /** Колонки комиссий строки журнала: buy / sell с учётом FIFO открытий при закрытии. */
+  function tradeHistoryRowFeeColumns(entry) {
+    const role = entry.tradeRole;
+    const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
+    const closeFee = Number.isFinite(entry.fee) ? Math.max(0, +entry.fee) : 0;
+    const isClose = role === "close_long" || role === "close_short" || role === "flip";
+    const openLegFeeSum = matches.length
+      ? matches.reduce((s, m) => s + sandboxWeightedOpenLegFeeForMatch(m), 0)
+      : 0;
+
+    if (entry.isBuy) {
+      if (isClose && (role === "close_short" || role === "flip")) {
+        return {
+          buyFee: closeFee > 0 ? closeFee : NaN,
+          sellFee: openLegFeeSum > 0 ? openLegFeeSum : NaN
+        };
+      }
+      return { buyFee: closeFee > 0 ? closeFee : NaN, sellFee: NaN };
+    }
+    if (isClose && (role === "close_long" || role === "flip")) {
+      return {
+        buyFee: openLegFeeSum > 0 ? openLegFeeSum : NaN,
+        sellFee: closeFee > 0 ? closeFee : NaN
+      };
+    }
+    return { buyFee: NaN, sellFee: closeFee > 0 ? closeFee : NaN };
   }
 
   /**
@@ -3011,7 +3042,7 @@
         const pricePnl = m.side === "short"
           ? (openPrice - sellPx) * sold
           : (sellPx - openPrice) * sold;
-        net += pricePnl - sandboxWeightedBuyFeeForMatch(m);
+        net += pricePnl - sandboxWeightedOpenLegFeeForMatch(m);
         closedPieces += sold;
       }
     } else if (Number.isFinite(o.tradePnl)) {
