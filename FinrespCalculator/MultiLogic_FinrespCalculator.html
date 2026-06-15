@@ -1102,11 +1102,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-tf"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-copy-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-tf"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-copy-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-tf"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-copy-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1123,7 +1123,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-tf";
+  const CALC_PAGE_VERSION = "2026-06-14-equity-copy-labels";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -5189,6 +5189,34 @@ ${markers}
     return `Справочно: сумма логик по отдельности (${stack}) · без портф. Stopper`;
   }
 
+  /** Строки заголовка на SVG equity (для копирования и отображения). */
+  function finrespChartTitleLines() {
+    const ids = selectedLogicIds();
+    const stack = ids.length ? ids.join(" + ") : "—";
+    const sc = stopperConfig();
+    const stopper = sc.useSl || sc.useTp ? "портф. Stopper" : "без Stopper";
+    return ["FINRESP Σ портфеля", `логики: ${stack} · ${stopper}`];
+  }
+
+  function referenceChartTitleLines(keys) {
+    const stack = keys.length ? keys.join(" + ") : "—";
+    return ["Справочно: сумма логик", `отдельно: ${stack} · без портф. Stopper`];
+  }
+
+  function logicChartTitleLines(key, selected) {
+    const role = selected ? "в стеке FINRESP" : "справочно, не в стеке";
+    return [`${key} · ${logicEquityLabel(key)}`, role];
+  }
+
+  /** Экранирование текста для SVG. */
+  function escSvgText(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   /** Equity портфеля из lastResult — совпадает с FINRESP Σ после «Рассчитать». */
   function finrespEquityRowsForChart(a, b, times) {
     const lr = state.lastResult;
@@ -5523,10 +5551,15 @@ ${rects}
     if (!rows?.length) return "";
     const decor = chartDecor || { vLines: [], modeRegions: [] };
     const w = 820;
-    const h = compact ? 190 : 240;
+    const titleLines = decor.chartTitleLines?.length
+      ? decor.chartTitleLines
+      : (decor.chartTitle ? [decor.chartTitle] : []);
+    const titleRows = titleLines.length;
+    const h = (compact ? 190 : 240) + (titleRows > 1 ? 10 : 0);
     const left = 72;
     const right = 28;
-    const top = 26, bottom = 58;
+    const top = 26 + (titleRows > 1 ? 6 : 0);
+    const bottom = 58;
     const plotW = w - left - right;
     const plotH = h - top - bottom;
     const vals = rows.map((r) => r?.eq).filter((v) => v != null);
@@ -5579,20 +5612,35 @@ ${rects}
     const caption = decor.caption ?? (faded
       ? "Справочный equity (логика не участвует в торговле / сумме)"
       : `Equity по выбранным логикам${configLegend}${modeLegend}`);
-    const finLabelSize = decor.prominentFin ? (compact ? 14 : 16) : (compact ? 12 : 14);
-    return `<svg viewBox="0 0 ${w} ${h}" class="chart-equity-main-svg" role="img" aria-label="${title}">
+    const titleFont = compact ? 12 : 14;
+    const titleColor = faded ? "#6b7280" : "#111827";
+    const titleStartY = 16;
+    const titleSvg = titleLines.map((line, i) =>
+      `<text x="${left + 4}" y="${titleStartY + i * (titleFont + 3)}" font-size="${titleFont}" font-weight="700" fill="${titleColor}" font-family="Consolas,monospace" opacity="${lineOpacity}">${escSvgText(line)}</text>`
+    ).join("");
+    const finLabel = `FINRESP ${fmt(finresp)} ₽`;
+    const finFont = decor.prominentFin ? (compact ? 12 : 14) : (compact ? 11 : 12);
+    const finBadgeY = compact ? 17 : 18;
+    const estW = Math.max(84, finLabel.length * (finFont * 0.58));
+    const boxW = estW + 12;
+    const boxX = Math.max(left + 8, w - 8 - boxW);
+    const finBadgeSvg = `<rect x="${boxX.toFixed(1)}" y="4" width="${boxW.toFixed(1)}" height="${compact ? 18 : 20}" rx="4" fill="#ffffff" stroke="${finColor}" stroke-width="1.1" opacity="0.98"/>
+<text x="${(w - 8).toFixed(1)}" y="${finBadgeY}" text-anchor="end" fill="${finColor}" font-size="${finFont}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">${escSvgText(finLabel)}</text>`;
+    const captionY = titleRows > 1 ? top + 6 : top + 10;
+    return `<svg viewBox="0 0 ${w} ${h}" class="chart-equity-main-svg" role="img" aria-label="${escSvgText(title)}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
 ${gridH}${gridV}${zeroLine}${configLines}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 ${yLabels}${xLabels}
+${titleSvg}
+${finBadgeSvg}
 <text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, ₽</text>
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
 <polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
 ${pointDot}
-<text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${finLabelSize}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
-<text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">${caption}</text>
+<text x="${left + 4}" y="${captionY}" font-size="9" fill="#64748b">${escSvgText(caption)}</text>
 </svg>`;
   }
 
@@ -5722,6 +5770,7 @@ ${pointDot}
       ),
       prominentFin: true,
       strokeW: 2.8,
+      chartTitleLines: finrespChartTitleLines(),
       caption: "Equity портфеля — совпадает с FINRESP Σ в блоке результатов"
     };
     const decorBase = chartDecorFromRows(
@@ -5745,7 +5794,11 @@ ${pointDot}
         const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
         return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет свечей в live-сессии</div></div>`;
       }
-      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected };
+      const decor = {
+        ...chartDecorFromRows(rows, configMarkersForRows(rows)),
+        faded: !selected,
+        chartTitleLines: logicChartTitleLines(key, selected)
+      };
       const fin = rows.at(-1).eq;
       const lineColor = selected ? equityLogicColor(key) : undefined;
       const svg = appendEquityIncrementPanel(
@@ -5786,6 +5839,7 @@ ${finrespSvg}
         ...decorBase,
         dashed: true,
         strokeW: 2.6,
+        chartTitleLines: referenceChartTitleLines(activeKeys),
         caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
       };
       const totalSvg = appendEquityIncrementPanel(
