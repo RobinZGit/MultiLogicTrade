@@ -1407,7 +1407,16 @@
     return !!(options && options.reverse);
   }
 
-  /** Инверсия long/short для исполнения сделок (не для индикаторов на графике). */
+  /** Инверсия только Op (вход): long↔short. Cl и выход — без реверса. */
+  function swapEntryExecHits(sig) {
+    return {
+      ...sig,
+      longOpHit: sig.shortOpHit,
+      shortOpHit: sig.longOpHit
+    };
+  }
+
+  /** @deprecated Используйте swapEntryExecHits — полный swap ломал выход по Cl. */
   function swapLogicExecHits(sig) {
     return {
       ...sig,
@@ -1673,16 +1682,15 @@
         if (pos !== 0) {
           const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
           const sig = logicLineBarSignals(parsed, cache, i, posCtx);
-          const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
-          if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
+          if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
-            markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
-            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
+            markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
+            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
             sell += flatten(price);
-          } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
+          } else if (pos < 0 && (sig.shortClHit || sig.longOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
-            markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
-            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
+            markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
+            markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
             sell += flatten(price);
           }
         }
@@ -1695,7 +1703,7 @@
         entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
           const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null));
-          const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
+          const esig = isReverseEnabled(opts) ? swapEntryExecHits(sig) : sig;
           if (esig.longOpHit === esig.shortOpHit) continue;
           const lot = resolveOpenLot(price, volConfig, opts);
           if (lot <= 0) continue;
@@ -1836,23 +1844,23 @@
 
       const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
       const sig = logicLineBarSignals(parsed, cache, i, posCtx);
-      const esig = isReverseEnabled(opts) ? swapLogicExecHits(sig) : sig;
 
-      if (pos > 0 && (esig.longClHit || esig.shortOpHit)) {
+      if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
         markerMeta.tradeOutLogic = logicId;
-        markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
-        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
+        markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
+        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
         sell += flatten(price);
-      } else if (pos < 0 && (esig.shortClHit || esig.longOpHit)) {
+      } else if (pos < 0 && (sig.shortClHit || sig.longOpHit)) {
         markerMeta.tradeOutLogic = logicId;
-        markerMeta.tradeOutSignal = logicLineExitSignal(pos, esig);
-        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, esig, null);
+        markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
+        markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
         sell += flatten(price);
       }
-      if (pos === 0 && esig.longOpHit !== esig.shortOpHit) {
+      const entrySig = isReverseEnabled(opts) ? swapEntryExecHits(sig) : sig;
+      if (pos === 0 && entrySig.longOpHit !== entrySig.shortOpHit) {
         const lot = resolveOpenLot(price, volConfig, opts);
         if (lot > 0) {
-          pos = esig.longOpHit ? lot : -lot;
+          pos = entrySig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
           cash -= comm;
@@ -1861,8 +1869,8 @@
           if (pos > 0) buy = lot;
           else sell = lot;
           markerMeta.tradeInLogic = logicId;
-          markerMeta.tradeInSignal = esig.longOpHit ? "op_long" : "op_short";
-          markerMeta.tradeInExpr = markerOpExpr(parsed, esig.longOpHit ? "long" : "short");
+          markerMeta.tradeInSignal = entrySig.longOpHit ? "op_long" : "op_short";
+          markerMeta.tradeInExpr = markerOpExpr(parsed, entrySig.longOpHit ? "long" : "short");
           const anchor = captureEntryAnchor(cache, parsed, i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -2348,7 +2356,7 @@
         if (!s || s.type !== "logic_line" || s.disabled) continue;
         const parsed = applySlTpParams({ ...s.parsed }, p);
         let sig = logicLineBarSignals(parsed, cache, b, posCtx);
-        if (reverse) sig = swapLogicExecHits(sig);
+        if (reverse) sig = swapEntryExecHits(sig);
         hits.push({ logicId: s.logicId || "?", ...summarizeLogicBarSignals(sig) });
       }
       const primary = hits.find((h) => h.longOp || h.shortOp || h.longCl || h.shortCl) || hits[0] || null;
@@ -2357,7 +2365,7 @@
     if (spec.type === "logic_line") {
       const parsed = applySlTpParams({ ...spec.parsed }, p);
       let sig = logicLineBarSignals(parsed, cache, b, posCtx);
-      if (reverse) sig = swapLogicExecHits(sig);
+      if (reverse) sig = swapEntryExecHits(sig);
       return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
     }
     if (spec.type === "sma_spread" || spec.type === "sma_corridor") {
@@ -4568,6 +4576,7 @@
     RANDOM_PRICE_SHIFT_MAX,
     smaSeries,
     tradeMarkersFromBar,
+    swapEntryExecHits,
     tradeSignalHint,
     createIndicatorCache,
     collectChartIndicatorsForSpecs

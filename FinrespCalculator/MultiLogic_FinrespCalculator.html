@@ -816,8 +816,10 @@ body.calc-running .help-ftr{opacity:.75;}
 </div></div>
 <div class="calc-field"><label for="stopper-ref">База SL/TP портфеля, ₽</label>
 <input id="stopper-ref" type="number" value="0" min="0" step="1000" title="0 — авто: equity на первой свече окна"></div>
+<div class="calc-field"><label for="vol-maxpos"><span class="at-token-global">@@MaxPos</span> — макс. позиций портфеля</label>
+<input id="vol-maxpos" type="number" value="10" min="1" max="200" step="1" title="Плечо = MaxPos × Volume% / 100. Лимит gross = депозит × MaxPos × Volume%"></div>
 </div>
-<p class="note" style="margin:.45rem 0 0">Общепортфельный Stopper (вкладка «Stopper» робота): equity = сумма по инструментам. При срабатывании — закрытие всех позиций, база обновляется.</p>
+<p class="note" style="margin:.45rem 0 0">Общепортфельный Stopper (вкладка «Stopper» робота): equity = сумма по инструментам. При срабатывании — закрытие всех позиций, база обновляется. <strong>Плечо</strong> = <code>@@MaxPos × Volume% / 100</code> (Volume% — в «Доп. параметрах»).</p>
 <p class="calc-reverse-badge" id="calc-reverse-badge" hidden><span class="at-token-global">@@Reverse</span> включён — покупка ↔ продажа</p>
 <p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@Reverse=выкл @@SL=2 @@TP=10 @@ATR=14</p>
 </div>
@@ -892,12 +894,10 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="vol-value" type="number" value="10" min="0.0001" max="50" step="0.0001"></div>
 <div class="calc-field" id="vol-deposit-wrap"><label for="vol-deposit">Депозит (Prime), ₽</label>
 <input id="vol-deposit" type="number" value="1000000" min="1" step="1000"></div>
-<div class="calc-field"><label for="vol-maxpos">Max positions (all tabs)</label>
-<input id="vol-maxpos" type="number" value="10" min="0" max="200" step="1"></div>
-<div class="calc-field"><label for="commission-pct">Commission, %</label>
+<div class="calc-field"><label for="commission-pct">Commission, %</label></label>
 <input id="commission-pct" type="number" value="0.04" min="0" max="10" step="0.0001" title="% от суммы сделки (оборота): покупка и продажа. 0.04 = 0.04%."></div>
 </div>
-<p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. Лимит позиции: Max positions × лот.</p>
+<p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. <strong>@@MaxPos</strong> — в блоке «Параметры управления» выше.</p>
 <p class="note">Комиссия: <strong>Commission, %</strong> от суммы каждой сделки (|цена × объём|); удерживается при покупке и продаже. FINRESP и % годовых в блоке выше уже <strong>с учётом комиссии</strong>.</p>
 
 <p class="extra-section">Учёт открытых лотов (песочница)</p>
@@ -1096,11 +1096,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-marker-labels-v1"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-reverse-entry-maxpos"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-marker-labels-v1"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-reverse-entry-maxpos"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-marker-labels-v1"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-reverse-entry-maxpos"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1114,7 +1114,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-marker-labels-v1";
+  const CALC_PAGE_VERSION = "2026-06-14-reverse-entry-maxpos";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -4296,7 +4296,7 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   /** Включение/выключение @@Reverse с подтверждением (кнопка и галочка live). */
-  function setReverseInteractive(targetOn, sourceId) {
+  async function setReverseInteractive(targetOn, sourceId) {
     const input = $("param-reverse");
     if (!input) return;
     const on = !!input.checked;
@@ -4305,12 +4305,25 @@ body.calc-running .help-ftr{opacity:.75;}
       syncReverseUi(sourceId);
       return;
     }
-    const msg = want
-      ? "Подтверждаете включение @@Reverse?\n\nИзменится логика входа: вместо покупки будет продажа, вместо продажи — покупка. Сигналы Op/Cl останутся теми же; изменится только исполнение."
-      : "Отключить @@Reverse?\n\nИсполнение вернётся к обычному: сигнал на покупку — покупка, на продажу — продажа.";
+    const liveActive = typeof isLiveTradingSession === "function" && isLiveTradingSession();
+    let msg = want
+      ? "Подтверждаете включение @@Reverse?\n\nИзменится только вход: Op long → short, Op short → long. Выход по Cl и SL/TP — как у открытой позиции (без реверса)."
+      : "Отключить @@Reverse?\n\nВход вернётся к обычному: Op long → long, Op short → short.";
+    if (liveActive) {
+      msg += "\n\nВ live-режиме сначала будут закрыты все открытые позиции по рынку, затем переключится реверс.";
+    }
     if (!window.confirm(msg)) {
       syncReverseUi(sourceId);
       return;
+    }
+    if (liveActive && typeof sellAllMarketLive === "function") {
+      try {
+        await sellAllMarketLive();
+      } catch (err) {
+        noteTechError(`reverse-toggle sell-all: ${err?.message || err}`);
+        syncReverseUi(sourceId);
+        return;
+      }
     }
     input.checked = want;
     renderFromParams();
@@ -4319,7 +4332,7 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Переключатель @@Reverse в блоке параметров. */
   function toggleReverseInteractive() {
     const on = !!$("param-reverse")?.checked;
-    setReverseInteractive(!on, "param-reverse-toggle");
+    void setReverseInteractive(!on, "param-reverse-toggle");
   }
 
   function syncReverseUi(skipSource) {
@@ -4351,7 +4364,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!panel || panel.dataset.reverseBound) return;
     panel.dataset.reverseBound = "1";
     panel.addEventListener("change", () => {
-      setReverseInteractive(panel.checked, "live-reverse-panel");
+      void setReverseInteractive(panel.checked, "live-reverse-panel");
     });
     syncReverseUi();
   }
@@ -4376,12 +4389,15 @@ body.calc-running .help-ftr{opacity:.75;}
     const globalEl = $("calc-at-summary-global");
     const logicEl = $("calc-at-summary");
     const reverse = $("param-reverse")?.checked ? "вкл" : "выкл";
+    const maxPos = $("vol-maxpos")?.value ?? "—";
+    const lev = calcLeverageAmount();
+    const levText = Number.isFinite(lev) && lev > 0 ? fmt(lev, 2) : "—";
     const pSl = $("stopper-sl-mult")?.value ?? "—";
     const pTp = $("stopper-tp-mult")?.value ?? "—";
     const pAtr = $("stopper-atr-len")?.value ?? "—";
     const pRef = $("stopper-ref")?.value ?? "—";
     if (globalEl) {
-      globalEl.textContent = `@@Reverse=${reverse} @@SL=${pSl} @@TP=${pTp} @@ATR=${pAtr} база=${pRef} ₽`;
+      globalEl.textContent = `@@Reverse=${reverse} @@MaxPos=${maxPos} плечо=${levText} @@SL=${pSl} @@TP=${pTp} @@ATR=${pAtr} база=${pRef} ₽`;
     }
     if (!logicEl) return;
     const sl = $("param-sl")?.value ?? "—";
