@@ -554,8 +554,13 @@
       return null;
     }
     if (!isOrderBuy(o)) {
+      if (Number.isFinite(o.finresp)) return o.finresp;
       if (Number.isFinite(o.brokerYield)) return o.brokerYield;
       if (Number.isFinite(o.tradePnl)) return o.tradePnl;
+      const role = o.tradeRole;
+      if (role === "close_long" || role === "close_short" || role === "flip") {
+        return sandboxCloseFinrespNet(o);
+      }
     }
     return null;
   }
@@ -567,6 +572,168 @@
     if (ot.includes("SELL")) return "sell";
     if (ot.includes("BUY")) return "buy";
     return null;
+  }
+
+  /** Комиссия по одной операции T-Bank (поле commission или отдельная OPERATION_TYPE_*_FEE). */
+  function tbankOpCommissionRub(op) {
+    if (!op) return 0;
+    const ot = String(op.operationType || op.type || "").toUpperCase();
+    const isFeeOp = ot.includes("BROKER_FEE") || ot.includes("SERVICE_FEE") || ot.includes("CASH_FEE")
+      || ot.includes("MARGIN_FEE") || ot.includes("SUCCESS_FEE") || ot.includes("ADVICE_FEE")
+      || ot.includes("OTHER_FEE") || ot.includes("OVER_COM");
+    if (isFeeOp) {
+      const pay = moneyValueRub(op.payment);
+      return Number.isFinite(pay) ? Math.abs(pay) : 0;
+    }
+    const fee = moneyValueRub(op.commission);
+    return Number.isFinite(fee) && fee !== 0 ? Math.abs(fee) : 0;
+  }
+
+  /** Сумма комиссий по списку операций (сделки + отдельные fee-операции). */
+  function sumTbankOperationsCommission(operations) {
+    let comm = 0;
+    for (const op of operations || []) comm += tbankOpCommissionRub(op);
+    return comm;
+  }
+
+  /** Снимок открытых позиций на старт торговли — для seed legs в боевом режиме. */
+  function captureRealLegSeedFromPortfolioRows(rows) {
+    if (isLiveSandbox()) return;
+    const seed = (rows || [])
+      .filter((r) => isLiveOpenPositionBalance(r.pieces, r.lot))
+      .map((r) => ({
+        key: sandboxPosKey(r.market || (r.isFuture ? "futures" : "shares"), r.ticker),
+        ticker: r.ticker,
+        sec: r.sec || r.ticker,
+        market: r.market || (r.isFuture ? "futures" : "shares"),
+        instrumentId: r.instrumentId,
+        lot: r.lot,
+        isFuture: !!r.isFuture,
+        side: r.side || "long",
+        pieces: Math.abs(+r.pieces || 0),
+        avgPrice: Number.isFinite(r.avgPrice) ? r.avgPrice : null
+      }));
+    state.live.realLegSeed = seed;
+  }
+
+  /** Seed FIFO/LIFO legs позициями, открытыми до старта live-сессии. */
+  function seedRealBrokerLegCtx(ctx) {
+    const seed = state.live.realLegSeed;
+    if (!Array.isArray(seed) || !seed.length) return;
+    for (const row of seed) {
+      if (!row.pieces || !Number.isFinite(row.avgPrice) || row.avgPrice <= 0) continue;
+      const posMeta = {
+        ticker: row.ticker,
+        sec: row.sec,
+        market: row.market,
+        instrumentId: row.instrumentId,
+        lot: row.lot,
+        isFuture: row.isFuture
+      };
+      pushSandboxLeg(ctx, row.key, row.side, row.pieces, row.avgPrice);
+      rebuildSandboxOpenFromLegs(ctx, row.key, posMeta);
+    }
+  }
+
+  /** Начало периода операций брокера для комиссий и журнала. */
+  function liveBrokerOpsPeriodFrom() {
+    return state.live.tradingStartedAt
+      || state.live.sessionStartedAt
+      || state.live.chartSession?.startedAt
+      || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  }
+
+  /**
+   * Пересчёт FINRESPΔ по журналу брокера: yield брокера при закрытии, иначе FIFO/LIFO как в песочнице.
+   * @param {object[]} enriched — результат enrichBrokerOperationsForHistory
+   */
+  function reconcileRealBrokerTradeFinresp(enriched) {
+    if (isLiveSandbox() || !Array.isArray(enriched) || !enriched.length) return;
+    const sorted = enriched.slice().sort(
+      (a, b) => (Date.parse(a._histDate || a.date || 0) || 0) - (Date.parse(b._histDate || b.date || 0) || 0)
+    );
+    const ctx = createSandboxReplayCtx({ startPortfolio: 0 });
+    seedRealBrokerLegCtx(ctx);
+    const metaByOpId = new Map();
+    const matchMode = sandboxMatchMode();
+
+    for (const op of sorted) {
+      const side = op._histSide || tbankOpTradeSide(op);
+      if (!side) continue;
+      const pieces = Math.abs(Math.trunc(+op.quantity || 0));
+      if (!pieces) continue;
+      const signedPieces = side === "buy" ? pieces : -pieces;
+      const isFuture = String(op.instrumentType || op.instrument_type || "").toLowerCase() === "futures";
+      const market = isFuture ? "futures" : "shares";
+      const ticker = op._histTicker || String(op.ticker || op.figi || "").toUpperCase();
+      const price = Number.isFinite(op._histPrice)
+        ? op._histPrice
+        : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const fee = tbankOpCommissionRub(op);
+      const brokerYield = moneyValueRub(op.yield);
+      const posMeta = {
+        ticker,
+        sec: ticker,
+        market,
+        instrumentId: op.instrumentUid || op.figi,
+        lot: Math.max(1, +op._histLot || 1),
+        isFuture
+      };
+      const meta = applySandboxSignedDelta(ctx, posMeta, signedPieces, price, {
+        matchMode,
+        skipNotify: true,
+        skipClosedJournal: true
+      });
+      let finresp = null;
+      const isClose = meta.role === "close_long" || meta.role === "close_short" || meta.role === "flip";
+      if (isClose) {
+        if (Number.isFinite(brokerYield)) {
+          finresp = brokerYield;
+        } else {
+          finresp = sandboxCloseFinrespNet({
+            tradeRole: meta.role,
+            price,
+            tradeMatches: meta.matches,
+            tradePnl: meta.pnlTotal,
+            fee,
+            notional: pieces * price,
+            signedPieces: -Math.abs(signedPieces)
+          });
+        }
+      }
+      if (op.id != null) {
+        metaByOpId.set(String(op.id), {
+          role: meta.role,
+          matches: meta.matches ? meta.matches.map((m) => ({ ...m })) : [],
+          pnlTotal: meta.pnlTotal,
+          fee,
+          brokerYield: Number.isFinite(brokerYield) ? brokerYield : null,
+          finresp: Number.isFinite(finresp) ? finresp : null
+        });
+      }
+    }
+
+    const hist = ensureLiveTradeHistory();
+    for (const h of hist) {
+      if (h.mode !== "real" || !String(h.id || "").startsWith("real-op-")) continue;
+      const opId = String(h.id).slice("real-op-".length);
+      const m = metaByOpId.get(opId);
+      if (!m) continue;
+      h.tradeRole = m.role;
+      h.tradeMatches = m.matches;
+      h.tradePnl = m.pnlTotal;
+      if (Number.isFinite(m.brokerYield)) h.brokerYield = m.brokerYield;
+      if (Number.isFinite(m.fee)) h.fee = m.fee;
+      h.finresp = m.finresp;
+      if (h.sourceOrder) {
+        h.sourceOrder.tradeRole = m.role;
+        h.sourceOrder.tradeMatches = m.matches;
+        h.sourceOrder.tradePnl = m.pnlTotal;
+        if (Number.isFinite(m.brokerYield)) h.sourceOrder.brokerYield = m.brokerYield;
+        if (Number.isFinite(m.fee)) h.sourceOrder.fee = m.fee;
+      }
+    }
   }
 
   /** Подпрограмма `dedupeOptimisticRealTradeHistory`. */
@@ -656,9 +823,7 @@
   /** Синхронизация UI/state: `syncRealTradeHistoryFromBroker`. */
   async function syncRealTradeHistoryFromBroker() {
     if (isLiveSandbox() || !state.tbank.token || !state.tbank.selectedAccountId) return;
-    const from = state.live.sessionStartedAt
-      || state.live.chartSession?.startedAt
-      || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+    const from = liveBrokerOpsPeriodFrom();
     try {
       const data = await tbankRequest("OperationsService/GetOperations", {
         accountId: state.tbank.selectedAccountId,
@@ -666,8 +831,10 @@
         to: new Date().toISOString(),
         state: "OPERATION_STATE_EXECUTED"
       });
-      state.live.brokerOperations = await enrichBrokerOperationsForHistory(data.operations || []);
-      for (const op of state.live.brokerOperations) upsertTradeHistoryFromTbankOperation(op);
+      const enriched = await enrichBrokerOperationsForHistory(data.operations || []);
+      state.live.brokerOperations = enriched;
+      for (const op of enriched) upsertTradeHistoryFromTbankOperation(op);
+      reconcileRealBrokerTradeFinresp(enriched);
     } catch (err) {
       noteLiveTech("live-broker-ops", err.message, `account=${state.tbank.selectedAccountId || "—"}`);
     }
@@ -3861,28 +4028,26 @@
       state.live.portfolioPositions = filterLiveOpenPositionRows(
         await buildTbankPositionRows(portfolio, positions, { sessionOnly: false })
       );
-      const from = state.live.sessionStartedAt
-        || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      if (!state.live.realLegSeed?.length) {
+        captureRealLegSeedFromPortfolioRows(state.live.portfolioPositions);
+      }
+      const from = liveBrokerOpsPeriodFrom();
       const ops = await tbankRequest("OperationsService/GetOperations", {
         accountId: state.tbank.selectedAccountId,
         from,
         to: new Date().toISOString(),
         state: "OPERATION_STATE_EXECUTED"
       });
-      state.live.brokerOperations = await enrichBrokerOperationsForHistory(ops.operations || []);
-      for (const op of state.live.brokerOperations) upsertTradeHistoryFromTbankOperation(op);
-      let comm = 0;
-      for (const op of ops.operations || []) {
-        const opCur = String(op.currency || op.paymentCurrency || "rub").toLowerCase();
-        if (opCur !== "rub" && opCur !== "rur") continue;
-        const fee = moneyValueRub(op.commission);
-        if (fee) comm += Math.abs(fee);
-      }
-      state.live.commissionPaid = comm;
+      const enriched = await enrichBrokerOperationsForHistory(ops.operations || []);
+      state.live.brokerOperations = enriched;
+      for (const op of enriched) upsertTradeHistoryFromTbankOperation(op);
+      reconcileRealBrokerTradeFinresp(enriched);
+      state.live.commissionPaid = sumTbankOperationsCommission(ops.operations || []);
       await recalcLivePortfolioMtmFromCandles();
       snapshotLiveSessionPortfolioBaseline();
       await refreshLiveOpenPositions();
       renderLiveOrdersPanel();
+      renderLivePortfolioStats();
     } catch (err) {
       noteLiveTech("live-portfolio", err.message, `account=${state.tbank.selectedAccountId || "—"}`);
     }
@@ -4489,6 +4654,7 @@ ${referenceBlock}
     state.live.preCalcSnapshot = null;
     state.live.chartSession = null;
     state.live.sessionStartedAt = null;
+    state.live.realLegSeed = null;
     state.live.modelFinresp = null;
     state.live.modelCommission = null;
     syncLivePeriodControls();
@@ -5493,6 +5659,7 @@ ${referenceBlock}
     }
     state.live.active = true;
     state.live.tradingStartedAt = new Date().toISOString();
+    state.live.realLegSeed = null;
     resetLiveFinrespBaselinesForTrading();
     state.live.lastError = "";
     syncLiveTradingUi();
