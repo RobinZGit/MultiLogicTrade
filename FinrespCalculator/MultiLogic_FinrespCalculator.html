@@ -107,6 +107,8 @@ h2:first-child{margin-top:0;}
 .chart-equity-delta-bar{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin:1rem 0 .35rem;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;background:#f8fafc;}
 .chart-equity-delta-bar label{font-size:.88rem;font-weight:600;color:#374151;}
 .chart-equity-delta-bar select{font-size:.88rem;padding:.25rem .45rem;border-radius:6px;border:1px solid var(--border);}
+.chart-equity-delta-panel{margin:.2rem 0 0;padding:.15rem 0 0;border-top:1px dashed #e5e7eb;}
+.chart-equity-delta-panel .chart-equity-delta-svg{display:block;min-width:720px;max-width:100%;height:auto;}
 .chart-equity-section{margin-top:1.35rem;padding-top:1.1rem;border-top:2px solid var(--accent);}
 .calc-reverse-bracket{font-weight:500;color:#475569;}
 .chart-equity-section-title{margin:0 0 .85rem;font-size:1.05rem;font-weight:700;color:#1e3a5f;}
@@ -1110,11 +1112,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-bootfix"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-bars"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-bootfix"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-bars"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-bootfix"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-bars"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1131,7 +1133,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-bootfix";
+  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-bars";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -5318,17 +5320,16 @@ ${markers}
     return `${dayKey} ${pad2(p.h)}`;
   }
 
-  /** Ступенчатый ряд: приращение equity внутри каждого периода (конец − начало бакета). */
-  function buildEquityIncrementSeries(rows, periodId) {
+  /** Бакеты приращения equity по периодам (абсолютное Δ за каждый период). */
+  function buildEquityIncrementBuckets(rows, periodId) {
     if (!rows?.length) return [];
-    const out = new Array(rows.length).fill(0);
+    const buckets = [];
     let bucketStart = 0;
     let curKey = equityPeriodBucketKey(rows[0]?.time, periodId);
     const flush = (endIdx) => {
       const eqStart = rows[bucketStart]?.eq ?? 0;
       const eqEnd = rows[endIdx]?.eq ?? eqStart;
-      const inc = eqEnd - eqStart;
-      for (let j = bucketStart; j <= endIdx; j++) out[j] = inc;
+      buckets.push({ startIdx: bucketStart, endIdx, value: eqEnd - eqStart });
     };
     for (let i = 1; i < rows.length; i++) {
       const k = equityPeriodBucketKey(rows[i]?.time, periodId);
@@ -5339,24 +5340,66 @@ ${markers}
       }
     }
     flush(rows.length - 1);
-    return out;
+    return buckets;
   }
 
-  /** Полилиния ступенчатого ряда (горизонталь внутри периода, скачок на границе). */
-  function buildStepPolylinePoints(rows, values, x, yFn) {
-    if (!rows.length) return "";
-    const parts = [];
-    for (let i = 0; i < rows.length; i++) {
-      const xi = x(i);
-      const yi = yFn(values[i] ?? 0);
-      if (i === 0) parts.push(`${xi.toFixed(1)},${yi.toFixed(1)}`);
-      else {
-        const yPrev = yFn(values[i - 1] ?? 0);
-        parts.push(`${xi.toFixed(1)},${yPrev.toFixed(1)}`);
-        parts.push(`${xi.toFixed(1)},${yi.toFixed(1)}`);
-      }
-    }
-    return parts.join(" ");
+  /** Низкая полоска баров Δ FINRESP под equity-графиком (шкала от нуля). */
+  function buildEquityIncrementBarSvg(rows, periodId, compact) {
+    const buckets = buildEquityIncrementBuckets(rows, periodId);
+    if (!buckets.length) return "";
+    const w = 820;
+    const h = compact ? 66 : 76;
+    const left = 72;
+    const right = 28;
+    const top = 12;
+    const bottom = 18;
+    const plotW = w - left - right;
+    const plotH = h - top - bottom;
+    const x = (i) => left + i * plotW / Math.max(1, rows.length - 1);
+    const barStep = plotW / Math.max(1, rows.length);
+    let absMax = 0;
+    for (const b of buckets) absMax = Math.max(absMax, Math.abs(b.value));
+    if (absMax < 1) absMax = 1;
+    const pad = absMax * 0.06;
+    const incHi = absMax + pad;
+    const incLo = -(absMax + pad);
+    const yInc = (v) => top + (incHi - v) * plotH / (incHi - incLo);
+    const y0 = yInc(0);
+    const rects = buckets.map((b) => {
+      const v = b.value;
+      const xL = x(b.startIdx);
+      const xR = b.endIdx < rows.length - 1 ? x(b.endIdx + 1) : x(b.endIdx) + barStep * 0.5;
+      const barW = Math.max(1.2, xR - xL - 0.3);
+      const yVal = yInc(v);
+      const yTop = Math.min(y0, yVal);
+      const barH = Math.max(0.8, Math.abs(yVal - y0));
+      const fill = v >= 0 ? "#dcfce7" : "#fff1f2";
+      const stroke = v >= 0 ? "#bbf7d0" : "#ffe4e6";
+      return `<rect x="${xL.toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${fill}" stroke="${stroke}" stroke-width="0.5" rx="0.5"/>`;
+    }).join("");
+    const periodLabel = EQUITY_DELTA_PERIOD_OPTIONS.find((o) => o.id === periodId)?.label || periodId;
+    const zeroLine = `<line x1="${left}" y1="${y0.toFixed(1)}" x2="${w - right}" y2="${y0.toFixed(1)}" stroke="#cbd5e1" stroke-width="1"/>`;
+    const yPosLbl = `<text x="${left - 8}" y="${(yInc(incHi) + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#94a3b8" font-family="Consolas,monospace">${axisPrice(incHi)}</text>`;
+    const yNegLbl = `<text x="${left - 8}" y="${(yInc(incLo) + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#94a3b8" font-family="Consolas,monospace">${axisPrice(incLo)}</text>`;
+    const yZeroLbl = `<text x="${left - 8}" y="${(y0 + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#64748b" font-family="Consolas,monospace">0</text>`;
+    return `<div class="chart-equity-delta-panel" role="img" aria-label="Приращение FINRESP за ${periodLabel}">
+<svg viewBox="0 0 ${w} ${h}" class="chart-equity-delta-svg">
+<rect width="${w}" height="${h}" fill="#fafafa"/>
+${zeroLine}
+<line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#e2e8f0" stroke-width="1"/>
+${yPosLbl}${yNegLbl}${yZeroLbl}
+${rects}
+<text x="${left + 2}" y="${top - 2}" font-size="8" fill="#6b7280">Δ за ${periodLabel}, ₽ · зелёный — рост, розовый — просадка</text>
+</svg>
+</div>`;
+  }
+
+  /** Добавить полоску Δ под SVG equity (только для активных графиков). */
+  function appendEquityIncrementPanel(chartHtml, rows, periodId, showPanel, compact) {
+    if (!chartHtml || !showPanel || !rows?.length) return chartHtml;
+    const panel = buildEquityIncrementBarSvg(rows, periodId, compact !== false);
+    return panel ? chartHtml + panel : chartHtml;
   }
 
   /** Перерисовка equity из кэша (смена периода приращения без пересчёта). */
@@ -5370,13 +5413,10 @@ ${markers}
   function buildEquityChartSvg(rows, finresp, title, compact, strokeColor, chartDecor) {
     if (!rows?.length) return "";
     const decor = chartDecor || { vLines: [], modeRegions: [] };
-    const periodId = decor.incrementPeriod || equityDeltaPeriod();
-    const incSeries = decor.showIncrement === false ? null : buildEquityIncrementSeries(rows, periodId);
-    const hasInc = !!incSeries?.length;
     const w = 820;
     const h = compact ? 190 : 240;
     const left = 72;
-    const right = hasInc ? 58 : 28;
+    const right = 28;
     const top = 26, bottom = 58;
     const plotW = w - left - right;
     const plotH = h - top - bottom;
@@ -5418,32 +5458,6 @@ ${markers}
     const zeroLine = zeroY
       ? `<line x1="${left}" y1="${zeroY}" x2="${w - right}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>`
       : "";
-    let incLine = "";
-    let incYLabels = "";
-    let incAxisLabel = "";
-    let incZeroLine = "";
-    if (hasInc) {
-      let incMin = Math.min(...incSeries, 0);
-      let incMax = Math.max(...incSeries, 0);
-      if (incMin === incMax) {
-        incMin -= 1;
-        incMax += 1;
-      }
-      const incPad = Math.max((incMax - incMin) * 0.12, 1);
-      const incLo = incMin - incPad;
-      const incHi = incMax + incPad;
-      const yInc = (v) => top + (incHi - v) * plotH / (incHi - incLo);
-      const incTicks = niceTicks(incLo, incHi, 4);
-      incYLabels = incTicks.map((v) =>
-        `<text x="${w - right + 10}" y="${(yInc(v) + 3.5).toFixed(1)}" text-anchor="start" font-size="9" fill="#7c3aed" font-family="Consolas,monospace">${axisPrice(v)}</text>`).join("");
-      if (incLo < 0 && incHi > 0) {
-        const iz = yInc(0).toFixed(1);
-        incZeroLine = `<line x1="${left}" y1="${iz}" x2="${w - right}" y2="${iz}" stroke="#c4b5fd" stroke-width="1" stroke-dasharray="3 5" opacity=".85"/>`;
-      }
-      const incOpacity = faded ? 0.5 : 0.92;
-      incLine = `<polyline fill="none" stroke="#7c3aed" stroke-width="${compact ? 1.7 : 2.1}" stroke-linejoin="round" opacity="${incOpacity}" points="${buildStepPolylinePoints(rows, incSeries, x, yInc)}"/>`;
-      incAxisLabel = `<text x="${w - 4}" y="${top - 8}" text-anchor="end" font-size="10" fill="#7c3aed" font-weight="600">Δ, ₽</text>`;
-    }
     const strokeW = decor.strokeW ?? (compact ? 1.8 : 2.2);
     const configLines = buildStopVLines(decor.vLines || [], x, top, h - bottom);
     const modeBands = buildModeRegionBands(rows, decor.modeRegions, x, top, h - bottom);
@@ -5453,25 +5467,20 @@ ${markers}
     const modeLegend = decor.modeRegions?.length
       ? " · зелёная область — песочница · розовая — реальная торговля"
       : "";
-    const periodLabel = EQUITY_DELTA_PERIOD_OPTIONS.find((o) => o.id === periodId)?.label || periodId;
-    const incLegend = hasInc ? ` · ступенька Δ — приращение за ${periodLabel}` : "";
     const caption = decor.caption ?? (faded
       ? "Справочный equity (логика не участвует в торговле / сумме)"
-      : `Equity по выбранным логикам${configLegend}${modeLegend}${incLegend}`);
+      : `Equity по выбранным логикам${configLegend}${modeLegend}`);
     const finLabelSize = decor.prominentFin ? (compact ? 14 : 16) : (compact ? 12 : 14);
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
-${gridH}${gridV}${zeroLine}${incZeroLine}${configLines}
+${gridH}${gridV}${zeroLine}${configLines}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
-${hasInc ? `<line x1="${w - right}" y1="${top}" x2="${w - right}" y2="${h - bottom}" stroke="#c4b5fd" stroke-width="1" opacity=".9"/>` : ""}
-${yLabels}${xLabels}${incYLabels}
+${yLabels}${xLabels}
 <text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, ₽</text>
-${incAxisLabel}
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
 <polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
-${incLine}
 ${pointDot}
 <text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${finLabelSize}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
 <text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">${caption}</text>
@@ -5604,16 +5613,12 @@ ${pointDot}
       ),
       prominentFin: true,
       strokeW: 2.8,
-      incrementPeriod: incPeriod,
       caption: "Equity портфеля — совпадает с FINRESP Σ в блоке результатов"
     };
-    const decorBase = {
-      ...chartDecorFromRows(
-        refRows.length ? refRows : totalRows,
-        configMarkersForRows(totalRows)
-      ),
-      incrementPeriod: incPeriod
-    };
+    const decorBase = chartDecorFromRows(
+      refRows.length ? refRows : totalRows,
+      configMarkersForRows(totalRows)
+    );
 
     const logicBlocks = catalogKeys.map((key) => {
       const selected = selectedSet.has(key);
@@ -5631,10 +5636,13 @@ ${pointDot}
         const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
         return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет свечей в live-сессии</div></div>`;
       }
-      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected, incrementPeriod: incPeriod };
+      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected };
       const fin = rows.at(-1).eq;
       const lineColor = selected ? equityLogicColor(key) : undefined;
-      const svg = buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor);
+      const svg = appendEquityIncrementPanel(
+        buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor),
+        rows, incPeriod, selected, true
+      );
       if (!svg) return "";
       const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
       return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}${svg}</div>`;
@@ -5644,8 +5652,11 @@ ${pointDot}
     if (finrespRows.length) {
       const finrespFin = finrespRows.at(-1).eq;
       const finrespColor = finrespFin < 0 ? "#b91c1c" : "#047857";
-      const finrespSvg = buildEquityChartSvg(
-        finrespRows, finrespFin, "Equity портфеля = FINRESP Σ", false, finrespColor, finrespDecor
+      const finrespSvg = appendEquityIncrementPanel(
+        buildEquityChartSvg(
+          finrespRows, finrespFin, "Equity портфеля = FINRESP Σ", false, finrespColor, finrespDecor
+        ),
+        finrespRows, incPeriod, true, false
       );
       if (finrespSvg) {
         const finrespHint = liveSession
@@ -5666,11 +5677,13 @@ ${finrespSvg}
         ...decorBase,
         dashed: true,
         strokeW: 2.6,
-        incrementPeriod: incPeriod,
         caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
       };
-      const totalSvg = buildEquityChartSvg(
-        totalRows, totalFin, `Equity Σ ${activeKeys.join("+")} (справочно)`, false, "#c2410c", referenceDecor
+      const totalSvg = appendEquityIncrementPanel(
+        buildEquityChartSvg(
+          totalRows, totalFin, `Equity Σ ${activeKeys.join("+")} (справочно)`, false, "#c2410c", referenceDecor
+        ),
+        totalRows, incPeriod, true, false
       );
       if (totalSvg) {
         referenceBlock = `<div class="chart-equity-total chart-equity-total--reference">
