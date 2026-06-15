@@ -1176,7 +1176,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-cm-linreg-regime";
+  const CALC_PAGE_VERSION = "2026-06-15-cm-linreg-op";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -4715,7 +4715,7 @@ body.calc-running .help-ftr{opacity:.75;}
     } else if (/CMA\s*\([^)]*Vol/i.test(line)) {
       text = "CMA(…;P=…;Vol)(Ab|Bl): объём ∝ |Close−CMA|; веса (price/Σprice)^@CmaPow, Σвесов=1.";
     } else if (/Op\s*\(\s*Long\s*\(\s*CMA/i.test(line) || /Op\s*\(\s*Short\s*\(\s*CMA/i.test(line)) {
-      text = "CM (CMA + LinReg): Regime по наклону LinReg; Op long — выше CMA (Ab) и AbUp; Op short — ниже CMA (Bl) и BlLo; Cl — CMA + LinReg против позиции, OnFlip(Close). Нужны индикаторы CMA и LinReg.";
+      text = "CM (CMA + LinReg на Op): long — выше CMA (Ab) и AbUp; short — ниже CMA (Bl) и BlLo; Cl — только CMA + OnFlip(Close). Нужны CMA и LinReg.";
     } else if (/SMA\s*\([^)]*Vol/i.test(line)) {
       text = "SMA(…;Vol)(Ab|Bl): объём сделки ∝ |Close−SMA|; Ab — покупка выше SMA, Bl — ниже. SL/TP — @SL / @TP.";
     } else if (line.trim()) {
