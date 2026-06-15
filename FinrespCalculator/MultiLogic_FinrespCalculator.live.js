@@ -2097,6 +2097,48 @@
   }
 
   let liveChartsRefreshTimer = null;
+  let liveChartsBootstrapPromise = null;
+
+  /** Первичная отрисовка графиков после старта live-сессии (инструменты + equity). */
+  async function bootstrapLiveChartsSession(opts) {
+    if (!isLiveTradingSession()) return false;
+    if (liveChartsBootstrapPromise) return liveChartsBootstrapPromise;
+    liveChartsBootstrapPromise = bootstrapLiveChartsSessionInner(opts).finally(() => {
+      liveChartsBootstrapPromise = null;
+    });
+    return liveChartsBootstrapPromise;
+  }
+
+  async function bootstrapLiveChartsSessionInner(opts) {
+    const ro = opts || {};
+    if (!isLiveTradingSession() || state.live.chartsBootstrapBusy) return false;
+    state.live.chartsBootstrapBusy = true;
+    try {
+      pinLiveSessionEquityWindow();
+      if (!selectedInstruments().length) {
+        refreshLiveChartsUi();
+        return false;
+      }
+      if (state.packs.length && !state.lastResult?.perSec?.length) {
+        const quick = await tryLiveFinrespCalc({ silent: true, ...ro });
+        if (quick?.perSec?.length) {
+          state.lastResult = quick;
+          applyResult(quick, { redrawCharts: true, liveSession: true, silent: true });
+          return true;
+        }
+      }
+      const ok = await refreshLiveCandleStream({ silent: true, redrawCharts: true, ...ro });
+      if (state.lastResult?.perSec?.length) {
+        if (!ok) refreshLiveChartsUi();
+        return true;
+      }
+      refreshLiveChartsUi();
+      return false;
+    } finally {
+      state.live.chartsBootstrapBusy = false;
+    }
+  }
+
   /** Подпрограмма `queueLiveChartsRefresh`. */
   function queueLiveChartsRefresh() {
     if (!isLiveTradingSession()) return;
@@ -3472,7 +3514,7 @@
     }
     saveConfig();
     syncLiveTradingUi();
-    refreshLiveChartsUi();
+    void bootstrapLiveChartsSession({ reason: "sandbox-toggle" });
   }
 
   /** Запись причины, по которой reconcile не запустился или не отправил заявки. */
@@ -4353,10 +4395,13 @@ ${referenceBlock}
   function refreshLiveChartsUi() {
     if (!isLiveTradingSession()) return;
     if (state.lastResult?.perSec?.length) {
-      const { perSec, stopper, a, b } = state.lastResult;
+      const { perSec, stopper } = state.lastResult;
       drawCharts(perSec, stopper, { liveSession: true });
     } else if (state.packs.length) {
       drawLiveChartPlaceholders();
+      if (!state.live.chartsBootstrapBusy && !liveChartsBootstrapPromise) {
+        void bootstrapLiveChartsSession({ via: "refresh-ui" });
+      }
     } else {
       drawLiveChartPlaceholders();
     }
@@ -4398,9 +4443,13 @@ ${referenceBlock}
     $("calc-bysec").textContent = "—";
     const annHint = $("calc-ann-hint");
     if (annHint) annHint.textContent = "Live-сессия: FINRESP и графики с нуля с момента выбора «Реальная торговля».";
+    if (state.lastResult?.perSec?.length) {
+      state.live.preCalcSnapshot = { result: state.lastResult };
+    }
     state.lastResult = null;
     if (isLiveSandbox()) resetSandboxStopperWatch();
     refreshLiveChartsUi();
+    void bootstrapLiveChartsSession({ reason: "session-start" });
     startLiveModePoll();
     return true;
   }
@@ -4408,12 +4457,36 @@ ${referenceBlock}
   /** Подпрограмма `endLiveChartSession`. */
   function endLiveChartSession() {
     stopLiveModePoll();
+    cancelQueuedLiveChartsRefresh();
+    const snapshot = state.live.preCalcSnapshot;
+    state.live.preCalcSnapshot = null;
     state.live.chartSession = null;
     state.live.sessionStartedAt = null;
     syncLivePeriodControls();
+    if (snapshot?.result?.perSec?.length) {
+      applyResult(snapshot.result, { redrawCharts: true, liveSession: false });
+      return;
+    }
+    if (state.packs.length) {
+      void calcResultAsync(null, { silent: true }).then((result) => {
+        if (result?.perSec?.length) {
+          applyResult(result, { redrawCharts: true, liveSession: false });
+          return;
+        }
+        if (!state.lastResult?.perSec?.length) {
+          syncChartBox($("calc-chart"), "");
+          syncChartBox($("calc-chart-equity"), "");
+        }
+      });
+      return;
+    }
     if (!state.lastResult?.perSec?.length) {
       syncChartBox($("calc-chart"), "");
       syncChartBox($("calc-chart-equity"), "");
+    } else {
+      const { perSec, stopper, a, b } = state.lastResult;
+      drawCharts(perSec, stopper, { liveSession: false });
+      drawEquityCharts(a, b, { liveSession: false });
     }
   }
 
@@ -4838,13 +4911,18 @@ ${referenceBlock}
   async function tryLiveFinrespCalc(runOptions) {
     const ro = runOptions || {};
     if (isLiveTradingSession()) {
-      const tailResult = await calcLiveSignalsPerInstrument(ro);
-      noteLiveFinrespDiagnostics(tailResult);
       pinLiveSessionEquityWindow();
-      if (tailResult?.perSec?.length) return tailResult;
+      if (ro.preferTail) {
+        const tailFast = await calcLiveSignalsPerInstrument(ro);
+        noteLiveFinrespDiagnostics(tailFast);
+        if (tailFast?.perSec?.length) return tailFast;
+      }
       let result = await calcResultAsync(null, ro);
       noteLiveFinrespDiagnostics(result);
-      if (result?.perSec?.length) return result;
+      if (result?.perSec?.length) return { ...result, finrespMode: "window" };
+      const tailResult = await calcLiveSignalsPerInstrument(ro);
+      noteLiveFinrespDiagnostics(tailResult);
+      if (tailResult?.perSec?.length) return tailResult;
       return null;
     }
     pinLiveWindowForAllInstruments();
@@ -4997,7 +5075,7 @@ ${referenceBlock}
         ? liveFinrespPartialMessage(result.perSec.length, skipN)
         : "";
       applyResult(state.lastResult, {
-        redrawCharts: !opts.silent && opts.redrawCharts !== false,
+        redrawCharts: opts.redrawCharts !== false,
         liveSession: true,
         silent: !!opts.silent
       });
@@ -5260,6 +5338,7 @@ ${referenceBlock}
     if (state.live.tradingActionBusy) return false;
     const ok = await refreshLiveCandleStream({ silent: true });
     if (!ok) return false;
+    if (state.lastResult?.perSec?.length) refreshLiveChartsUi();
     if (state.live.active && state.lastResult?.perSec?.length) {
       await liveTradingReconcile();
       queueLiveChartsRefresh();
@@ -6035,6 +6114,7 @@ ${referenceBlock}
       sellAllMarketLive,
       liveTradingReconcile,
       refreshLiveCandleStream,
+      bootstrapLiveChartsSession,
       refreshLiveManualLimitPrice,
       refreshLiveChartsUi,
       refreshLiveEquityChartsUi,
