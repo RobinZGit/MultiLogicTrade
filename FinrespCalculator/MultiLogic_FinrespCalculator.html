@@ -1176,9 +1176,16 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-cma-opt-buttons";
+  const CALC_PAGE_VERSION = "2026-06-15-chart-yield";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
-  const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
+  const CALC_PROGRESS = {
+    LOAD_MAX: 33,
+    FINRESP_START: 33,
+    FINRESP_MAX: 66,
+    CHARTS_START: 88,
+    EQUITY_CHARTS_START: 93,
+    RUN_MAX: 99
+  };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
   const $ = (id) => document.getElementById(id);
   const IS_FILE_PROTOCOL = location.protocol === "file:";
@@ -3179,12 +3186,20 @@ body.calc-running .help-ftr{opacity:.75;}
     return Math.round((d / t) * CALC_PROGRESS.LOAD_MAX);
   }
 
-  /** Прогресс построения equity-графиков (88–99%). */
+  /** Прогресс построения mini-графиков по инструментам (88–93%). */
+  function mapInstrumentChartProgressPct(done, total) {
+    const t = Math.max(1, +total || 1);
+    const d = Math.max(0, Math.min(t, +done || 0));
+    const span = CALC_PROGRESS.EQUITY_CHARTS_START - CALC_PROGRESS.CHARTS_START;
+    return CALC_PROGRESS.CHARTS_START + Math.round((d / t) * span);
+  }
+
+  /** Прогресс построения equity-графиков (93–99%). */
   function mapEquityProgressPct(done, total) {
     const t = Math.max(1, +total || 1);
     const d = Math.max(0, Math.min(t, +done || 0));
-    const span = CALC_PROGRESS.RUN_MAX - CALC_PROGRESS.CHARTS_START;
-    return CALC_PROGRESS.CHARTS_START + Math.round((d / t) * span);
+    const span = CALC_PROGRESS.RUN_MAX - CALC_PROGRESS.EQUITY_CHARTS_START;
+    return CALC_PROGRESS.EQUITY_CHARTS_START + Math.round((d / t) * span);
   }
 
   /** Установка значения: `setCalcProgress`. */
@@ -5187,12 +5202,26 @@ body.calc-running .help-ftr{opacity:.75;}
     return null;
   }
 
+  const chartIndicatorCacheByPack = new WeakMap();
+
+  /** Кэш индикаторов по пакету свечей (один раз на инструмент за отрисовку). */
+  function indicatorCacheForPack(pack) {
+    if (!pack?.length || !E.createIndicatorCache) return null;
+    let cache = chartIndicatorCacheByPack.get(pack);
+    if (!cache) {
+      cache = E.createIndicatorCache(pack);
+      chartIndicatorCacheByPack.set(pack, cache);
+    }
+    return cache;
+  }
+
   /** OHLC + индикаторы всех выбранных логик для строк графика. */
   function enrichChartRowsForDisplay(rows, sec) {
     const pack = packForSec(sec);
-    if (!pack?.length || !rows?.length || !E.createIndicatorCache) return rows;
+    if (!pack?.length || !rows?.length) return rows;
+    const cache = indicatorCacheForPack(pack);
+    if (!cache) return rows;
     const timeToIdx = new Map(pack.map((c, i) => [c.time, i]));
-    const cache = E.createIndicatorCache(pack);
     const p = params();
     const indicators = indicatorSelection();
     const specs = selectedLogicIds()
@@ -5223,7 +5252,7 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   /** Диагностика графика по инструменту (raw vs enriched rows). */
-  function analyzeChartInstrument(sec, rawRows) {
+  function analyzeChartInstrument(sec, rawRows, enrichedRows) {
     const rows = rawRows || [];
     let rawTradeIn = 0;
     let rawTradeOut = 0;
@@ -5231,7 +5260,7 @@ body.calc-running .help-ftr{opacity:.75;}
       if (r?.tradeIn) rawTradeIn += 1;
       if (r?.tradeOut) rawTradeOut += 1;
     }
-    const enriched = enrichChartRowsForDisplay(rows, sec);
+    const enriched = enrichedRows ?? enrichChartRowsForDisplay(rows, sec);
     const sum = (typeof MLInstrumentChart !== "undefined" && MLInstrumentChart.summarizeChartRows)
       ? MLInstrumentChart.summarizeChartRows(enriched)
       : { rows: enriched.length, tradeIn: 0, tradeOut: 0, samples: [] };
@@ -6177,7 +6206,9 @@ ${referenceBlock}
   /** Асинхронное построение equity-графиков с прогрессом. */
   async function drawEquityChartsAsync(a, b, drawOpts, onProgress) {
     const data = await calcLogicEquityRunsAsync(a, b, onProgress);
+    await yieldToUi();
     renderEquityChartsFromData(a, b, data, drawOpts);
+    await yieldToUi();
   }
 
   /** Подпрограмма `chartFailuresForDraw`. */
@@ -6232,7 +6263,7 @@ ${referenceBlock}
   }
 
   /** Отрисовка SVG-графиков FINRESP по результату расчёта. */
-  function drawCharts(perSec, stopper, drawOpts) {
+  async function drawCharts(perSec, stopper, drawOpts, onProgress) {
     const liveSession = drawOpts?.liveSession || isLiveTradingSession();
     const failed = chartFailuresForDraw();
     const entries = chartEntriesForDraw(perSec, failed);
@@ -6274,12 +6305,18 @@ ${referenceBlock}
       fmtFinresp: (v) => fmt(v)
     };
 
-    for (const entry of entries) {
+    for (let ei = 0; ei < entries.length; ei++) {
+      const entry = entries[ei];
+      if (onProgress) {
+        const sec = entry.sec || entry.row?.sec || "";
+        onProgress(ei, entries.length, sec);
+      }
       if (entry.kind === "fail") {
         const failEl = document.createElement("div");
         failEl.className = "chart-mini chart-fail";
         failEl.innerHTML = `<p class="chart-sec-title">${entry.sec}</p><p class="chart-fail-msg">${entry.error}</p>`;
         stack.appendChild(failEl);
+        if (onProgress) await yieldToUi();
         continue;
       }
       const p = entry.row;
@@ -6289,11 +6326,12 @@ ${referenceBlock}
         waitEl.className = "chart-mini";
         waitEl.innerHTML = `<p class="chart-sec-title">${p.sec}</p><div class="chart-mini-empty">Ожидание свечей live-сессии…</div>`;
         stack.appendChild(waitEl);
+        if (onProgress) await yieldToUi();
         continue;
       }
       const displayFin = liveSession ? liveDisplayFinresp(p.sec, p.finresp) : p.finresp;
       const chartRows = enrichChartRowsForDisplay(rows.length ? rows : p.rows, p.sec);
-      chartDiags.push(analyzeChartInstrument(p.sec, rows.length ? rows : p.rows));
+      chartDiags.push(analyzeChartInstrument(p.sec, rows.length ? rows : p.rows, chartRows));
       const stopV = chartStopLines(chartRows, portfolioEvents);
       const orderV = liveSession ? orderMarkersForChart(p.sec, chartRows) : [];
       const vLines = [...stopV, ...orderV];
@@ -6305,6 +6343,7 @@ ${referenceBlock}
       if (!chartRows.length) {
         mini.innerHTML = `<p class="chart-sec-title">${p.sec}</p><p class="chart-fail-msg">Нет данных для графика в выбранном окне.</p>`;
         stack.appendChild(mini);
+        if (onProgress) await yieldToUi();
         continue;
       }
 
@@ -6338,6 +6377,7 @@ ${referenceBlock}
         }
         stack.appendChild(mini);
       }
+      if (onProgress) await yieldToUi();
     }
 
     if (stack.childNodes.length) {
@@ -6679,7 +6719,12 @@ ${referenceBlock}
         const { a: ra, b: rb, perSec, stopper } = result;
         setCalcProgress("Графики по инструментам…", CALC_PROGRESS.CHARTS_START);
         await yieldToUi();
-        drawCharts(perSec, stopper, {});
+        await drawCharts(perSec, stopper, {}, (i, n, sec) => {
+          setCalcProgress(
+            `График ${sec} (${i + 1}/${n})`,
+            mapInstrumentChartProgressPct(i + 1, n)
+          );
+        });
         await drawEquityChartsAsync(ra, rb, {}, (i, n, key) => {
           setCalcProgress(
             `Equity по логикам: ${key} (${i + 1}/${n})`,
