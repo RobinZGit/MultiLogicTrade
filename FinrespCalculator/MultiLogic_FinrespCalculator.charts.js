@@ -517,7 +517,7 @@ ${indLines}
 ${candles}
 ${eqLine}
 ${markers}
-<text x="${left + 4}" y="${legendY}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико — масштаб · drag — сдвиг${stopLegend}${modeLegend}${zoomHint}</text>
+<text x="${left + 4}" y="${legendY}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико/pinch — масштаб · drag/свайп — сдвиг · dblclick/2×tap — сброс${stopLegend}${modeLegend}${zoomHint}</text>
 ${finBadgeSvg}
 </svg>`;
   }
@@ -537,6 +537,8 @@ ${finBadgeSvg}
     const minBars = 6;
     let view = { start: 0, end: rows.length - 1 };
     let drag = null;
+    let touch = null;
+    let lastTapAt = 0;
 
     host.innerHTML = "";
     const wrap = document.createElement("div");
@@ -561,7 +563,7 @@ ${finBadgeSvg}
 
     const viewport = document.createElement("div");
     viewport.className = "ml-chart-viewport";
-    viewport.title = "Колёсико — масштаб, перетаскивание — сдвиг по времени";
+    viewport.title = "Колёсико или pinch — масштаб; drag или свайп одним пальцем — сдвиг; двойной клик или двойной tap — сброс";
 
     const legendHost = document.createElement("div");
     legendHost.className = "ml-chart-legend-host";
@@ -578,8 +580,16 @@ ${finBadgeSvg}
 
     if (copyBtn) wireCopyButton(copyBtn, viewport);
 
+    function applyViewRange(ns, ne) {
+      view.start = clamp(ns, 0, rows.length - 1);
+      view.end = clamp(ne, view.start, rows.length - 1);
+      if (view.end - view.start + 1 < minBars) {
+        view.end = Math.min(rows.length - 1, view.start + minBars - 1);
+      }
+      render();
+    }
+
     function panByBars(delta) {
-      const span = view.end - view.start;
       let ns = view.start + delta;
       let ne = view.end + delta;
       if (ns < 0) {
@@ -593,17 +603,11 @@ ${finBadgeSvg}
       ns = clamp(ns, 0, rows.length - 1);
       ne = clamp(ne, ns, rows.length - 1);
       if (ne - ns + 1 < minBars) ne = Math.min(rows.length - 1, ns + minBars - 1);
-      view.start = ns;
-      view.end = ne;
-      render();
+      applyViewRange(ns, ne);
     }
 
-    viewport.addEventListener("wheel", (ev) => {
-      ev.preventDefault();
-      const rect = viewport.getBoundingClientRect();
-      const frac = clamp((ev.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+    function zoomAround(frac, factor) {
       const span = view.end - view.start;
-      const factor = ev.deltaY < 0 ? 0.82 : 1.22;
       let newSpan = Math.round(span * factor);
       newSpan = clamp(newSpan, minBars - 1, rows.length - 1);
       const anchor = view.start + span * frac;
@@ -617,9 +621,26 @@ ${finBadgeSvg}
         ns -= ne - (rows.length - 1);
         ne = rows.length - 1;
       }
-      view.start = clamp(ns, 0, rows.length - 1);
-      view.end = clamp(ne, view.start, rows.length - 1);
-      render();
+      applyViewRange(ns, ne);
+    }
+
+    function touchDistance(t0, t1) {
+      const dx = t0.clientX - t1.clientX;
+      const dy = t0.clientY - t1.clientY;
+      return Math.hypot(dx, dy);
+    }
+
+    function touchMidFrac(touches, rect) {
+      const x = (touches[0].clientX + touches[1].clientX) / 2;
+      return clamp((x - rect.left) / Math.max(rect.width, 1), 0, 1);
+    }
+
+    viewport.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const frac = clamp((ev.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+      const factor = ev.deltaY < 0 ? 0.82 : 1.22;
+      zoomAround(frac, factor);
     }, { passive: false });
 
     viewport.addEventListener("mousedown", (ev) => {
@@ -654,6 +675,89 @@ ${finBadgeSvg}
       render();
     });
 
+    const onTouchStart = (ev) => {
+      if (ev.touches.length === 1) {
+        touch = {
+          mode: "pan",
+          x0: ev.touches[0].clientX,
+          start0: view.start,
+          end0: view.end
+        };
+        drag = null;
+        viewport.classList.add("ml-chart-dragging");
+      } else if (ev.touches.length >= 2) {
+        const rect = viewport.getBoundingClientRect();
+        const span0 = view.end - view.start;
+        touch = {
+          mode: "pinch",
+          dist0: touchDistance(ev.touches[0], ev.touches[1]),
+          midFrac0: touchMidFrac(ev.touches, rect),
+          start0: view.start,
+          span0
+        };
+        drag = null;
+        viewport.classList.add("ml-chart-dragging");
+      }
+      ev.preventDefault();
+    };
+
+    const onTouchMove = (ev) => {
+      if (!touch) return;
+      ev.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      if (touch.mode === "pan" && ev.touches.length === 1) {
+        const span = touch.end0 - touch.start0;
+        const barsPerPx = span / Math.max(rect.width, 1);
+        const delta = Math.round(-(ev.touches[0].clientX - touch.x0) * barsPerPx);
+        view.start = touch.start0 + delta;
+        view.end = touch.end0 + delta;
+        render();
+      } else if (touch.mode === "pinch" && ev.touches.length >= 2) {
+        const dist = touchDistance(ev.touches[0], ev.touches[1]);
+        const ratio = dist / Math.max(touch.dist0, 1);
+        let newSpan = Math.round(touch.span0 / ratio);
+        newSpan = clamp(newSpan, minBars - 1, rows.length - 1);
+        const frac = touchMidFrac(ev.touches, rect);
+        const anchor = touch.start0 + touch.span0 * touch.midFrac0;
+        let ns = Math.round(anchor - newSpan * frac);
+        let ne = ns + newSpan;
+        if (ns < 0) {
+          ne -= ns;
+          ns = 0;
+        }
+        if (ne > rows.length - 1) {
+          ns -= ne - (rows.length - 1);
+          ne = rows.length - 1;
+        }
+        applyViewRange(ns, ne);
+      }
+    };
+
+    const onTouchEnd = (ev) => {
+      if (ev.touches.length === 0) {
+        const now = Date.now();
+        if (touch?.mode === "pan" && ev.changedTouches.length === 1 && now - lastTapAt < 350) {
+          view = { start: 0, end: rows.length - 1 };
+          render();
+        }
+        lastTapAt = now;
+        touch = null;
+        viewport.classList.remove("ml-chart-dragging");
+      } else if (ev.touches.length === 1 && touch?.mode === "pinch") {
+        touch = {
+          mode: "pan",
+          x0: ev.touches[0].clientX,
+          start0: view.start,
+          end0: view.end
+        };
+      }
+    };
+
+    viewport.addEventListener("touchstart", onTouchStart, { passive: false });
+    viewport.addEventListener("touchmove", onTouchMove, { passive: false });
+    viewport.addEventListener("touchend", onTouchEnd, { passive: false });
+    viewport.addEventListener("touchcancel", onTouchEnd, { passive: false });
+
     wrap.appendChild(viewport);
     wrap.appendChild(legendHost);
     host.appendChild(wrap);
@@ -671,6 +775,10 @@ ${finBadgeSvg}
       destroy() {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
+        viewport.removeEventListener("touchstart", onTouchStart);
+        viewport.removeEventListener("touchmove", onTouchMove);
+        viewport.removeEventListener("touchend", onTouchEnd);
+        viewport.removeEventListener("touchcancel", onTouchEnd);
         host.innerHTML = "";
       }
     };

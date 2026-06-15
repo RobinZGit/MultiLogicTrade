@@ -248,10 +248,85 @@ th{background:#f8fafc;width:28%;}
 <p>Чекбоксы SMA, ATR, Stoch, LinReg, Bollinger, VWAP, CCI, MACD, Momentum. Отключённые удаляются из Op/Cl перед расчётом. SL/TP позиции не зависят от этого списка.</p>
 <p><strong>Оптимизировать</strong> (индикаторы) — перебор непустых комбинаций, остаётся набор с лучшим FINRESP.</p>
 
-<h3>9.6. Каталог логик (TBC, UT, UCT, L5, L1…L4, SMA…)</h3>
-<p>Первая — <strong>TBC (test counter-bokovik)</strong>: лонг, Stoch+MACD, контртренд-боковик (ниже SMA на вход). Далее <strong>UT</strong> (Universal Trend), <strong>UCT</strong> (Universal Counter Trend — контртренд с каналом LinReg ±K×ATR, сигналы BlLinK / AbRegK и др.), L5, L1…L4.</p>
-<p>Для UT и UCT ширина канала LinReg задаётся полем <strong>@K</strong> (×ATR), длина — <strong>@LR</strong> (в свечах). На графике канал отображается фиолетовыми линиями, если LinReg включён в «Индикаторы» и используется в выбранной логике.</p>
-<p>Текстовые поля Op/Cl/Regime — как в роботе MultiLogic. <strong>Применить</strong> — подставить <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code>, <code>@Strict</code> из основного блока и пересчитать. Маркер <code>@OBT</code> в строку добавляется <em>вручную</em>.</p>
+<h3>9.6. Каталог логик — все встроенные стратегии по умолчанию</h3>
+<p>В блоке «Логики» (каталог) перечислены готовые строки Op/Cl/Regime — те же, что в роботе MultiLogic. Параметры <code>@SL</code>, <code>@TP</code>, <code>@LR</code>, <code>@K</code>, <code>@Strict</code>, <code>@SmaCorridor</code>, <code>@CmaLen</code>, <code>@CmaPow</code> подставляются из основного блока при «Рассчитать» и «Применить». Маркер <code>@OBT</code> в строку добавляется <em>вручную</em> (фильтр по стакану — только live).</p>
+
+<h4>Общие принципы</h4>
+<ul>
+<li><strong>Regime(LinReg;…)</strong> — режим рынка по наклону линейной регрессии за <code>@LR</code> свечей. <code>Entry=MatchSide</code> — вход только по стороне тренда; <code>Entry=FlatOnly</code> — только в боковике (мертвая зона наклона <code>SlopeDead</code>). <code>OnFlip=Close</code> — при смене режима закрытие по условию Cl с суффиксом <code>OnFlip(Close)</code>.</li>
+<li><strong>Op(…)</strong> — открытие позиции; <strong>Cl(…)</strong> — закрытие. <code>Long</code> / <code>Short</code> — направление.</li>
+<li><strong>Ab</strong> / <strong>Bl</strong> у индикатора — цена <em>выше</em> / <em>ниже</em> линии (close относительно SMA, полосы Bollinger, канала LinReg и т.д.).</li>
+<li><strong>LinReg</strong> — канал: центр регрессии ± <code>Dev</code> (в L1…L5) или ± <code>K×ATR</code> (в UT/UCT). Сигналы <code>AbUp</code>/<code>BlLo</code> — пробой верхней/нижней границы; <code>AbLinK</code>/<code>BlLinK</code> — цена относительно канала K×ATR; <code>AbRegK</code>/<code>BlRegK</code> — с дрейфом якоря <code>Drift=RegDrift</code>.</li>
+<li><strong>SL[@SL]</strong> / <strong>TP[@TP]</strong> — стоп и тейк позиции (доля от цены входа или ×ATR — по значению полей).</li>
+<li><strong>Strict(@Strict)</strong> — строгость совпадения всех условий в скобках (0…1).</li>
+<li>Несколько логик в списке «Логика» — <strong>стек приоритета</strong>: на баре сначала проверяется верхняя, затем следующая; выход и SL/TP — у логики, открывшей позицию. SMA-логики с непрерывным объёмом в стек с L1…L5 не смешиваются — оставьте одну SMA или одну L-логику.</li>
+</ul>
+
+<h4>RND — случайные сделки (тест)</h4>
+<p><strong>Назначение:</strong> контрольный шум — проверка расчёта FINRESP и инфраструктуры без рыночной логики.</p>
+<p><strong>Принцип:</strong> на каждом баре независимо с вероятностью 12% сигнал <code>Rand(P=12%)</code> на long и отдельно на short. Фиксированные <code>SL[1%]</code> и <code>TP[5%]</code>. Regime не используется.</p>
+
+<h4>TBC — test counter-bokovik (лонг)</h4>
+<p><strong>Назначение:</strong> контртрендовый лонг в боковике — покупка на перепроданности у нижней границы диапазона.</p>
+<p><strong>Regime:</strong> LinReg с <code>SlopeDead=0.05%</code>, <code>Entry=FlatOnly</code> — только когда рынок «без тренда».</p>
+<p><strong>Вход long:</strong> close <strong>ниже</strong> SMA(100) <em>и</em> Stoch %K ≤ 10 <em>и</em> MACD линия ниже сигнальной.</p>
+<p><strong>Выход long:</strong> close <strong>выше</strong> SMA(100) <em>и</em> Stoch %K ≥ 90 <em>и</em> MACD выше сигнальной. SL/TP — из @SL/@TP.</p>
+
+<h4>UT — Universal Trend</h4>
+<p><strong>Назначение:</strong> торговля <em>по тренду</em> в обе стороны — long на росте, short на падении, с каналом LinReg ±K×ATR.</p>
+<p><strong>Regime:</strong> LinReg без мёртвой зоны; смена режима может закрывать через <code>OnFlip(Close)</code> на Cl.</p>
+<p><strong>Long:</strong> вход — цена выше SMA(100) и пробой верхней границы канала LinReg(@LR;K=@K) (<code>AbLinK</code>). Выход — цена ниже SMA и регрессионный канал с дрейфом якоря на Open (<code>BlRegK</code>) + OnFlip.</p>
+<p><strong>Short:</strong> зеркально — вход <code>BlLinK</code> под SMA, выход <code>AbRegK</code> над SMA. Ширина канала — поле <strong>@K</strong> (×ATR), длина — <strong>@LR</strong>.</p>
+
+<h4>UCT — Universal Counter Trend</h4>
+<p><strong>Назначение:</strong> контртренд — long от нижней границы канала при общем контексте, short от верхней; те же LinReg K×ATR и RegDrift, но сигналы <em>инвертированы</em> относительно UT.</p>
+<p><strong>Long:</strong> вход под SMA + <code>BlLinK</code>; выход над SMA + <code>AbRegK</code> OnFlip.</p>
+<p><strong>Short:</strong> вход над SMA + <code>AbLinK</code>; выход под SMA + <code>BlRegK</code> OnFlip.</p>
+
+<h4>L5 — LmaxTrend (лонг + short, максимальный набор фильтров)</h4>
+<p><strong>Назначение:</strong> трендовая стратегия с полным стеком индикаторов — для сравнения «тяжёлого» варианта L1/L3.</p>
+<p><strong>Regime:</strong> трендовый (<code>Entry=MatchSide</code>).</p>
+<p><strong>Long:</strong> SMA(100) сверху + LinReg AbUp + Bollinger AbUp + VWAP Ab + ATR «рост волатильности» (GrOk) + Stoch ≥ 80 + CCI ≥ 100 + Momentum &gt; 0 + MACD &gt; сигнальная. Выход — зеркальные «медвежьи» условия (BlLo, Bl по полосам, Stoch ≤ 20, CCI ≤ −100, MOM &lt; 0, MACD &lt; sig) + OnFlip.</p>
+<p><strong>Short:</strong> симметрично для нисходящего тренда (BlLo, нижние полосы, Stoch ≤ 20, CCI ≤ −100 и т.д.).</p>
+
+<h4>L1 — лонг, тренд</h4>
+<p><strong>Regime:</strong> тренд, вход по стороне тренда.</p>
+<p><strong>Вход long:</strong> цена выше SMA(100), LinReg AbUp (±Dev=2), ATR GrOk (рост ≥ 3% за 5 баров), CCI ≥ 100, MACD &gt; сигнальная.</p>
+<p><strong>Выход:</strong> цена ниже SMA, LinReg BlLo, CCI ≤ −100, MACD &lt; сигнальная, OnFlip(Close).</p>
+
+<h4>L2 — лонг, боковик</h4>
+<p><strong>Regime:</strong> боковик (<code>SlopeDead</code>, FlatOnly).</p>
+<p><strong>Вход long:</strong> цена выше SMA, Stoch %K ≤ 10 (откат вверх от перепроданности в диапазоне), ATR GrOk, MACD &gt; sig.</p>
+<p><strong>Выход:</strong> цена ниже SMA, Stoch ≥ 90, MACD &lt; sig, OnFlip.</p>
+
+<h4>L3 — short, тренд</h4>
+<p>Зеркало L1 для short: вход под SMA + LinReg BlLo + ATR + CCI ≤ −100 + MACD &lt; sig; выход над SMA + AbUp + CCI ≥ 100 + MACD &gt; sig, OnFlip.</p>
+
+<h4>L4 — short, боковик</h4>
+<p>Зеркало L2 для short: Regime боковик; вход short при цене ниже SMA и Stoch ≥ 90; выход при цене выше SMA и Stoch ≤ 10, OnFlip.</p>
+
+<h4>sma_below — «Ниже SMA», объём |Close−SMA|</h4>
+<p><strong>Назначение:</strong> эталонная SMA-стратегия без дискретных Op/Cl — <em>непрерывный</em> набор/сброс объёма.</p>
+<p><strong>Принцип:</strong> строка <code>SMA(100;Vol)(Bl)</code> — пока close <strong>ниже</strong> SMA(100), позиция long с объёмом, пропорциональным расстоянию |Close−SMA| (чем дальше ниже — тем больше лот в рамках настроек объёма). Выход при возврате цены к SMA или по SL/TP. Маркеры на графике — при переходе через ноль и по стопам.</p>
+
+<h4>sma_above — «Выше SMA», объём |Close−SMA|</h4>
+<p>То же, но условие <code>(Ab)</code> — удержание long, пока цена <strong>выше</strong> SMA; объём растёт с отдалением вверх от средней.</p>
+
+<h4>sma_corridor_trend — SMA-эталон, тренд, коридор ATR</h4>
+<p><strong>Принцип:</strong> <code>SMA(100;Spread=@SmaCorridor)(Trend)</code> — вокруг SMA строится коридор ±<strong>@SmaCorridor</strong>×ATR. В режиме <strong>Trend</strong> набор объёма при движении <em>по</em> направлению выхода за коридор (импульс в сторону тренда относительно SMA). Непрерывная позиция, SL/TP из полей.</p>
+
+<h4>sma_corridor_anti — SMA-эталон, анти-тренд, коридор ATR</h4>
+<p><code>(Anti)</code> — зеркальная логика: объём на откатах <em>против</em> импульса за границу коридора (контртренд относительно SMA+ATR-полосы).</p>
+
+<h4>CML — CM long (CMA + LinReg на входе)</h4>
+<p><strong>Назначение:</strong> кастомная средняя CMA с показателем степени <code>@CmaPow</code> и длиной <code>@CmaLen</code> — только <strong>лонг</strong>.</p>
+<p><strong>Вход long:</strong> цена выше CMA <em>и</em> LinReg AbUp (пробой верхней границы регрессии, Dev=2). Regime в строке <em>нет</em> — фильтр только по CMA+LinReg на Op.</p>
+<p><strong>Выход:</strong> цена ниже CMA, <code>OnFlip(Close)</code> — закрытие при пересечении CMA вниз.</p>
+
+<h4>CMS — CM short (CMA + LinReg на входе)</h4>
+<p>Зеркало CML для short: вход — цена ниже CMA + LinReg BlLo; выход — цена выше CMA, OnFlip(Close).</p>
+
+<p class="note">Для UT, UCT, L1…L5 канал LinReg на графике — фиолетовые линии, если LinReg включён в «Индикаторы» и входит в выбранную логику. Текстовые поля Op/Cl/Regime в каталоге редактируются как в роботе; <strong>Применить</strong> пересчитывает с подстановкой @-параметров.</p>
 
 <h3>9.7. MOEX — тикеры и префиксы</h3>
 <table>
@@ -281,12 +356,14 @@ th{background:#f8fafc;width:28%;}
 </ul>
 
 <h4>Масштаб и прокрутка</h4>
-<p>График <strong>интерактивный</strong> — удобно смотреть плотные участки (много баров на маленькой ширине):</p>
+<p>График <strong>интерактивный</strong> — на ПК и на планшете (мышь + touch):</p>
 <table>
 <tr><th>Действие</th><th>Эффект</th></tr>
 <tr><td><strong>Колёсико мыши</strong> над графиком</td><td>Масштаб по времени (zoom in/out) вокруг точки под курсором</td></tr>
 <tr><td><strong>Перетаскивание</strong> (зажатая ЛКМ)</td><td>Сдвиг видимого окна влево/вправо по барам</td></tr>
-<tr><td><strong>Двойной клик</strong></td><td>Вернуть отображение всего периода окна</td></tr>
+<tr><td><strong>Свайп одним пальцем</strong> (планшет/сенсор)</td><td>То же, что drag — сдвиг по времени; страница при этом не прокручивается (<code>touch-action: none</code> на области графика)</td></tr>
+<tr><td><strong>Pinch</strong> (два пальца — разведение/сведение)</td><td>Масштаб вокруг середины между пальцами (zoom in при разведении, out при сведении)</td></tr>
+<tr><td><strong>Двойной клик</strong> или <strong>двойной tap</strong></td><td>Вернуть отображение всего периода окна</td></tr>
 </table>
 <p>В подсказке на графике показывается, сколько баров видно из общего числа (если включён zoom).</p>
 
@@ -381,7 +458,7 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p>Содержит: версию страницы (<code>pageVersion</code>), режим кошелька, ТФ, период, выбор инструментов, состояние кэша, live-поля (<code>liveObTrendConfirm</code>, <code>logicUsesObTrend</code>, <code>liveOpenPositionsCount</code>, источник свечей), блок <code>liveApiForbidden</code> (тикер, sec, name, uid — запрещённые для API инструменты), <code>liveReconcile.*</code> (в т.ч. пропуски по <code>@OBT</code>), журнал <code>errors:</code> со строками <code>live-forbidden-instrument:</code>, <code>live-obt-skip</code>, <code>live-orderbook</code> (до 128 строк). Обновляется при старте, расчёте, live-торговле и ошибках T-Bank.</p>
 
-<p class="note">Версия справки: 2026-06-14d (синхронизирована с формой <code>2026-06-14-instrument-eq-line</code>) · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
+<p class="note">Версия справки: 2026-06-15 (touch pan/zoom, подробный каталог логик) · синхронизирована с формой <code>2026-06-15-touch-help</code> · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
 
 <div class="btn-row">
 <a class="calc-btn" href="MultiLogic_FinrespCalculator.html">Вернуться в калькулятор</a>
