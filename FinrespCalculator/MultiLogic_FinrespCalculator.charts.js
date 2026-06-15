@@ -517,9 +517,51 @@ ${indLines}
 ${candles}
 ${eqLine}
 ${markers}
-<text x="${left + 4}" y="${legendY}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · long — зелёный · short — красный · наведение — логика/сигнал · колёсико/pinch — масштаб · drag/свайп — сдвиг · dblclick/2×tap — сброс${stopLegend}${modeLegend}${zoomHint}</text>
+<text x="${left + 4}" y="${legendY}" font-size="9" fill="#64748b">△↓ вход · ▲ выход · −/+ масштаб · ←/→ сдвиг · колёсико/pinch · drag/свайп · dblclick/2×tap — сброс${stopLegend}${modeLegend}${zoomHint}</text>
 ${finBadgeSvg}
 </svg>`;
+  }
+
+  /** Кнопки −/+ (масштаб) и ←/→ (сдвиг) для планшета. */
+  function buildChartNavToolbar() {
+    const nav = document.createElement("div");
+    nav.className = "ml-chart-nav";
+    const groups = [
+      {
+        label: "Масштаб",
+        buttons: [
+          { act: "zoom-out", label: "−", title: "Сжать — меньше баров на экране" },
+          { act: "zoom-in", label: "+", title: "Растянуть — больше деталей по времени" }
+        ]
+      },
+      {
+        label: "Сдвиг",
+        buttons: [
+          { act: "pan-left", label: "←", title: "Влево — раньше по времени" },
+          { act: "pan-right", label: "→", title: "Вправо — позже по времени" }
+        ]
+      }
+    ];
+    for (const g of groups) {
+      const grp = document.createElement("div");
+      grp.className = "ml-chart-nav-group";
+      const lbl = document.createElement("span");
+      lbl.className = "ml-chart-nav-label";
+      lbl.textContent = g.label;
+      grp.appendChild(lbl);
+      for (const b of g.buttons) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ml-chart-nav-btn";
+        btn.dataset.chartAct = b.act;
+        btn.textContent = b.label;
+        btn.title = b.title;
+        btn.setAttribute("aria-label", b.title);
+        grp.appendChild(btn);
+      }
+      nav.appendChild(grp);
+    }
+    return nav;
   }
 
   /**
@@ -558,10 +600,16 @@ ${finBadgeSvg}
       copyBtn.className = "ml-chart-copy-btn";
       copyBtn.textContent = "Копировать график";
       copyBtn.title = "Скопировать видимый график в буфер обмена (PNG)";
+      const actions = document.createElement("div");
+      actions.className = "chart-mini-header-actions";
+      actions.appendChild(buildChartNavToolbar());
+      actions.appendChild(copyBtn);
       header.appendChild(titleEl);
-      header.appendChild(copyBtn);
+      header.appendChild(actions);
       wrap.appendChild(header);
     }
+
+    const chartNav = wrap.querySelector(".ml-chart-nav");
 
     const viewport = document.createElement("div");
     viewport.className = "ml-chart-viewport";
@@ -699,6 +747,36 @@ ${finBadgeSvg}
       applyViewRange(ns, ne);
     }
 
+    function panStepBars() {
+      const span = view.end - view.start;
+      return Math.max(1, Math.round(span * 0.12));
+    }
+
+    if (chartNav) {
+      chartNav.addEventListener("click", (ev) => {
+        const btn = ev.target.closest("[data-chart-act]");
+        if (!btn) return;
+        ev.preventDefault();
+        const step = panStepBars();
+        switch (btn.dataset.chartAct) {
+          case "zoom-in":
+            zoomAround(0.5, 0.82);
+            break;
+          case "zoom-out":
+            zoomAround(0.5, 1.22);
+            break;
+          case "pan-left":
+            panByBars(-step);
+            break;
+          case "pan-right":
+            panByBars(step);
+            break;
+          default:
+            break;
+        }
+      });
+    }
+
     viewport.addEventListener("wheel", (ev) => {
       ev.preventDefault();
       const rect = viewport.getBoundingClientRect();
@@ -821,6 +899,18 @@ ${finBadgeSvg}
         render();
       },
       panByBars,
+      zoomIn() {
+        zoomAround(0.5, 0.82);
+      },
+      zoomOut() {
+        zoomAround(0.5, 1.22);
+      },
+      panLeft() {
+        panByBars(-panStepBars());
+      },
+      panRight() {
+        panByBars(panStepBars());
+      },
       copyToClipboard() {
         return copyChartToClipboard(viewport);
       },
