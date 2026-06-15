@@ -895,11 +895,15 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any" title="Ширина коридора в ATR вокруг SMA, не в свечах">
 </div>
 <div class="calc-field"><label for="param-cma-len"><span class="at-token">@CmaLen</span> — CMA, свечей</label>
+<div class="calc-field-opt-row">
 <input id="param-cma-len" type="number" value="100" min="2" max="500" step="1" title="Длина окна кастомной SMA (CMA)">
-</div>
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-cma-len" data-opt="cma-len">⚡</button>
+</div></div>
 <div class="calc-field"><label for="param-cma-pow"><span class="at-token">@CmaPow</span> — CMA, степень</label>
+<div class="calc-field-opt-row">
 <input id="param-cma-pow" type="number" value="1" min="0" max="10" step="0.1" title="Степень норм. цены n=price/Σprice: вес n^P, Σвесов=1 (0 = SMA)">
-</div>
+<button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-cma-pow" data-opt="cma-pow">⚡</button>
+</div></div>
 <div class="calc-field"><label for="param-lr"><span class="at-token">@LR</span> — LinReg, свечей</label>
 <div class="calc-field-opt-row">
 <input id="param-lr" type="number" value="20" min="2" max="500" step="1" title="Длина линейной регрессии в барах (свечах), не в ATR">
@@ -1172,7 +1176,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-cm-op-cl-logic";
+  const CALC_PAGE_VERSION = "2026-06-15-cma-opt-buttons";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1831,6 +1835,8 @@ body.calc-running .help-ftr{opacity:.75;}
     { kind: "sl", btnId: "opt-sl", inputId: "param-sl", label: "@SL", position: true },
     { kind: "tp", btnId: "opt-tp", inputId: "param-tp", label: "@TP", position: true },
     { kind: "atr-sl", btnId: "opt-atr-sl", inputId: "param-atr-sl", label: "ATR SL/TP", integer: true, position: true },
+    { kind: "cma-len", btnId: "opt-cma-len", inputId: "param-cma-len", label: "@CmaLen", integer: true, position: true },
+    { kind: "cma-pow", btnId: "opt-cma-pow", inputId: "param-cma-pow", label: "@CmaPow", position: true },
     { kind: "lr", btnId: "opt-lr", inputId: "param-lr", label: "@LR", integer: true, position: true },
     { kind: "lin-k", btnId: "opt-lin-k", inputId: "param-lin-k", label: "@K", position: true },
     { kind: "strict", btnId: "opt-strict", inputId: "param-strict", label: "@Strict", integer: true, position: true },
@@ -3587,6 +3593,10 @@ body.calc-running .help-ftr{opacity:.75;}
         return { params: { ...p, TP: Math.max(0, cv) }, stopper: sc };
       case "atr-sl":
         return { params: { ...p, slTpAtrLen: Math.max(2, Math.round(cv)) }, stopper: sc };
+      case "cma-len":
+        return { params: { ...p, CmaLen: Math.max(2, Math.round(cv)) }, stopper: sc };
+      case "cma-pow":
+        return { params: { ...p, CmaPow: Math.max(0, cv) }, stopper: sc };
       case "lr":
         return { params: { ...p, LR: Math.max(2, Math.round(cv)) }, stopper: sc };
       case "lin-k":
