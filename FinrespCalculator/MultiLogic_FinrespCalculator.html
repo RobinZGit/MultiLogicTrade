@@ -1179,11 +1179,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-equity-avg-price"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-avg-price-selected"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-equity-avg-price"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-avg-price-selected"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-equity-avg-price"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-avg-price-selected"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1200,7 +1200,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-equity-avg-price";
+  const CALC_PAGE_VERSION = "2026-06-15-avg-price-selected";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -6074,6 +6074,13 @@ ${pointDot}
 </svg>`;
   }
 
+  /** Пакеты свечей только по инструментам, выбранным в «Акции (фьючерсы)». */
+  function packsForSelectedInstruments() {
+    const instruments = selectedInstruments();
+    if (!instruments.length || !state.packs?.length) return [];
+    return orderPacksForInstruments(instruments, packsByInstrumentKey(state.packs));
+  }
+
   /** Close на свече с точным временем (пакеты синхронизированы по time). */
   function closeAtPackTime(pack, timeStr) {
     if (!pack?.length || !timeStr) return null;
@@ -6086,11 +6093,14 @@ ${pointDot}
     return null;
   }
 
-  /** Средняя цена close выбранных инструментов по каждой свече окна ползунков. */
+  /** Средняя цена close выбранных в списке инструментов по каждой свече окна ползунков. */
   function buildAvgClosePriceRows(a, b) {
-    const packs = state.packs || [];
+    const packs = packsForSelectedInstruments();
     if (!packs.length || a == null || b == null) return [];
-    const ref = refPack();
+    const ref = packs.reduce(
+      (best, p) => ((p?.length || 0) > (best?.length || 0) ? p : best),
+      packs[0]
+    );
     if (!ref.length) return [];
     const rows = [];
     const end = Math.min(b, ref.length - 1);
@@ -6117,12 +6127,12 @@ ${pointDot}
     const rows = ctx.avgPriceRows || [];
     if (!rows.length) return "";
     const last = rows.at(-1).eq;
-    const nInst = state.packs?.length || 0;
+    const nInst = packsForSelectedInstruments().length;
     const decor = {
       priceChart: true,
       strokeW: 2.5,
-      chartTitleLines: [`Средняя цена close · ${nInst} инстр.`],
-      caption: "На каждой свече: Σ close выбранных инструментов / N (простое среднее)"
+      chartTitleLines: [`Средняя цена close · ${nInst} выбр.`],
+      caption: "Σ close выбранных в списке бумаг / N (простое среднее)"
     };
     const svg = buildEquityChartSvg(
       rows, last, "Средняя цена выбранных инструментов", false, "#0d9488", decor
@@ -6133,7 +6143,7 @@ ${pointDot}
       : "";
     return `<div class="chart-equity-avg-price" data-equity-copy-block>
 ${equityChartCopyHeaderHtml(`<p class="chart-sec-title">Средневзвешенная цена рынка (close)</p>`)}
-<p class="chart-equity-avg-price-hint">Как двигался рынок по выбранным бумагам: среднее арифметическое цен закрытия.${instNote}</p>
+<p class="chart-equity-avg-price-hint">По бумагам из списка «Акции (фьючерсы)» выше: 1, 2 или все выбранные — среднее арифметическое close на свече.${instNote}</p>
 ${svg}
 </div>`;
   }
