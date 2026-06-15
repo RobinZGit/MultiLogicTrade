@@ -699,6 +699,16 @@
         skipNotify: true,
         skipClosedJournal: true
       });
+      // Привязать комиссию покупки к leg (чтобы потом взвесить при закрытии).
+      if (signedPieces > 0 && fee > 0 && meta?.legIds?.length) {
+        const perLegFee = fee / meta.legIds.length;
+        for (const legId of meta.legIds) {
+          for (const legs of ctx.openLegs?.values() || []) {
+            const leg = legs.find((l) => l.legId === legId);
+            if (leg) leg.fee = (leg.fee || 0) + perLegFee;
+          }
+        }
+      }
       let finresp = null;
       const isClose = meta.role === "close_long" || meta.role === "close_short" || meta.role === "flip";
       if (isClose) {
@@ -1039,17 +1049,59 @@
     const modeLabel = entry.fake
       ? '<span class="trade-mode-fake">фейк</span>'
       : '<span class="trade-mode-real">реал</span>';
+    const buyFeeRub = (() => {
+      if (entry.isBuy) return Number.isFinite(entry.fee) ? +entry.fee : NaN;
+      const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
+      if (!matches.length) return NaN;
+      let sum = 0;
+      for (const m of matches) sum += sandboxWeightedBuyFeeForMatch(m);
+      return Number.isFinite(sum) && sum > 0 ? sum : NaN;
+    })();
+    const sellFeeRub = (!entry.isBuy && Number.isFinite(entry.fee) && +entry.fee > 0) ? +entry.fee : NaN;
     let finrespCell = "—";
     if (Number.isFinite(entry.finresp)) {
       const cls = entry.finresp >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
       finrespCell = `<span class="${cls}">${entry.finresp >= 0 ? "+" : ""}${fmt(entry.finresp, 2)} ₽</span>`;
     }
+    const feeBuyCell = Number.isFinite(buyFeeRub)
+      ? `<span style="color:#b45309;font-weight:700">−${fmt(buyFeeRub, 2)} ₽</span>`
+      : "—";
+    const feeSellCell = Number.isFinite(sellFeeRub)
+      ? `<span style="color:#b91c1c;font-weight:700">−${fmt(sellFeeRub, 2)} ₽</span>`
+      : "—";
     const rowCls = entry.fake ? "trade-row-fake" : "trade-row-real";
     const activeCls = entry.active ? " trade-row-active" : "";
     const sourceLabel = entry.tradeSourceLabel || "—";
     const sourceTitle = sourceLabel.replace(/"/g, "&quot;");
     const sourceCell = `<td class="trade-source-cell" title="${sourceTitle}">${sourceLabel}</td>`;
-    return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${sourceCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
+    return `<tr class="${rowCls}${activeCls}"><td>${star}</td><td>${entry.ticker}</td><td class="${dirCls}">${entry.isBuy ? "покупка" : "продажа"}</td><td>${otype}${priceHint}${sumHint}</td><td>${lotsReq}/${lotsExec}</td><td>${entry.status}${entry.active ? " · активна" : ""}</td><td>${finrespCell}</td><td>${feeBuyCell}</td><td>${feeSellCell}</td><td>${sourceCell}</td><td>${modeLabel}</td><td>${when}</td></tr>`;
+  }
+
+  /** Суммы по закрытиям (продажи с FINRESPΔ) для строки итогов истории. */
+  function computeTradeHistoryCloseTotals(done) {
+    let sumFin = 0;
+    let sumBuyFee = 0;
+    let sumSellFee = 0;
+    for (const e of done) {
+      if (e.isBuy) continue;
+      if (!Number.isFinite(e.finresp)) continue;
+      sumFin += e.finresp;
+      sumSellFee += Number.isFinite(e.fee) ? Math.max(0, +e.fee) : 0;
+      for (const m of Array.isArray(e.tradeMatches) ? e.tradeMatches : []) {
+        sumBuyFee += sandboxWeightedBuyFeeForMatch(m);
+      }
+    }
+    return { sumFin, sumBuyFee, sumSellFee };
+  }
+
+  /** Закреплённый футер итогов — вне прокрутки таблицы. */
+  function renderTradeHistoryTotalsFooter(totals) {
+    const sumFin = totals?.sumFin ?? 0;
+    const sumBuyFee = totals?.sumBuyFee ?? 0;
+    const sumSellFee = totals?.sumSellFee ?? 0;
+    const finCls = sumFin > 0 ? "trade-finresp-pos" : sumFin < 0 ? "trade-finresp-neg" : "";
+    const finStr = `${sumFin >= 0 ? "+" : ""}${fmt(sumFin, 2)} ₽`;
+    return `<div class="live-trade-history-totals" role="status" aria-label="Итоги закрытий"><span class="live-trade-history-totals-label">Итоги (закрытия):</span> <span class="live-trade-history-totals-fin ${finCls}">FINRESPΔ ${finStr}</span> <span class="live-trade-history-totals-sep">·</span> <span class="live-trade-history-totals-buy">buy-комиссия −${fmt(sumBuyFee, 2)} ₽</span> <span class="live-trade-history-totals-sep">·</span> <span class="live-trade-history-totals-sell">sell-комиссия −${fmt(sumSellFee, 2)} ₽</span></div>`;
   }
 
   /** Отрисовка элемента live-панели: `renderLiveOrdersPanel`. */
@@ -1072,21 +1124,24 @@
         ? `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — P/L закрытия с комиссией (фейк) · Источник — робот / ручная / закрытие.`
         : `Сделок в журнале: ${hist.length} (фейк ${nFake}, реал ${nReal}${nAct ? `, активных заявок ${nAct}` : ""}). ★ покупка · ☆ продажа · FINRESPΔ — yield брокера на продаже · Источник — логика робота или ручная заявка.`;
     }
-    if (!hist.length) {
-      el.innerHTML = isLiveSandbox()
-        ? '<p class="live-trading-orders-empty">Сделок пока нет. Робот и ручные заявки попадут сюда после исполнения.</p>'
-        : '<p class="live-trading-orders-empty">Сделок пока нет. После «Начать торговлю» здесь — заявки и исполнения.</p>';
-      return;
-    }
     const active = hist.filter((h) => h.active);
     const done = hist.filter((h) => !h.active);
+    const totalsFooter = renderTradeHistoryTotalsFooter(computeTradeHistoryCloseTotals(done));
+    if (!hist.length) {
+      const emptyMsg = isLiveSandbox()
+        ? "Сделок пока нет. Робот и ручные заявки попадут сюда после исполнения."
+        : "Сделок пока нет. После «Начать торговлю» здесь — заявки и исполнения.";
+      el.innerHTML = `<div class="live-trading-orders-scroll"><p class="live-trading-orders-empty">${emptyMsg}</p></div>${totalsFooter}`;
+      return;
+    }
     const activeBlock = active.length
-      ? `<tr class="live-trade-history-subhead"><td colspan="10">Текущие заявки (не исполнены полностью)</td></tr>${active.map(renderTradeHistoryRow).join("")}`
+      ? `<tr class="live-trade-history-subhead"><td colspan="12">Текущие заявки (не исполнены полностью)</td></tr>${active.map(renderTradeHistoryRow).join("")}`
       : "";
     const doneBlock = done.length
-      ? `${active.length ? '<tr class="live-trade-history-subhead"><td colspan="10">Исполненные и завершённые</td></tr>' : ""}${done.map(renderTradeHistoryRow).join("")}`
+      ? `${active.length ? '<tr class="live-trade-history-subhead"><td colspan="12">Исполненные и завершённые</td></tr>' : ""}${done.map(renderTradeHistoryRow).join("")}`
       : "";
-    el.innerHTML = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Источник</th><th>Режим</th><th>Время</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
+    const tableHtml = `<table><thead><tr><th></th><th>Тикер</th><th>Сторона</th><th>Тип / сумма</th><th>Лоты</th><th>Статус</th><th>FINRESPΔ</th><th>Комиссия buy</th><th>Комиссия sell</th><th>Источник</th><th>Режим</th><th>Время</th></tr></thead><tbody>${activeBlock}${doneBlock}</tbody></table>`;
+    el.innerHTML = `<div class="live-trading-orders-scroll">${tableHtml}</div>${totalsFooter}`;
   }
 
   /** Live-торговля: `liveOrderCancellable`. */
@@ -2642,10 +2697,21 @@
       lot: fill.lot,
       isFuture: fill.isFuture
     };
-    return applySandboxSignedDelta(ctx, posMeta, signedPieces, price, {
+    const meta = applySandboxSignedDelta(ctx, posMeta, signedPieces, price, {
       matchMode: fill.matchMode || sandboxMatchMode(),
       skipNotify: true
     });
+    // Привязать комиссию покупки к открытому leg (для взвешивания при закрытии).
+    if (signedPieces > 0 && fee > 0 && meta?.legIds?.length) {
+      const perLegFee = fee / meta.legIds.length;
+      for (const legId of meta.legIds) {
+        for (const legs of ctx.openLegs?.values() || []) {
+          const leg = legs.find((l) => l.legId === legId);
+          if (leg) leg.fee = (leg.fee || 0) + perLegFee;
+        }
+      }
+    }
+    return meta;
   }
 
   /** Подпрограмма `appendSandboxFill`. */
@@ -2805,6 +2871,7 @@
       const leg = pool[idx];
       if (leg.side !== closeSide) break;
       const take = Math.min(remaining, leg.pieces);
+      const openPieces = leg.pieces;
       const legPnl = closeSide === "short"
         ? (leg.price - closePrice) * take
         : (closePrice - leg.price) * take;
@@ -2813,6 +2880,8 @@
         side: leg.side,
         pieces: take,
         openPrice: leg.price,
+        openPieces,
+        openFee: Number.isFinite(leg.fee) ? leg.fee : null,
         closePrice,
         pnl: legPnl,
         openedAt: leg.openedAt,
@@ -2899,6 +2968,12 @@
     const sold = Math.max(0, Math.trunc(+match.pieces || 0));
     if (!sold) return 0;
     const openPrice = +match.openPrice || 0;
+    // Новый путь: комиссия покупки пришита прямо к leg / match.
+    const openFee = +match.openFee;
+    const openPieces = Math.max(0, Math.trunc(+match.openPieces || 0));
+    if (Number.isFinite(openFee) && openFee > 0 && openPieces > 0) {
+      return openFee * (sold / openPieces);
+    }
     const openFill = match.legId != null ? sandboxOpenFillForLeg(match.legId) : null;
     if (openFill) {
       const bought = Math.abs(Math.trunc(+openFill.signedPieces || 0));

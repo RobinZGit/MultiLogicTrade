@@ -338,7 +338,13 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-trading-panel--sandbox .live-trading-orders-wrap{border-top-color:#bbf7d0;}
 .live-trading-panel--sandbox .live-trading-orders th,.live-trading-panel--sandbox .live-trading-orders td{border-bottom-color:#bbf7d0;}
 .live-trading-panel--sandbox .live-trading-orders th{color:#166534;}
-.live-trade-history-panel .live-trading-orders{max-height:20rem;}
+.live-trade-history-panel .live-trading-orders{display:flex;flex-direction:column;max-height:20rem;overflow:hidden;}
+.live-trade-history-panel .live-trading-orders-scroll{flex:1 1 auto;min-height:0;overflow:auto;}
+.live-trade-history-totals{flex:0 0 auto;border-top:2px solid #fcd34d;background:#fffbeb;padding:.45rem .5rem;font-size:.78rem;font-weight:700;color:#7c2d12;line-height:1.35;}
+.live-trade-history-totals-buy{color:#b45309;}
+.live-trade-history-totals-sell{color:#b91c1c;}
+.live-trade-history-totals-sep{color:#a8a29e;font-weight:500;}
+.live-trading-panel--sandbox .live-trade-history-totals{border-top-color:#86efac;background:#f0fdf4;color:#14532d;}
 .live-trade-history-panel tr.trade-row-fake{background:#ecfdf5;}
 .live-trade-history-panel tr.trade-row-real{background:#fdf2f8;}
 .live-trade-history-panel tr.trade-row-active{font-weight:600;}
@@ -1128,11 +1134,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-live-trade-finresp-fix"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-trade-history-totals-sticky"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-live-trade-finresp-fix"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-trade-history-totals-sticky"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-live-trade-finresp-fix"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-trade-history-totals-sticky"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1149,7 +1155,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-live-trade-finresp-fix";
+  const CALC_PAGE_VERSION = "2026-06-15-trade-history-totals-sticky";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
