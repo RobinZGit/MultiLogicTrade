@@ -129,14 +129,18 @@
     const pv = state.live.portfolioValue;
     const comm = state.live.commissionPaid;
     const fin = liveFinResultRub();
+    const modelFin = state.live.modelFinresp;
     if (Number.isFinite(cash) && Number.isFinite(mtm) && Number.isFinite(pv)) {
       const commTxt = Number.isFinite(comm) && comm > 0 ? ` · комиссии: −${fmt(comm, 2)} ₽` : "";
-      const finTxt = Number.isFinite(fin)
-        ? ` · фин. результат: ${fmtSignedRub(fin, 2)} ₽ (портфель − старт сессии)`
+      const modelTxt = Number.isFinite(modelFin)
+        ? ` · FINRESP Σ (модель): ${fmtSignedRub(modelFin, 2)} ₽ = блок расчёта`
+        : "";
+      const portTxt = Number.isFinite(fin)
+        ? ` · портфель Δ: ${fmtSignedRub(fin, 2)} ₽`
         : "";
       el.textContent =
         `Портфель = деньги + позиции: ${fmt(cash, 2)} + ${fmt(mtm, 2)} = ${fmt(pv, 2)} ₽`
-        + ` · «Деньги, свободно» — не в бумагах (старт − комиссии ± сделки)${commTxt}${finTxt}`;
+        + ` · «Деньги, свободно» — не в бумагах (старт − комиссии ± сделки)${commTxt}${modelTxt}${portTxt}`;
       return;
     }
     if (isLiveSandbox()) {
@@ -208,13 +212,23 @@
     const el = $("live-finresult-value");
     if (!el) return;
     if (stat) stat.hidden = !isLiveMode();
-    const v = liveFinResultRub();
+    const v = isLiveTradingSession() && Number.isFinite(state.live.modelFinresp)
+      ? state.live.modelFinresp
+      : NaN;
     el.textContent = Number.isFinite(v) ? `${fmtSignedRub(v, 2)} ₽` : "—";
     const neg = Number.isFinite(v) && v < 0;
     const pos = Number.isFinite(v) && v > 0;
     el.classList.toggle("live-fin-negative", neg);
     el.classList.toggle("live-fin-positive", pos);
     el.style.color = neg ? "#b91c1c" : (pos ? "#047857" : "");
+  }
+
+  /** Сброс baseline FINRESP при старте торговли (отсчёт с «Начать торговлю»). */
+  function resetLiveFinrespBaselinesForTrading() {
+    const cs = state.live.chartSession;
+    if (!cs) return;
+    cs.finrespBaseline = null;
+    cs.commissionBaseline = null;
   }
 
   /** Уведомления отключены (UI колокольчиков удалён). */
@@ -4443,6 +4457,8 @@ ${referenceBlock}
       modeRegions: [{ startTime: startedAt, endTime: null, mode }]
     };
     snapshotLiveSessionPortfolioBaseline();
+    state.live.modelFinresp = 0;
+    state.live.modelCommission = 0;
     $("calc-finresp").textContent = `${fmt(0)} ₽`;
     $("calc-finresp").style.color = "#047857";
     setCommissionMetric("calc-commission", 0);
@@ -4461,6 +4477,7 @@ ${referenceBlock}
     if (isLiveSandbox()) resetSandboxStopperWatch();
     refreshLiveChartsUi();
     void bootstrapLiveChartsSession({ reason: "session-start" });
+    renderLiveFinResultStat();
     startLiveModePoll();
     return true;
   }
@@ -4473,6 +4490,8 @@ ${referenceBlock}
     state.live.preCalcSnapshot = null;
     state.live.chartSession = null;
     state.live.sessionStartedAt = null;
+    state.live.modelFinresp = null;
+    state.live.modelCommission = null;
     syncLivePeriodControls();
     if (snapshot?.result?.perSec?.length) {
       applyResult(snapshot.result, { redrawCharts: true, liveSession: false });
@@ -5475,6 +5494,7 @@ ${referenceBlock}
     }
     state.live.active = true;
     state.live.tradingStartedAt = new Date().toISOString();
+    resetLiveFinrespBaselinesForTrading();
     state.live.lastError = "";
     syncLiveTradingUi();
     if (!state.live.pollTimer) startLiveModePoll();

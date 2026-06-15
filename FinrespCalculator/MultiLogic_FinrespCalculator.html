@@ -705,8 +705,8 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="live-trading-stat live-trading-stat-free-cash" id="live-free-cash-stat" title="RUB на счёте, не вложенные в бумаги: старт − комиссии − покупки + выручка от продаж">
 <b id="live-free-cash-label">Деньги, свободно (₽)</b><span id="live-free-cash-value">—</span></div>
 <div class="live-trading-stat live-trading-stat-commission"><b id="live-commission-label">Комиссии уплачено (реально), ₽</b><span id="live-commission-paid">—</span></div>
-<div class="live-trading-stat live-trading-stat-finresult" id="live-finresult-stat" title="Текущий портфель минус старт сессии (как если продать всё по текущим ценам, с учётом комиссий и закрытых сделок)">
-<b id="live-finresult-label">Фин. результат (₽)</b><span id="live-finresult-value">—</span></div>
+<div class="live-trading-stat live-trading-stat-finresult" id="live-finresult-stat" title="FINRESP Σ по модели сигналов — то же значение, что в блоке результатов расчёта ниже (не дельта портфеля T-Bank)">
+<b id="live-finresult-label">FINRESP Σ (модель), ₽</b><span id="live-finresult-value">—</span></div>
 <p class="live-trading-stats-hint" id="live-trading-stats-hint">Портфель = деньги (свободные RUB) + стоимость открытых позиций по текущим ценам.</p>
 </div>
 <details class="live-manual-order" id="live-manual-order-panel">
@@ -1128,11 +1128,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-logic-picker"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-live-finresp-metrics"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-logic-picker"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-live-finresp-metrics"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-logic-picker"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-live-finresp-metrics"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1149,7 +1149,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-logic-picker";
+  const CALC_PAGE_VERSION = "2026-06-15-live-finresp-metrics";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1743,6 +1743,8 @@ body.calc-running .help-ftr{opacity:.75;}
       lastReconcile: null,
       apiForbiddenInstruments: [],
       portfolioValue: null,
+      modelFinresp: null,
+      modelCommission: null,
       realPortfolioValue: null,
       freeCashRub: null,
       positionsMtmRub: null,
@@ -2331,13 +2333,33 @@ body.calc-running .help-ftr{opacity:.75;}
   }
 
   /** Подпрограмма `annualPeriodDays`. */
-  function annualPeriodDays(windowStart, windowEnd) {
+  function annualPeriodDays(windowStart, windowEnd, opts) {
+    const live = opts?.liveSession || (typeof isLiveTradingSession === "function" && isLiveTradingSession());
+    if (live) {
+      const cal = calendarDaysBetweenTimes(windowStart, windowEnd);
+      if (cal != null) return cal;
+      const d0 = parseMoexTime(windowStart);
+      const d1 = parseMoexTime(windowEnd);
+      if (d0 && d1 && d1 >= d0) {
+        return Math.max((d1 - d0) / 86400000, 1 / 1440);
+      }
+      return null;
+    }
     return robotOperatingDays() ?? calendarDaysBetweenTimes(windowStart, windowEnd);
+  }
+
+  /** Начало периода FINRESP / % годовых в live (сессия или старт торговли). */
+  function liveFinrespPeriodStart() {
+    if (typeof isLiveTradingSession !== "function" || !isLiveTradingSession()) return null;
+    if (state.live.active && state.live.tradingStartedAt) {
+      return formatMoexBarTime(state.live.tradingStartedAt) || liveSessionStartTime();
+    }
+    return liveSessionStartTime();
   }
 
   /** Подпрограмма `annualSimplePct`. */
   function annualSimplePct(finresp, deposit, days) {
-    if (!deposit || deposit <= 0 || !days || days < 1) return null;
+    if (!deposit || deposit <= 0 || !days || days <= 0) return null;
     const profitFraction = finresp / deposit;
     const elapsedYears = days / 365;
     return (profitFraction / elapsedYears) * 100;
@@ -2345,7 +2367,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Подпрограмма `annualCompoundPct`. */
   function annualCompoundPct(finresp, deposit, days) {
-    if (!deposit || deposit <= 0 || !days || days < 1) return null;
+    if (!deposit || deposit <= 0 || !days || days <= 0) return null;
     const ratio = 1 + finresp / deposit;
     if (ratio <= 0) return null;
     const elapsedYears = days / 365;
@@ -6321,17 +6343,25 @@ ${referenceBlock}
     $("calc-cash").textContent = `${fmt(agg.cash)} ₽`;
     $("calc-bysec").textContent = formatBySec(agg.bySec) || "—";
     const c0 = liveSession
-      ? (formatMoexBarTime(liveSessionStartTime()) || refPack()[a]?.time || "—")
+      ? (liveFinrespPeriodStart() || refPack()[a]?.time || "—")
       : (refPack()[a]?.time || "—");
     const c1 = refPack()[b]?.time || "—";
     const deposit = volConfig().deposit;
-    const days = annualPeriodDays(c0, c1);
+    const days = annualPeriodDays(c0, c1, { liveSession });
     setAnnMetric("calc-ann-simple", annualSimplePct(agg.finresp, deposit, days));
     setAnnMetric("calc-ann-compound", annualCompoundPct(agg.finresp, deposit, days));
     const annHint = $("calc-ann-hint");
     if (annHint) {
       if (liveSession) {
-        annHint.textContent = `Live-сессия · ${isLiveSandbox() ? "песочница (фейк)" : "реальная торговля"} · FINRESP и equity с нуля.`;
+        const mode = isLiveSandbox() ? "песочница (фейк)" : "реальная торговля";
+        const scope = state.live.active ? "с начала торговли" : "с начала live-сессии";
+        const periodPct = deposit > 0 && Number.isFinite(agg.finresp) ? (agg.finresp / deposit) * 100 : null;
+        const daysLabel = days == null
+          ? "—"
+          : (days < 1 ? `${Math.max(1, Math.round(days * 24 * 60))} мин` : `${Math.round(days * 10) / 10} календ. дн.`);
+        annHint.textContent = `Live · ${mode} · FINRESP и % годовых ${scope} (${c0} — ${c1}, ${daysLabel})`
+          + (Number.isFinite(periodPct) ? ` · доходность за период: ${fmtPct(periodPct)}` : "")
+          + " · совпадает с FINRESP Σ в блоке «Реальная торговля».";
       } else if (days && deposit > 0) {
         const periodPct = (agg.finresp / deposit) * 100;
         const windowDays = calendarDaysBetweenTimes(c0, c1);
@@ -6370,6 +6400,11 @@ ${referenceBlock}
     }
     $("calc-status").textContent = status;
     updateTechInfo("result-applied");
+    if (liveSession) {
+      state.live.modelFinresp = agg.finresp;
+      state.live.modelCommission = agg.commission || 0;
+      if (typeof renderLiveFinResultStat === "function") renderLiveFinResultStat();
+    }
     if (!opts.optimTrial && !liveSession) {
       const pack = refPack();
       recordEquityConfigMarker(pack[a]?.time);
