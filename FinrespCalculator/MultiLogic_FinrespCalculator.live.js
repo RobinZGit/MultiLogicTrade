@@ -894,7 +894,9 @@
       fake,
       mode: fake ? "sandbox" : "real",
       tradeRole: o.tradeRole || null,
+      tradeMatches: Array.isArray(o.tradeMatches) ? o.tradeMatches.map((m) => ({ ...m })) : null,
       tradePnl: o.tradePnl,
+      signedPieces: o.signedPieces,
       brokerYield: o.brokerYield,
       brokerOp: !!o.brokerOp,
       tradeSource: o.tradeSource || null,
@@ -926,12 +928,22 @@
         else if (!entry.isBuy && Number.isFinite(prev.brokerYield)) merged.finresp = prev.brokerYield;
       }
       if (!entry.tradeRole && prev.tradeRole) merged.tradeRole = prev.tradeRole;
-      if ((!entry.tradeMatches || !entry.tradeMatches.length) && prev.tradeMatches?.length) {
+      if (Array.isArray(entry.tradeMatches) && entry.tradeMatches.length) {
+        merged.tradeMatches = entry.tradeMatches.map((m) => ({ ...m }));
+      } else if ((!merged.tradeMatches || !merged.tradeMatches.length) && prev.tradeMatches?.length) {
         merged.tradeMatches = prev.tradeMatches;
       }
       if (!Number.isFinite(entry.tradePnl) && Number.isFinite(prev.tradePnl)) merged.tradePnl = prev.tradePnl;
+      if (merged.fake || merged.mode === "sandbox") {
+        const fin = tradeHistoryFinrespForOrder(merged);
+        if (Number.isFinite(fin)) merged.finresp = fin;
+      }
       hist[idx] = merged;
     } else {
+      if (entry.fake || entry.mode === "sandbox") {
+        const fin = tradeHistoryFinrespForOrder(entry);
+        if (Number.isFinite(fin)) entry.finresp = fin;
+      }
       hist.unshift(entry);
     }
     if (hist.length > 500) hist.length = 500;
@@ -1023,7 +1035,9 @@
   /** Синхронизация UI/state: `syncTradeHistoryFromSources`. */
   function syncTradeHistoryFromSources() {
     if (isLiveSandbox()) {
-      for (const fill of ensureSandboxState().ledger || []) upsertTradeHistoryFromSandboxFill(fill);
+      const sb = ensureSandboxState();
+      rebuildSandboxFromLedger(sb);
+      for (const fill of sb.ledger || []) upsertTradeHistoryFromSandboxFill(fill);
       return;
     }
     const brokerOps = state.live.brokerOperations || [];
@@ -1050,10 +1064,11 @@
       ? '<span class="trade-mode-fake">фейк</span>'
       : '<span class="trade-mode-real">реал</span>';
     const { buyFee: buyFeeRub, sellFee: sellFeeRub } = tradeHistoryRowFeeColumns(entry);
+    const finrespVal = Number.isFinite(entry.finresp) ? entry.finresp : tradeHistoryFinrespForOrder(entry);
     let finrespCell = "—";
-    if (Number.isFinite(entry.finresp)) {
-      const cls = entry.finresp >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
-      finrespCell = `<span class="${cls}">${entry.finresp >= 0 ? "+" : ""}${fmt(entry.finresp, 2)} ₽</span>`;
+    if (Number.isFinite(finrespVal)) {
+      const cls = finrespVal >= 0 ? "trade-finresp-pos" : "trade-finresp-neg";
+      finrespCell = `<span class="${cls}">${finrespVal >= 0 ? "+" : ""}${fmt(finrespVal, 2)} ₽</span>`;
     }
     const feeBuyCell = Number.isFinite(buyFeeRub)
       ? `<span style="color:#b45309;font-weight:700">−${fmt(buyFeeRub, 2)} ₽</span>`
@@ -1075,8 +1090,8 @@
     let sumBuyFee = 0;
     let sumSellFee = 0;
     for (const e of done) {
-      const role = e.tradeRole;
-      const isClose = role === "close_long" || role === "close_short" || role === "flip";
+      const closeKind = tradeHistoryCloseKind(e);
+      const isClose = closeKind === "close_long" || closeKind === "close_short" || closeKind === "flip";
       if (!isClose) continue;
       const finresp = Number.isFinite(e.finresp) ? e.finresp : tradeHistoryFinrespForOrder(e);
       if (Number.isFinite(finresp)) sumFin += finresp;
@@ -2989,29 +3004,41 @@
     return sandboxWeightedOpenLegFeeForMatch(match);
   }
 
+  /** Роль закрытия по FIFO-матчам (лонг/шорт/flip). */
+  function tradeHistoryCloseKind(entry) {
+    const role = entry.tradeRole;
+    if (role === "close_long" || role === "close_short" || role === "flip") return role;
+    const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
+    if (!matches.length) return null;
+    const openSide = matches[0]?.side;
+    if (openSide === "long" && !entry.isBuy) return "close_long";
+    if (openSide === "short" && entry.isBuy) return "close_short";
+    return null;
+  }
+
   /** Колонки комиссий строки журнала: buy / sell с учётом FIFO открытий при закрытии. */
   function tradeHistoryRowFeeColumns(entry) {
-    const role = entry.tradeRole;
+    const closeKind = tradeHistoryCloseKind(entry);
     const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
     const closeFee = Number.isFinite(entry.fee) ? Math.max(0, +entry.fee) : 0;
-    const isClose = role === "close_long" || role === "close_short" || role === "flip";
     const openLegFeeSum = matches.length
       ? matches.reduce((s, m) => s + sandboxWeightedOpenLegFeeForMatch(m), 0)
       : 0;
+    const isClose = closeKind === "close_long" || closeKind === "close_short" || closeKind === "flip";
 
     if (entry.isBuy) {
-      if (isClose && (role === "close_short" || role === "flip")) {
+      if (isClose && (closeKind === "close_short" || closeKind === "flip")) {
         return {
-          buyFee: closeFee > 0 ? closeFee : NaN,
-          sellFee: openLegFeeSum > 0 ? openLegFeeSum : NaN
+          buyFee: closeFee,
+          sellFee: openLegFeeSum
         };
       }
       return { buyFee: closeFee > 0 ? closeFee : NaN, sellFee: NaN };
     }
-    if (isClose && (role === "close_long" || role === "flip")) {
+    if (isClose && (closeKind === "close_long" || closeKind === "flip")) {
       return {
-        buyFee: openLegFeeSum > 0 ? openLegFeeSum : NaN,
-        sellFee: closeFee > 0 ? closeFee : NaN
+        buyFee: openLegFeeSum,
+        sellFee: closeFee
       };
     }
     return { buyFee: NaN, sellFee: closeFee > 0 ? closeFee : NaN };
