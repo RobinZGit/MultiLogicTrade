@@ -1110,11 +1110,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-labels"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-bootfix"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-labels"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-bootfix"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-labels"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-bootfix"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1128,7 +1128,10 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-labels";
+  window.__mlFinresp = window.__mlFinresp || {};
+  window.__mlFinresp.bootPhase = "started";
+  window.__mlFinresp.lastBootError = null;
+  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-bootfix";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1546,7 +1549,11 @@ body.calc-running .help-ftr{opacity:.75;}
   updateTechInfo("boot");
 
   window.addEventListener("error", (ev) => {
-    noteTechError(`window.error: ${ev.message || ev.type} @ ${ev.filename || "?"}:${ev.lineno || "?"}`);
+    const msg = `window.error: ${ev.message || ev.type} @ ${ev.filename || "?"}:${ev.lineno || "?"}`;
+    if (window.__mlFinresp?.bootPhase === "started") {
+      window.__mlFinresp.lastBootError = `${ev.message || ev.type} @ ${ev.filename || "?"}:${ev.lineno || "?"}`;
+    }
+    noteTechError(msg);
   });
   window.addEventListener("unhandledrejection", (ev) => {
     const msg = ev.reason?.message || String(ev.reason ?? "rejection");
@@ -1631,6 +1638,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     window.__mlSyncAccountMode = () => bootstrapLiveTradingPanelVisibility();
     window.__mlFinrespVersion = `${CALC_PAGE_VERSION} (no-engine)`;
+    window.__mlFinresp.bootPhase = "partial";
     bootstrapLiveTradingPanelVisibility();
     bindCoreCollapsibleToggles();
     updateTechInfo("init-fail-no-engine");
@@ -1645,6 +1653,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     window.__mlSyncAccountMode = () => bootstrapLiveTradingPanelVisibility();
     window.__mlFinrespVersion = `${CALC_PAGE_VERSION} (no-live)`;
+    window.__mlFinresp.bootPhase = "partial";
     bootstrapLiveTradingPanelVisibility();
     bindCoreCollapsibleToggles();
     updateTechInfo("init-fail-no-live");
@@ -1953,12 +1962,12 @@ body.calc-running .help-ftr{opacity:.75;}
       hiddenLogicKeys: (state.hiddenLogicKeys || []).slice(),
       logicCatalogVersion: 4,
       logicLabels: { ...state.logicLabels },
-      randomPriceShift: !!$("random-price-shift")?.checked
-    },
-    charts: {
-      equityDeltaPeriod: equityDeltaPeriod()
-    }
-  };
+      randomPriceShift: !!$("random-price-shift")?.checked,
+      charts: {
+        equityDeltaPeriod: equityDeltaPeriod()
+      }
+    };
+  }
 
   /** Сохранение: `saveConfig`. */
   function saveConfig() {
@@ -6643,31 +6652,49 @@ ${referenceBlock}
     }
     bootstrapLiveTradingPanelVisibility();
     updateTechInfo("init-fail");
+    window.__mlFinresp.bootPhase = "partial";
   }
   window.__mlSyncAccountMode = () => syncAccountModeUi();
   window.__mlOnAccountModeUserChange = handleAccountModeUserChange;
   window.__mlFinrespVersion = CALC_PAGE_VERSION;
+  window.__mlFinresp.bootPhase = "ok";
   bootstrapLiveTradingPanelVisibility();
 })();
 </script>
 <script id="ml-finresp-fallback">
 (function () {
-  if (window.__mlFinrespVersion) return;
+  var boot = window.__mlFinresp || {};
+  if (boot.bootPhase === "ok" || window.__mlFinrespVersion) return;
   var t = document.getElementById("tech-info-text");
-  if (t && (/загрузка/i.test(t.textContent) || /ожидание MultiLogic_FinrespCalculator/i.test(t.textContent))) {
-    t.textContent = [
-      "ОШИБКА: основной скрипт калькулятора не выполнился.",
-      "protocol=" + location.protocol,
-      "engineFailed=" + !!(window.__mlFinresp && window.__mlFinresp.engineFailed),
-      "",
-      "Проверьте:",
-      "1) MultiLogic_FinrespCalculator.engine.js, charts.js и live.js рядом с HTML",
-      "2) Ctrl+F5 (жёсткое обновление)",
-      "3) F12 → Console — красные ошибки",
-      "4) serve-calculator.ps1 → http://127.0.0.1:8765/…"
-    ].join("\n");
+  if (!t) return;
+  if (!(/загрузка/i.test(t.textContent) || /ожидание MultiLogic_FinrespCalculator/i.test(t.textContent) || /preboot ok/i.test(t.textContent))) {
+    return;
   }
-  var p = window.__mlFinresp && window.__mlFinresp.preboot;
+  var lines = [
+    "ОШИБКА: основной скрипт калькулятора не выполнился.",
+    "protocol=" + location.protocol,
+    "bootPhase=" + (boot.bootPhase || "—"),
+    "engineFailed=" + !!boot.engineFailed,
+    "chartsFailed=" + !!boot.chartsFailed,
+    "liveFailed=" + !!boot.liveFailed
+  ];
+  if (boot.lastBootError) lines.push("lastBootError=" + boot.lastBootError);
+  lines.push(
+    "",
+    "Частая причина: синтаксическая ошибка во встроенном <script> HTML (ломает весь калькулятор).",
+    "npm test в репозитории ловит это до публикации.",
+    "",
+    "Проверьте:",
+    "1) MultiLogic_FinrespCalculator.engine.js, charts.js и live.js рядом с HTML",
+    "2) Ctrl+Shift+R (жёсткое обновление)",
+    "3) F12 → Console — красная строка с номером строки",
+    "4) serve-calculator.ps1 → http://127.0.0.1:8765/MultiLogic_FinrespCalculator.html"
+  );
+  if (location.protocol === "file:") {
+    lines.push("", "file://: для MOEX и стабильной загрузки модулей лучше http://127.0.0.1:8765/…");
+  }
+  t.textContent = lines.join("\n");
+  var p = boot.preboot;
   if (p) p.syncLivePanelFromMode();
 })();
 </script>
