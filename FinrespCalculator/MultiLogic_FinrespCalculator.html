@@ -1176,7 +1176,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-chart-yield";
+  const CALC_PAGE_VERSION = "2026-06-15-equity-yield";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -3194,12 +3194,22 @@ body.calc-running .help-ftr{opacity:.75;}
     return CALC_PROGRESS.CHARTS_START + Math.round((d / t) * span);
   }
 
-  /** Прогресс построения equity-графиков (93–99%). */
-  function mapEquityProgressPct(done, total) {
+  /** Прогресс equity: расчёт (65%) и отрисовка (35%) в диапазоне 93–99%. */
+  function mapEquityPhaseProgressPct(phase, done, total) {
     const t = Math.max(1, +total || 1);
     const d = Math.max(0, Math.min(t, +done || 0));
     const span = CALC_PROGRESS.RUN_MAX - CALC_PROGRESS.EQUITY_CHARTS_START;
-    return CALC_PROGRESS.EQUITY_CHARTS_START + Math.round((d / t) * span);
+    const calcSpan = Math.round(span * 0.65);
+    const renderSpan = span - calcSpan;
+    const base = CALC_PROGRESS.EQUITY_CHARTS_START;
+    if (phase === "render") {
+      return base + calcSpan + Math.round((d / t) * renderSpan);
+    }
+    return base + Math.round((d / t) * calcSpan);
+  }
+
+  function mapEquityProgressPct(done, total) {
+    return mapEquityPhaseProgressPct("calc", done, total);
   }
 
   /** Установка значения: `setCalcProgress`. */
@@ -5988,6 +5998,7 @@ ${pointDot}
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
       if (onProgress) onProgress(i, keys.length, key);
+      await yieldToUi();
       const spec = E.resolveLogicSpec(key, state.customLines, p, indicators);
       const { perSec } = E.runMulti(state.packs, spec, a, b, p, vol, EQUITY_STOPPER_OFF, finrespRunOptions());
       const rows = E.buildPortfolioEquityRows(perSec, times);
@@ -6016,43 +6027,37 @@ ${pointDot}
     return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
   }
 
-  /** Отрисовка equity-графиков по готовым рядам. */
-  function renderEquityChartsFromData(a, b, data, drawOpts) {
+  /** Контекст отрисовки equity или признак раннего выхода. */
+  function prepareEquityChartCtx(a, b, data, drawOpts) {
     const opts = drawOpts || {};
     const liveSession = opts.liveSession || isLiveTradingSession();
     const box = $("calc-chart-equity");
-    if (!box) return;
+    if (!box) return { ok: false };
     if (liveSession && !state.packs.length) {
-      state.lastEquityChartCtx = null;
-      drawLiveEquityPlaceholders();
-      return;
+      return { ok: false, livePlaceholder: true };
     }
     if (!state.packs.length) {
-      state.lastEquityChartCtx = null;
-      syncChartBox(box, "");
-      return;
+      return { ok: false, box, html: "", clearCtx: true };
     }
     const catalogKeys = equityCatalogLogicKeys();
     const activeKeys = selectedEquityLogicKeys();
     const selectedSet = new Set(activeKeys);
-
     if (!data) {
-      state.lastEquityChartCtx = null;
-      syncChartBox(box, "");
-      return;
+      return { ok: false, box, html: "", clearCtx: true };
     }
-
-    state.lastEquityChartCtx = { a, b, data, drawOpts: opts };
     const incTf = equityDeltaTf();
     const { runs, times } = data;
     const hasFinrespSource = !!finrespEquityRowsForChart(a, b, times);
     const hasPerLogicRuns = catalogKeys.some((key) => runs[key]?.rows?.length);
     if (!hasPerLogicRuns && !hasFinrespSource) {
-      state.lastEquityChartCtx = null;
-      syncChartBox(box, !activeKeys.length
-        ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для equity.</p>`
-        : "");
-      return;
+      return {
+        ok: false,
+        box,
+        html: !activeKeys.length
+          ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для equity.</p>`
+          : "",
+        clearCtx: true
+      };
     }
     const processEquityRows = (rows, key) => {
       let r = liveSession ? (rows || []) : sliceRowsForLiveSession(rows);
@@ -6060,13 +6065,10 @@ ${pointDot}
       if (liveSession && r.length === 1) r = [{ ...r[0] }, { ...r[0] }];
       return r;
     };
-
     const refKey = catalogKeys.find((key) => runs[key]?.rows?.length);
     const refRows = refKey ? processEquityRows(runs[refKey]?.rows || [], refKey) : [];
-
     const finrespSource = finrespEquityRowsForChart(a, b, times);
     const finrespRows = finrespSource?.length ? processEquityRows(finrespSource, "__finresp") : [];
-
     const totalSource = activeKeys.length
       ? (liveSession
         ? buildTotalEquityRows(
@@ -6095,107 +6097,209 @@ ${pointDot}
       refRows.length ? refRows : totalRows,
       configMarkersForRows(totalRows)
     );
-
-    const logicBlocks = catalogKeys.map((key) => {
-      const selected = selectedSet.has(key);
-      const heading = logicChartHeading(key, selected);
-      const absentNote = !selected
-        ? `<p class="chart-logic-absent-note">${logicAbsentNote(liveSession)}</p>`
-        : "";
-      const run = runs[key];
-      if (!run?.rows?.length) {
-        const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
-        return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет данных в окне</div></div>`;
-      }
-      const rows = processEquityRows(run.rows, key);
-      if (!rows.length) {
-        const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
-        return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет свечей в live-сессии</div></div>`;
-      }
-      const decor = {
-        ...chartDecorFromRows(rows, configMarkersForRows(rows)),
-        faded: !selected,
-        chartTitleLines: logicChartTitleLines(key, selected)
-      };
-      const fin = rows.at(-1).eq;
-      const lineColor = selected ? equityLogicColor(key) : undefined;
-      const svg = appendEquityIncrementPanel(
-        buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor),
-        rows, incTf, true, !selected
-      );
-      if (!svg) return "";
-      const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
-      return `<div class="${wrapClass}" data-equity-copy-block>${equityChartCopyHeaderHtml(`<p class="chart-sec-title">${heading}</p>`)}${absentNote}${svg}</div>`;
-    }).filter(Boolean);
-
-    let finrespBlock = "";
-    if (finrespRows.length) {
-      const finrespFin = finrespRows.at(-1).eq;
-      const finrespColor = finrespFin < 0 ? "#b91c1c" : "#047857";
-      const finrespSvg = appendEquityIncrementPanel(
-        buildEquityChartSvg(
-          finrespRows, finrespFin, "Equity портфеля = FINRESP Σ", false, finrespColor, finrespDecor
-        ),
-        finrespRows, incTf, false, false
-      );
-      if (finrespSvg) {
-        const finrespHint = liveSession
-          ? "Совпадает с FINRESP Σ live-сессии (с нуля сессии)."
-          : "Совпадает с FINRESP Σ в блоке результатов (стек выбранных логик, портф. Stopper).";
-        finrespBlock = `<div class="chart-equity-total chart-equity-total--finresp" data-equity-copy-block>
-${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>`)}
-<p class="chart-equity-finresp-hint">${finrespHint}</p>
-${finrespSvg}
-</div>`;
-      }
-    }
-
-    let referenceBlock = "";
-    if (activeKeys.length && totalRows.length) {
-      const totalFin = totalRows.at(-1).eq;
-      const referenceDecor = {
-        ...decorBase,
-        dashed: true,
-        strokeW: 2.6,
-        chartTitleLines: referenceChartTitleLines(activeKeys),
-        caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
-      };
-      const totalSvg = appendEquityIncrementPanel(
-        buildEquityChartSvg(
-          totalRows, totalFin, `Equity Σ ${activeKeys.join("+")} (справочно)`, false, "#c2410c", referenceDecor
-        ),
-        totalRows, incTf, false, false
-      );
-      if (totalSvg) {
-        referenceBlock = `<div class="chart-equity-total chart-equity-total--reference" data-equity-copy-block>
-${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>`)}
-<p class="chart-equity-reference-hint">Не совпадает с FINRESP Σ при нескольких логиках: здесь логики не в стеке, а суммируются независимо.</p>
-${totalSvg}
-</div>`;
-      }
-    } else if (!activeKeys.length) {
-      referenceBlock = `<p class="note">Справочная сумма логик: выберите хотя бы одну логику в списке «Логика».</p>`;
-    }
-
-    const markerNote = state.equityConfigMarkers?.length
+    const markerNoteHtml = state.equityConfigMarkers?.length
       ? `<p class="note">Фиолетовые линии — смена логик, комиссии или индикаторов.</p>`
       : "";
-    const liveNote = liveSession
+    const liveNoteHtml = liveSession
       ? `<p class="note">${liveChartSessionNote()}</p>`
       : "";
     const sectionTitle = liveSession
       ? "Equity по логикам — live-сессия"
       : "Equity по логикам";
+    return {
+      ok: true,
+      box,
+      ctx: {
+        a,
+        b,
+        opts,
+        liveSession,
+        catalogKeys,
+        activeKeys,
+        selectedSet,
+        runs,
+        incTf,
+        processEquityRows,
+        finrespRows,
+        totalRows,
+        finrespDecor,
+        decorBase,
+        sectionTitle,
+        deltaBarHtml: equityDeltaPeriodBarHtml(),
+        windowNoteHtml: equityWindowNote(a, b),
+        liveNoteHtml,
+        markerNoteHtml
+      }
+    };
+  }
 
+  /** HTML одного mini-графика equity по логике каталога. */
+  function buildEquityLogicBlockHtml(key, ctx) {
+    const selected = ctx.selectedSet.has(key);
+    const heading = logicChartHeading(key, selected);
+    const absentNote = !selected
+      ? `<p class="chart-logic-absent-note">${logicAbsentNote(ctx.liveSession)}</p>`
+      : "";
+    const run = ctx.runs[key];
+    if (!run?.rows?.length) {
+      const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+      return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет данных в окне</div></div>`;
+    }
+    const rows = ctx.processEquityRows(run.rows, key);
+    if (!rows.length) {
+      const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+      return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет свечей в live-сессии</div></div>`;
+    }
+    const decor = {
+      ...chartDecorFromRows(rows, configMarkersForRows(rows)),
+      faded: !selected,
+      chartTitleLines: logicChartTitleLines(key, selected)
+    };
+    const fin = rows.at(-1).eq;
+    const lineColor = selected ? equityLogicColor(key) : undefined;
+    const svg = appendEquityIncrementPanel(
+      buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor),
+      rows, ctx.incTf, true, !selected
+    );
+    if (!svg) return "";
+    const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
+    return `<div class="${wrapClass}" data-equity-copy-block>${equityChartCopyHeaderHtml(`<p class="chart-sec-title">${heading}</p>`)}${absentNote}${svg}</div>`;
+  }
+
+  /** HTML блока FINRESP Σ (equity портфеля). */
+  function buildEquityFinrespBlockHtml(ctx) {
+    if (!ctx.finrespRows.length) return "";
+    const finrespFin = ctx.finrespRows.at(-1).eq;
+    const finrespColor = finrespFin < 0 ? "#b91c1c" : "#047857";
+    const finrespSvg = appendEquityIncrementPanel(
+      buildEquityChartSvg(
+        ctx.finrespRows, finrespFin, "Equity портфеля = FINRESP Σ", false, finrespColor, ctx.finrespDecor
+      ),
+      ctx.finrespRows, ctx.incTf, false, false
+    );
+    if (!finrespSvg) return "";
+    const finrespHint = ctx.liveSession
+      ? "Совпадает с FINRESP Σ live-сессии (с нуля сессии)."
+      : "Совпадает с FINRESP Σ в блоке результатов (стек выбранных логик, портф. Stopper).";
+    return `<div class="chart-equity-total chart-equity-total--finresp" data-equity-copy-block>
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>`)}
+<p class="chart-equity-finresp-hint">${finrespHint}</p>
+${finrespSvg}
+</div>`;
+  }
+
+  /** HTML справочного блока суммы логик. */
+  function buildEquityReferenceBlockHtml(ctx) {
+    if (ctx.activeKeys.length && ctx.totalRows.length) {
+      const totalFin = ctx.totalRows.at(-1).eq;
+      const referenceDecor = {
+        ...ctx.decorBase,
+        dashed: true,
+        strokeW: 2.6,
+        chartTitleLines: referenceChartTitleLines(ctx.activeKeys),
+        caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
+      };
+      const totalSvg = appendEquityIncrementPanel(
+        buildEquityChartSvg(
+          ctx.totalRows, totalFin, `Equity Σ ${ctx.activeKeys.join("+")} (справочно)`, false, "#c2410c", referenceDecor
+        ),
+        ctx.totalRows, ctx.incTf, false, false
+      );
+      if (!totalSvg) return "";
+      return `<div class="chart-equity-total chart-equity-total--reference" data-equity-copy-block>
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(ctx.activeKeys)}</p>`)}
+<p class="chart-equity-reference-hint">Не совпадает с FINRESP Σ при нескольких логиках: здесь логики не в стеке, а суммируются независимо.</p>
+${totalSvg}
+</div>`;
+    }
+    if (!ctx.activeKeys.length) {
+      return `<p class="note">Справочная сумма логик: выберите хотя бы одну логику в списке «Логика».</p>`;
+    }
+    return "";
+  }
+
+  /** Отрисовка equity-графиков по готовым рядам (одним блоком). */
+  function renderEquityChartsFromData(a, b, data, drawOpts) {
+    const prepared = prepareEquityChartCtx(a, b, data, drawOpts);
+    if (!prepared.ok) {
+      if (prepared.livePlaceholder) {
+        state.lastEquityChartCtx = null;
+        drawLiveEquityPlaceholders();
+        return;
+      }
+      if (prepared.clearCtx) state.lastEquityChartCtx = null;
+      if (prepared.box) syncChartBox(prepared.box, prepared.html ?? "");
+      return;
+    }
+    const { box, ctx } = prepared;
+    state.lastEquityChartCtx = { a, b, data, drawOpts: ctx.opts };
+    const logicBlocks = ctx.catalogKeys
+      .map((key) => buildEquityLogicBlockHtml(key, ctx))
+      .filter(Boolean);
+    const finrespBlock = buildEquityFinrespBlockHtml(ctx);
+    const referenceBlock = buildEquityReferenceBlockHtml(ctx);
     syncChartBox(box, `<div class="chart-equity-section">
-<p class="chart-equity-section-title">${sectionTitle}</p>
-${equityDeltaPeriodBarHtml()}
-${equityWindowNote(a, b)}
-${liveNote}${markerNote}
+<p class="chart-equity-section-title">${ctx.sectionTitle}</p>
+${ctx.deltaBarHtml}
+${ctx.windowNoteHtml}
+${ctx.liveNoteHtml}${ctx.markerNoteHtml}
 ${finrespBlock}
 ${referenceBlock}
 <div class="chart-stack">${logicBlocks.join("")}</div>
 </div>`);
+  }
+
+  /** Пошаговая отрисовка equity с yield между блоками (этап «Рассчитать»). */
+  async function renderEquityChartsFromDataAsync(a, b, data, drawOpts, onProgress) {
+    const prepared = prepareEquityChartCtx(a, b, data, drawOpts);
+    if (!prepared.ok) {
+      if (prepared.livePlaceholder) {
+        state.lastEquityChartCtx = null;
+        drawLiveEquityPlaceholders();
+        return;
+      }
+      if (prepared.clearCtx) state.lastEquityChartCtx = null;
+      if (prepared.box) syncChartBox(prepared.box, prepared.html ?? "");
+      return;
+    }
+    const { box, ctx } = prepared;
+    state.lastEquityChartCtx = { a, b, data, drawOpts: ctx.opts };
+
+    const section = document.createElement("div");
+    section.className = "chart-equity-section";
+    section.insertAdjacentHTML("beforeend", `<p class="chart-equity-section-title">${ctx.sectionTitle}</p>`);
+    section.insertAdjacentHTML("beforeend", ctx.deltaBarHtml);
+    section.insertAdjacentHTML("beforeend", ctx.windowNoteHtml);
+    if (ctx.liveNoteHtml) section.insertAdjacentHTML("beforeend", ctx.liveNoteHtml);
+    if (ctx.markerNoteHtml) section.insertAdjacentHTML("beforeend", ctx.markerNoteHtml);
+
+    const finrespBlock = buildEquityFinrespBlockHtml(ctx);
+    if (finrespBlock) {
+      section.insertAdjacentHTML("beforeend", finrespBlock);
+      if (onProgress) await yieldToUi();
+    }
+
+    const referenceBlock = buildEquityReferenceBlockHtml(ctx);
+    if (referenceBlock) {
+      section.insertAdjacentHTML("beforeend", referenceBlock);
+      if (onProgress) await yieldToUi();
+    }
+
+    const stack = document.createElement("div");
+    stack.className = "chart-stack";
+    section.appendChild(stack);
+
+    for (let i = 0; i < ctx.catalogKeys.length; i++) {
+      const key = ctx.catalogKeys[i];
+      if (onProgress) onProgress(i, ctx.catalogKeys.length, key);
+      const block = buildEquityLogicBlockHtml(key, ctx);
+      if (block) stack.insertAdjacentHTML("beforeend", block);
+      if (onProgress) await yieldToUi();
+    }
+
+    box.innerHTML = "";
+    box.appendChild(section);
+    box.hidden = false;
   }
 
   /** Кривые equity по логикам каталога. */
@@ -6205,10 +6309,14 @@ ${referenceBlock}
 
   /** Асинхронное построение equity-графиков с прогрессом. */
   async function drawEquityChartsAsync(a, b, drawOpts, onProgress) {
-    const data = await calcLogicEquityRunsAsync(a, b, onProgress);
+    const data = await calcLogicEquityRunsAsync(a, b, (i, n, key) => {
+      if (onProgress) onProgress("calc", i, n, key);
+    });
+    if (!data) return;
     await yieldToUi();
-    renderEquityChartsFromData(a, b, data, drawOpts);
-    await yieldToUi();
+    await renderEquityChartsFromDataAsync(a, b, data, drawOpts, (i, n, key) => {
+      if (onProgress) onProgress("render", i, n, key);
+    });
   }
 
   /** Подпрограмма `chartFailuresForDraw`. */
@@ -6725,10 +6833,11 @@ ${referenceBlock}
             mapInstrumentChartProgressPct(i + 1, n)
           );
         });
-        await drawEquityChartsAsync(ra, rb, {}, (i, n, key) => {
+        await drawEquityChartsAsync(ra, rb, {}, (phase, i, n, key) => {
+          const label = phase === "render" ? "Equity график" : "Equity расчёт";
           setCalcProgress(
-            `Equity по логикам: ${key} (${i + 1}/${n})`,
-            mapEquityProgressPct(i + 1, n)
+            `${label}: ${key} (${i + 1}/${n})`,
+            mapEquityPhaseProgressPct(phase, i + 1, n)
           );
         });
         if (instruments.length > 1 && loadedData.failures.length) {
