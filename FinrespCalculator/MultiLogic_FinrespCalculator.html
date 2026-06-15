@@ -1104,11 +1104,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-bars-v2"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-copy-png"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-bars-v2"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-copy-png"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-bars-v2"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-copy-png"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1125,7 +1125,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-bars-v2";
+  const CALC_PAGE_VERSION = "2026-06-14-equity-copy-png";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -5419,6 +5419,112 @@ ${rects}
     return panel ? chartHtml + panel : chartHtml;
   }
 
+  /** Заголовок equity-графика с кнопкой копирования (PNG: кривая + полоска Δ). */
+  function equityChartCopyHeaderHtml(titleInner) {
+    return `<div class="chart-mini-header">${titleInner}<button type="button" class="ml-chart-copy-btn" data-equity-copy-btn title="Скопировать equity и полоску Δ в буфер обмена (PNG)">Копировать график</button></div>`;
+  }
+
+  /** SVG → растр для сборки PNG. */
+  async function equitySvgToImage(svg) {
+    const vb = svg.viewBox.baseVal;
+    const w = vb.width || 820;
+    const h = vb.height || 240;
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", String(w));
+    clone.setAttribute("height", String(h));
+    const xml = new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      return { img, w, h };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  /** Копирование equity + полоски Δ одного блока в буфер как PNG. */
+  async function copyEquityChartBlockToClipboard(block) {
+    if (!block) return { ok: false, reason: "no-block" };
+    const equitySvg = block.querySelector("svg.chart-equity-main-svg");
+    const deltaSvg = block.querySelector("svg.chart-equity-delta-svg");
+    if (!equitySvg) return { ok: false, reason: "no-svg" };
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      return { ok: false, reason: "clipboard" };
+    }
+    const parts = [await equitySvgToImage(equitySvg)];
+    if (deltaSvg) parts.push(await equitySvgToImage(deltaSvg));
+    const totalW = Math.max(...parts.map((p) => p.w));
+    const totalH = parts.reduce((s, p) => s + p.h, 0);
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(totalW * scale);
+    canvas.height = Math.round(totalH * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { ok: false, reason: "canvas" };
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(scale, scale);
+    let y = 0;
+    for (const { img, w, h } of parts) {
+      ctx.drawImage(img, 0, y, w, h);
+      y += h;
+    }
+    const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!pngBlob) return { ok: false, reason: "png" };
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+    return { ok: true };
+  }
+
+  /** Клик по «Копировать график» у equity-блока. */
+  async function onEquityChartCopyClick(btn) {
+    const defaultLabel = btn.dataset.defaultLabel || "Копировать график";
+    if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = defaultLabel;
+    const block = btn.closest("[data-equity-copy-block]");
+    btn.disabled = true;
+    let result;
+    try {
+      result = await copyEquityChartBlockToClipboard(block);
+    } catch (err) {
+      noteTechError(`equity-chart-copy: ${err?.message || err}`);
+      result = { ok: false, reason: "error" };
+    }
+    btn.disabled = false;
+    if (result.ok) {
+      btn.textContent = "Скопировано";
+      btn.classList.add("ml-chart-copy-btn--ok");
+      setTimeout(() => {
+        btn.textContent = defaultLabel;
+        btn.classList.remove("ml-chart-copy-btn--ok");
+      }, 1800);
+      return;
+    }
+    btn.textContent = result.reason === "clipboard" ? "Буфер недоступен" : "Ошибка копирования";
+    btn.classList.add("ml-chart-copy-btn--err");
+    setTimeout(() => {
+      btn.textContent = defaultLabel;
+      btn.classList.remove("ml-chart-copy-btn--err");
+    }, 2200);
+  }
+
+  /** Делегирование кликов «Копировать график» в блоке equity. */
+  function bindEquityChartCopyUi() {
+    const box = $("calc-chart-equity");
+    if (!box || box.dataset.equityCopyBound) return;
+    box.dataset.equityCopyBound = "1";
+    box.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-equity-copy-btn]");
+      if (!btn) return;
+      ev.stopPropagation();
+      void onEquityChartCopyClick(btn);
+    });
+  }
+
   /** Перерисовка equity из кэша (смена периода приращения без пересчёта). */
   function redrawEquityChartsFromCache() {
     const ctx = state.lastEquityChartCtx;
@@ -5488,7 +5594,7 @@ ${rects}
       ? "Справочный equity (логика не участвует в торговле / сумме)"
       : `Equity по выбранным логикам${configLegend}${modeLegend}`);
     const finLabelSize = decor.prominentFin ? (compact ? 14 : 16) : (compact ? 12 : 14);
-    return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
+    return `<svg viewBox="0 0 ${w} ${h}" class="chart-equity-main-svg" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
 ${gridH}${gridV}${zeroLine}${configLines}
@@ -5662,7 +5768,7 @@ ${pointDot}
       );
       if (!svg) return "";
       const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
-      return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}${svg}</div>`;
+      return `<div class="${wrapClass}" data-equity-copy-block>${equityChartCopyHeaderHtml(`<p class="chart-sec-title">${heading}</p>`)}${absentNote}${svg}</div>`;
     }).filter(Boolean);
 
     let finrespBlock = "";
@@ -5679,8 +5785,8 @@ ${pointDot}
         const finrespHint = liveSession
           ? "Совпадает с FINRESP Σ live-сессии (с нуля сессии)."
           : "Совпадает с FINRESP Σ в блоке результатов (стек выбранных логик, портф. Stopper).";
-        finrespBlock = `<div class="chart-equity-total chart-equity-total--finresp">
-<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>
+        finrespBlock = `<div class="chart-equity-total chart-equity-total--finresp" data-equity-copy-block>
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--finresp">${finrespEquityTitle()}</p>`)}
 <p class="chart-equity-finresp-hint">${finrespHint}</p>
 ${finrespSvg}
 </div>`;
@@ -5703,8 +5809,8 @@ ${finrespSvg}
         totalRows, incPeriod, false, false
       );
       if (totalSvg) {
-        referenceBlock = `<div class="chart-equity-total chart-equity-total--reference">
-<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>
+        referenceBlock = `<div class="chart-equity-total chart-equity-total--reference" data-equity-copy-block>
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title chart-sec-title--reference">${referenceEquityTitle(activeKeys)}</p>`)}
 <p class="chart-equity-reference-hint">Не совпадает с FINRESP Σ при нескольких логиках: здесь логики не в стеке, а суммируются независимо.</p>
 ${totalSvg}
 </div>`;
@@ -6541,6 +6647,7 @@ ${referenceBlock}
     saveConfig();
     redrawEquityChartsFromCache();
   });
+  bindEquityChartCopyUi();
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
