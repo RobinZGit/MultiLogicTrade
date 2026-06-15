@@ -207,6 +207,9 @@ label .at-token-global{font-family:Consolas,Monaco,monospace;font-weight:800;col
 .calc-reverse-toggle-btn--on:hover{background:linear-gradient(180deg,#fed7aa 0%,#ffedd5 100%);}
 details.logic-editor{border:1px solid var(--border);border-radius:10px;padding:.5rem .85rem;margin:1rem 0;background:#fafbfc;}
 details.logic-editor[open]{background:#fff;border-color:#c7d2fe;box-shadow:0 1px 6px rgba(37,99,235,.08);}
+.calc-panels-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0;align-items:start;}
+.calc-panels-row>.logic-editor{margin:0;min-width:0;}
+@media (max-width:1100px){.calc-panels-row{grid-template-columns:1fr;}}
 .extra-params-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.55rem .15rem .55rem;margin:-.5rem -.85rem 0;cursor:pointer;list-style:none;}
 .extra-params-head::-webkit-details-marker{display:none;}
 .extra-params-head::marker{content:"";}
@@ -834,7 +837,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 </div>
 </div>
-<p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в «Дополнительных параметрах» ниже.</p>
+<p class="calc-sec-hint" id="calc-logic-hint">Каталог редактируется в блоке «Логики» ниже (рядом с доп. параметрами).</p>
 </div>
 
 <div class="calc-at-params" id="calc-at-params">
@@ -928,6 +931,27 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="note" id="position-sl-hint" hidden></p>
 </div>
 
+<div class="calc-panels-row">
+
+<details class="logic-editor" id="logic-catalog-panel">
+<summary class="extra-params-head">
+<span class="extra-params-title">Логики</span>
+<a href="#" class="extra-params-toggle" id="logic-catalog-toggle" role="button">Развернуть</a>
+</summary>
+<p class="note" style="margin:.35rem 0 .65rem">Список «Логика» выше = этот каталог. Строки Op/Cl, SMA-коридор или CMA, плюс SL/TP.</p>
+<div class="logic-lines-toolbar">
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-import" title="Загрузить каталог логик из JSON-файла">Импорт всех</button>
+<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-restore-defaults" title="Сбросить каталог к встроенным логикам из кода">Восстановить логики по умолчанию</button>
+</div>
+<input type="file" id="logic-catalog-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
+<input type="file" id="logic-line-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
+<div class="logic-grid" id="logic-lines"></div>
+<button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
+<p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
+</details>
+
 <details class="logic-editor" id="extra-params">
 <summary class="extra-params-head">
 <span class="extra-params-title">Дополнительные параметры</span>
@@ -996,20 +1020,6 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="note">По умолчанию выбраны все индикаторы. Оптимизация перебирает все непустые комбинации и оставляет набор с лучшим FINRESP.</p>
 </div>
 
-<p class="extra-section">Каталог логик</p>
-<p class="note">Список «Логика» = этот каталог. Первая — <strong>TBC (test counter-bokovik)</strong>, затем UT, UCT, L5, L1…L4. Строка Op/Cl, SMA-коридор или объёмная SMA, плюс SL/TP.</p>
-<div class="logic-lines-toolbar">
-<button type="button" class="calc-btn calc-btn-secondary logic-lines-add-btn" id="logic-line-add" title="Добавить новую строку логики в каталог">+ Добавить логику</button>
-<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-export" title="Сохранить весь каталог логик в JSON-файл">Экспорт всех</button>
-<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-import" title="Загрузить каталог логик из JSON-файла">Импорт всех</button>
-<button type="button" class="calc-btn calc-btn-secondary logic-lines-io-btn" id="logic-catalog-restore-defaults" title="Сбросить каталог к встроенным логикам из кода">Восстановить логики по умолчанию</button>
-</div>
-<input type="file" id="logic-catalog-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
-<input type="file" id="logic-line-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
-<div class="logic-grid" id="logic-lines"></div>
-<button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
-<p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
-
 <p class="extra-section">База цен MOEX (IndexedDB браузера)</p>
 <div class="calc-field calc-field-wide cache-row">
 <label>Кэш свечей</label>
@@ -1038,6 +1048,8 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <p class="note">Как вкладки «MOEX акции» / «MOEX фьючерсы» в роботе. Акции: «Подобрать» — из текста поля. Фьючерсы: «Подобрать» и «Рассчитать» — контракты MOEX по префиксам и периоду расчёта: экспирация (LASTTRADEDATE) не раньше начала периода, выпуск (FIRSTTRADEDATE) внутри периода; бессрочные (…RUBF, IMOEXF) — по экспирации. При «выбрать все фьючерсы» в расчёт попадают все подходящие серии, не только по одному на префикс.</p>
 </details>
+
+</div>
 
 <div class="calc-result-hero" aria-label="Итог FINRESP">
 <div class="calc-metric-primary calc-metric-finresp"><b>FINRESP Σ (с комиссией)</b><span id="calc-finresp">—</span></div>
@@ -1157,11 +1169,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-cml-cms-split"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-logic-panel-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-cml-cms-split"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-logic-panel-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-cml-cms-split"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-logic-panel-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1178,7 +1190,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-cml-cms-split";
+  const CALC_PAGE_VERSION = "2026-06-15-logic-panel-split";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -1362,6 +1374,7 @@ body.calc-running .help-ftr{opacity:.75;}
   /** «Тех. информация», доп. параметры, T-Bank — до полной инициализации (повторный вызов безопасен). */
   function bindCoreCollapsibleToggles() {
     bindCollapsibleToggle("tech-info-panel", "tech-info-toggle");
+    bindCollapsibleToggle("logic-catalog-panel", "logic-catalog-toggle");
     bindCollapsibleToggle("extra-params", "extra-params-toggle");
     bindCollapsibleToggle("tbank-settings", "tbank-settings-toggle");
   }
@@ -4082,7 +4095,10 @@ body.calc-running .help-ftr{opacity:.75;}
     selectLogicInCalc(key);
     saveConfig();
     invalidateFormChange();
-    $("extra-params")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const panel = $("logic-catalog-panel");
+    if (panel && !panel.open) panel.open = true;
+    syncCollapsibleToggleLabel(panel, "logic-catalog-toggle");
+    panel?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const ta = document.querySelector(`#logic-lines textarea[data-key="${key}"]`);
     if (ta) {
       try { ta.focus(); } catch (_) { /* ignore */ }
@@ -4092,7 +4108,7 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Подпрограмма `promptAddLogicLine`. */
   function promptAddLogicLine() {
     const line = window.prompt(
-      "Строка логики Op/Cl для новой записи.\nМожно вставить сразу или оставить пусто — отредактируете в блоке ниже (шаблон — L5).",
+      "Строка логики Op/Cl для новой записи.\nМожно вставить сразу или оставить пусто — отредактируете в блоке «Логики» (шаблон — L5).",
       ""
     );
     if (line === null) return;
