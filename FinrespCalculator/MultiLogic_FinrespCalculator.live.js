@@ -1191,6 +1191,319 @@
     el.innerHTML = `<div class="live-trading-orders-scroll">${tableHtml}</div>${totalsFooter}`;
   }
 
+  /** Карта legId → tradeId открывающей сделки + остатки открытых legs после replay. */
+  function buildReplayLegTradeMap() {
+    const legToTradeId = new Map();
+    const remainingLegs = [];
+    if (isLiveSandbox()) {
+      const sb = ensureSandboxState();
+      rebuildSandboxFromLedger(sb);
+      for (const fill of sb.ledger || []) {
+        const tradeId = fill.fillId != null ? `fill-${fill.fillId}` : (fill.orderId || null);
+        if (!tradeId) continue;
+        for (const legId of fill.openLegIds || []) legToTradeId.set(legId, tradeId);
+      }
+      for (const [key, legs] of (sb.openLegs || new Map()).entries()) {
+        for (const leg of legs || []) {
+          remainingLegs.push({
+            key,
+            legId: leg.legId,
+            side: leg.side,
+            pieces: leg.pieces,
+            price: leg.price,
+            fee: leg.fee,
+            openedAt: leg.openedAt,
+            openTradeId: legToTradeId.get(leg.legId) || null
+          });
+        }
+      }
+      return { legToTradeId, remainingLegs };
+    }
+    const enriched = state.live.brokerOperations || [];
+    const ctx = createSandboxReplayCtx({ startPortfolio: 0 });
+    seedRealBrokerLegCtx(ctx);
+    const sorted = enriched.slice().sort(
+      (a, b) => (Date.parse(a._histDate || a.date || 0) || 0) - (Date.parse(b._histDate || b.date || 0) || 0)
+    );
+    const matchMode = sandboxMatchMode();
+    for (const op of sorted) {
+      const side = op._histSide || tbankOpTradeSide(op);
+      if (!side) continue;
+      const pieces = Math.abs(Math.trunc(+op.quantity || 0));
+      if (!pieces) continue;
+      const signedPieces = side === "buy" ? pieces : -pieces;
+      const isFuture = String(op.instrumentType || op.instrument_type || "").toLowerCase() === "futures";
+      const market = isFuture ? "futures" : "shares";
+      const ticker = op._histTicker || String(op.ticker || op.figi || "").toUpperCase();
+      const price = Number.isFinite(op._histPrice)
+        ? op._histPrice
+        : (moneyValueRub(op.price) || moneyValueToNumber(op.price));
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const posMeta = {
+        ticker,
+        sec: ticker,
+        market,
+        instrumentId: op.instrumentUid || op.figi,
+        lot: Math.max(1, +op._histLot || 1),
+        isFuture
+      };
+      const meta = applySandboxSignedDelta(ctx, posMeta, signedPieces, price, {
+        matchMode,
+        skipNotify: true,
+        skipClosedJournal: true
+      });
+      const tradeId = op.id != null ? `real-op-${op.id}` : null;
+      if (tradeId && meta?.legIds?.length) {
+        for (const legId of meta.legIds) legToTradeId.set(legId, tradeId);
+      }
+    }
+    for (const [key, legs] of (ctx.openLegs || new Map()).entries()) {
+      for (const leg of legs || []) {
+        remainingLegs.push({
+          key,
+          legId: leg.legId,
+          side: leg.side,
+          pieces: leg.pieces,
+          price: leg.price,
+          fee: leg.fee,
+          openedAt: leg.openedAt,
+          openTradeId: legToTradeId.get(leg.legId) || null
+        });
+      }
+    }
+    return { legToTradeId, remainingLegs };
+  }
+
+  /** Одна сделка для JSON-протокола. */
+  function tradeHistoryProtocolTradeRow(entry) {
+    const fees = tradeHistoryRowFeeColumns(entry);
+    const finresp = tradeHistoryCloseFinrespExplicit(entry) ?? tradeHistoryFinrespForOrder(entry);
+    return {
+      tradeId: entry.id,
+      orderId: entry.orderId || null,
+      when: entry.when || null,
+      ticker: entry.ticker,
+      isBuy: !!entry.isBuy,
+      side: entry.isBuy ? "buy" : "sell",
+      tradeRole: entry.tradeRole || null,
+      lotsRequested: entry.lotsRequested ?? null,
+      lotsExecuted: entry.lotsExecuted ?? null,
+      price: Number.isFinite(entry.price) ? +entry.price : null,
+      notional: Number.isFinite(entry.notional) ? +entry.notional : null,
+      fee: Number.isFinite(entry.fee) ? +entry.fee : null,
+      feeBuyRub: Number.isFinite(fees.buyFee) ? fees.buyFee : null,
+      feeSellRub: Number.isFinite(fees.sellFee) ? fees.sellFee : null,
+      finrespDelta: Number.isFinite(finresp) ? finresp : null,
+      status: entry.status || null,
+      active: !!entry.active,
+      fake: !!entry.fake,
+      mode: entry.mode || (entry.fake ? "sandbox" : "real"),
+      tradeSourceLabel: entry.tradeSourceLabel || null,
+      brokerYield: Number.isFinite(entry.brokerYield) ? entry.brokerYield : null
+    };
+  }
+
+  /** FIFO-пакеты закрытия со ссылками на открывающие сделки. */
+  function tradeHistoryProtocolClosePacket(entry, legToTradeId) {
+    const closeKind = tradeHistoryCloseKind(entry);
+    if (closeKind !== "close_long" && closeKind !== "close_short" && closeKind !== "flip") return null;
+    const matches = Array.isArray(entry.tradeMatches) ? entry.tradeMatches : [];
+    const closePrice = +entry.price || 0;
+    const fees = tradeHistoryRowFeeColumns(entry);
+    const fifoPackets = matches.map((m) => {
+      const qty = Math.max(0, Math.trunc(+m.pieces || 0));
+      const openPx = +m.openPrice || 0;
+      const closePx = +m.closePrice || closePrice;
+      const buyFee = sandboxWeightedOpenLegFeeForMatch(m);
+      const isShort = m.side === "short";
+      const saleSum = isShort ? openPx * qty : closePx * qty;
+      const purchaseSum = isShort ? closePx * qty : openPx * qty;
+      return {
+        openTradeId: m.legId != null ? (legToTradeId.get(m.legId) || null) : null,
+        legId: m.legId ?? null,
+        openSide: m.side || null,
+        pieces: qty,
+        openPrice: openPx,
+        closePrice: closePx,
+        purchaseSum,
+        saleSum,
+        buyFeeAllocatedRub: buyFee,
+        openedAt: m.openedAt || null
+      };
+    });
+    const amounts = tradeHistoryCloseFifoAmounts(entry);
+    const finresp = tradeHistoryCloseFinrespExplicit(entry);
+    return {
+      closeTradeId: entry.id,
+      when: entry.when || null,
+      ticker: entry.ticker,
+      closeKind,
+      closeSide: entry.isBuy ? "buy" : "sell",
+      closePrice: Number.isFinite(entry.price) ? +entry.price : null,
+      closeNotional: Number.isFinite(entry.notional) ? +entry.notional : null,
+      saleSumRub: amounts?.saleSum ?? null,
+      purchaseSumRub: amounts?.purchaseSum ?? null,
+      feeBuyRub: Number.isFinite(fees.buyFee) ? fees.buyFee : null,
+      feeSellRub: Number.isFinite(fees.sellFee) ? fees.sellFee : null,
+      finrespDelta: Number.isFinite(finresp) ? finresp : null,
+      fifoPackets
+    };
+  }
+
+  /** Сводка верхнего блока live + формулы расчёта. */
+  function tradeHistoryProtocolPortfolioSummary(done) {
+    const cash = liveFreeCashRub();
+    const mtm = livePositionsMtmRub();
+    const portfolio = state.live.portfolioValue;
+    const commission = state.live.commissionPaid;
+    const modelFin = state.live.modelFinresp;
+    const portDelta = liveFinResultRub();
+    const closeTotals = computeTradeHistoryCloseTotals(done);
+    const base = liveSessionPortfolioBaseline();
+    return {
+      portfolioValueRub: Number.isFinite(portfolio) ? portfolio : null,
+      freeCashRub: Number.isFinite(cash) ? cash : null,
+      positionsMtmRub: Number.isFinite(mtm) ? mtm : null,
+      commissionPaidRub: Number.isFinite(commission) ? commission : null,
+      modelFinrespRub: Number.isFinite(modelFin) ? modelFin : null,
+      portfolioDeltaRub: Number.isFinite(portDelta) ? portDelta : null,
+      sessionPortfolioBaselineRub: Number.isFinite(base) ? base : null,
+      closeTotalsFifo: closeTotals,
+      howCalculated: {
+        portfolio: "Портфель всего = деньги свободно + стоимость открытых позиций по текущим ценам (cash + MTM).",
+        freeCash: isLiveSandbox()
+          ? "Деньги свободно (фейк) = старт песочницы − комиссии − покупки + выручка продаж."
+          : "Деньги свободно = RUB на счёте T-Bank, не в бумагах.",
+        portfolioDelta: "Портфель Δ = текущий портфель − baseline на старт live-сессии.",
+        modelFinresp: "FINRESP Σ (модель) = результат расчёта по сигналам логики (блок «Рассчитать»), не журнал сделок.",
+        closeFinresp: "FINRESPΔ закрытия = Σ продажи − Σ покупки (FIFO-пакеты) − комиссия buy − комиссия sell.",
+        fifoPackets: "Каждое закрытие ссылается на openTradeId покупок/продаж открытия через fifoPackets."
+      }
+    };
+  }
+
+  /** Собрать полный JSON-протокол истории сделок. */
+  function buildTradeHistoryProtocol() {
+    syncTradeHistoryFromSources();
+    const hist = ensureLiveTradeHistory().slice().sort(
+      (a, b) => (Date.parse(a.when || 0) || 0) - (Date.parse(b.when || 0) || 0)
+    );
+    const done = hist.filter((h) => !h.active);
+    const { legToTradeId, remainingLegs } = buildReplayLegTradeMap();
+    const trades = hist.map(tradeHistoryProtocolTradeRow);
+    const closeEvents = done
+      .map((e) => tradeHistoryProtocolClosePacket(e, legToTradeId))
+      .filter(Boolean);
+    const openLotsByKey = new Map();
+    for (const leg of remainingLegs) {
+      if (!leg.pieces) continue;
+      const row = openLotsByKey.get(leg.key) || {
+        positionKey: leg.key,
+        ticker: leg.key.split(":").pop() || leg.key,
+        side: leg.side,
+        remainingPieces: 0,
+        openTrades: []
+      };
+      row.remainingPieces += leg.pieces;
+      row.openTrades.push({
+        openTradeId: leg.openTradeId,
+        legId: leg.legId,
+        piecesRemaining: leg.pieces,
+        openPrice: leg.price,
+        openFeeRub: Number.isFinite(leg.fee) ? leg.fee : null,
+        openedAt: leg.openedAt || null
+      });
+      openLotsByKey.set(leg.key, row);
+    }
+    const legToOpenTradeId = {};
+    for (const [legId, tradeId] of legToTradeId.entries()) legToOpenTradeId[String(legId)] = tradeId;
+    return {
+      format: "multilogic-trade-history-protocol-v1",
+      exportedAt: new Date().toISOString(),
+      pageVersion: (typeof root.__mlFinrespVersion === "string" ? root.__mlFinrespVersion : null),
+      mode: isLiveSandbox() ? "sandbox" : "real",
+      session: {
+        liveActive: !!state.live.active,
+        sandbox: isLiveSandbox(),
+        sessionStartedAt: state.live.sessionStartedAt || state.live.chartSession?.startedAt || null,
+        tradingStartedAt: state.live.tradingStartedAt || null
+      },
+      portfolioSummary: tradeHistoryProtocolPortfolioSummary(done),
+      legToOpenTradeId,
+      trades,
+      closeEvents,
+      openLots: [...openLotsByKey.values()]
+    };
+  }
+
+  const PROTOCOL_STORAGE_KEY = "multilogic.trade-protocol.v1";
+
+  /** Собрать автономный HTML-файл протокола (данные встроены, render.js инлайн). */
+  async function buildStandaloneProtocolHtml(payload) {
+    const dataJson = JSON.stringify(payload).replace(/</g, "\\u003c");
+    let renderJs = "";
+    try {
+      const res = await fetch("MultiLogic_TradeHistoryProtocol.render.js", { cache: "no-store" });
+      if (res.ok) renderJs = await res.text();
+    } catch (_) { /* file:// или офлайн */ }
+    let htmlTpl = "";
+    try {
+      const res = await fetch("MultiLogic_TradeHistoryProtocol.html", { cache: "no-store" });
+      if (res.ok) htmlTpl = await res.text();
+    } catch (_) { /* ignore */ }
+    if (htmlTpl && renderJs) {
+      const dataScript = `<script type="application/json" id="ml-protocol-data">${dataJson}</script>`;
+      return htmlTpl.replace(
+        '<script src="MultiLogic_TradeHistoryProtocol.render.js"></script>\n<script>MLTradeProtocol.boot();</script>',
+        `<script>${renderJs}</script>\n${dataScript}\n<script>MLTradeProtocol.boot();</script>`
+      );
+    }
+    return `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>MultiLogic — протокол</title></head><body>
+<script type="application/json" id="ml-protocol-data">${dataJson}</script>
+<script>${renderJs || "document.body.textContent='render.js unavailable';"}</script>
+<script>MLTradeProtocol.boot();</script></body></html>`;
+  }
+
+  /** Открыть HTML-протокол и скачать автономный .html-файл. */
+  async function exportTradeHistoryProtocolFile() {
+    if (!isLiveMode()) return;
+    try {
+      const payload = buildTradeHistoryProtocol();
+      try { sessionStorage.setItem(PROTOCOL_STORAGE_KEY, JSON.stringify(payload)); } catch (_) { /* quota */ }
+      window.open("MultiLogic_TradeHistoryProtocol.html", "_blank");
+      const day = new Date().toISOString().slice(0, 10);
+      const mode = payload.mode || "live";
+      const filename = `multilogic_trade_protocol_${mode}_${day}.html`;
+      const html = await buildStandaloneProtocolHtml(payload);
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      noteLiveTech(
+        "live-trade-protocol",
+        `saved ${filename}`,
+        `trades=${payload.trades?.length ?? 0} closes=${payload.closeEvents?.length ?? 0}`
+      );
+    } catch (err) {
+      noteLiveTech("live-trade-protocol", err.message || String(err));
+    }
+  }
+
+  /** Кнопка «Сохранить протокол» в шапке истории сделок. */
+  function bindTradeHistoryProtocolExport() {
+    const btn = $("live-trade-history-save-protocol");
+    if (!btn || bindTradeHistoryProtocolExport._bound) return;
+    bindTradeHistoryProtocolExport._bound = true;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      exportTradeHistoryProtocolFile();
+    });
+  }
+
   /** Live-торговля: `liveOrderCancellable`. */
   function liveOrderCancellable(o, sandboxNewest) {
     if (isLiveSandbox()) return !!sandboxNewest && !!o.revertSnap;
@@ -1286,7 +1599,10 @@
     renderLiveOrdersPanel();
     renderLivePositionsPanel();
     syncLiveManualOrderUi();
-    if (isLive) bindLivePanelCollapsibleToggles();
+    if (isLive) {
+      bindLivePanelCollapsibleToggles();
+      bindTradeHistoryProtocolExport();
+    }
   }
 
   /** Остановка периодического опроса: `stopLiveTradingPoll`. */
@@ -6550,6 +6866,8 @@ ${referenceBlock}
       refreshLiveChartsUi,
       refreshLiveEquityChartsUi,
       renderLiveOrdersPanel,
+      exportTradeHistoryProtocolFile,
+      buildTradeHistoryProtocol,
       renderLivePositionsPanel,
       syncLiveManualOrderUi,
       syncLivePeriodControls,

@@ -500,6 +500,11 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-manual-order-summary::-webkit-details-marker{display:none;}
 .live-panel-summary{display:flex;justify-content:space-between;align-items:center;gap:1rem;}
 .live-panel-summary-title{flex:1 1 auto;}
+.live-panel-summary-actions{display:flex;align-items:center;gap:.45rem;flex-shrink:0;}
+.live-trade-history-save-btn{padding:.28rem .55rem;font-size:.78rem;min-height:auto;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;border-radius:.35rem;cursor:pointer;font-weight:600;white-space:nowrap;}
+.live-trade-history-save-btn:hover{background:#fef3c7;}
+.live-trading-panel--sandbox .live-trade-history-save-btn{border-color:#86efac;background:#ecfdf5;color:#14532d;}
+.live-trading-panel--sandbox .live-trade-history-save-btn:hover{background:#d1fae5;}
 .live-panel-summary .extra-params-toggle{color:#7f1d1d;font-size:.82rem;}
 .live-manual-order-body{padding:0 .7rem .7rem;}
 .live-manual-order-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem .65rem;align-items:end;margin-bottom:.55rem;}
@@ -765,7 +770,10 @@ body.calc-running .help-ftr{opacity:.75;}
 <details class="live-order-book live-trade-history-panel" id="live-trade-history-panel">
 <summary class="live-manual-order-summary live-panel-summary">
 <span class="live-panel-summary-title">История сделок</span>
+<div class="live-panel-summary-actions">
+<button type="button" class="live-trade-history-save-btn" id="live-trade-history-save-protocol" title="Открыть протокол в HTML и сохранить файл с FIFO-пакетами и ссылками на покупки">Сохранить протокол</button>
 <button type="button" class="extra-params-toggle" id="live-trade-history-toggle" aria-expanded="false">Развернуть</button>
+</div>
 </summary>
 <div class="live-order-book-body">
 <p class="live-order-book-meta" id="live-trade-history-meta">Журнал сессии: фейк — симуляция; реал — операции брокера. ★/☆ · FINRESPΔ · колонка «Источник» — логика робота, ручная заявка, закрытие позиции и т.п.</p>
@@ -1136,11 +1144,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-real-trade-history-fifo-parity"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-trade-history-protocol-html"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-real-trade-history-fifo-parity"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-trade-history-protocol-html"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-real-trade-history-fifo-parity"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-trade-history-protocol-html"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1157,7 +1165,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-real-trade-history-fifo-parity";
+  const CALC_PAGE_VERSION = "2026-06-15-trade-history-protocol-html";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
