@@ -1176,7 +1176,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-equity-yield";
+  const CALC_PAGE_VERSION = "2026-06-15-optim-fix";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -3570,7 +3570,7 @@ body.calc-running .help-ftr{opacity:.75;}
     else if (meta?.inputId) $(meta.inputId).value = String(bestValue);
     syncReverseUi();
     const result = calcResult(optimRunContext(kind, bestValue));
-    if (result) applyResult(result, { redrawCharts: true });
+    if (result) applyResult(result, { redrawCharts: true, redrawChartsAsync: true });
     const scoreNote = isPositionOptimKind(kind) ? " (FINRESP до портф. Stopper)" : "";
     $("calc-status").textContent = autoDone
       ? `Оптимизация ${optimDisplayLabel(kind)} завершена: лучшее ${bestLabel}, FINRESP ${fmt(bestFinresp)} ₽${scoreNote}`
@@ -3702,8 +3702,39 @@ body.calc-running .help-ftr{opacity:.75;}
     optimLoop(token);
   }
 
+  /** Загрузить свечи из кэша/MOEX в state.packs для оптимизации без полного «Рассчитать». */
+  async function ensurePacksForOptim() {
+    if (state.packs.length) return true;
+    const instruments = selectedInstruments();
+    if (!instruments.length) return false;
+    const from = $("calc-from").value;
+    const till = $("calc-till").value;
+    const interval = $("calc-tf").value;
+    try {
+      const loaded = await ensureInstrumentPacks(instruments, from, till, interval);
+      if (!loaded.packs.length) return false;
+      state.packs = loaded.packs;
+      state.failedInstruments = loaded.failures;
+      state.windowSkipped = [];
+      state.lastLoadMeta = {
+        periodKey: loaded.periodKey,
+        keys: instruments.map(instrumentKey)
+      };
+      state.lastInstruments = instruments.map((i) => ({ sec: i.sec, market: i.market }));
+      state.movedSlider = "end";
+      setSliderBounds(false);
+      saveWindowAnchor();
+      updateTechInfo("optim-packs-ready");
+      return true;
+    } catch (err) {
+      noteTechError(`ensurePacksForOptim: ${err.message}`);
+      return false;
+    }
+  }
+
   /** Подпрограмма `toggleOptim`. */
-  function toggleOptim(kind) {
+  async function toggleOptim(kind) {
+    if (state.uiBusy) return;
     if (state.optim.active === kind) {
       stopOptim();
       return;
@@ -3717,8 +3748,13 @@ body.calc-running .help-ftr{opacity:.75;}
       return;
     }
     if (!state.packs.length) {
-      $("calc-status").textContent = "Сначала загрузите свечи — нажмите «Рассчитать».";
-      return;
+      $("calc-status").textContent = "Подготовка свечей для оптимизации…";
+      await yieldToUi();
+      const ready = await ensurePacksForOptim();
+      if (!ready) {
+        $("calc-status").textContent = "Сначала загрузите свечи — нажмите «Рассчитать» (кэш пуст или период не совпадает).";
+        return;
+      }
     }
     if (state.optim.active) stopOptim();
     const input = meta.inputId ? $(meta.inputId) : null;
@@ -3732,6 +3768,10 @@ body.calc-running .help-ftr{opacity:.75;}
       candidates = [false, true];
       if (input) input.checked = !!startValue;
     } else {
+      if (!input) {
+        $("calc-status").textContent = `Нет поля ввода для ${label}.`;
+        return;
+      }
       const min = +input.min || 0;
       const max = +input.max || 50;
       const rawStart = Math.max(+input.value || 0, min);
@@ -6617,8 +6657,13 @@ ${referenceBlock}
     }
     if (opts.redrawCharts !== false) {
       const chartOpts = { liveSession };
-      drawCharts(perSec, stopper, chartOpts);
-      drawEquityCharts(a, b, chartOpts);
+      if (opts.redrawChartsAsync) {
+        void drawCharts(perSec, stopper, chartOpts);
+        void drawEquityChartsAsync(a, b, chartOpts);
+      } else {
+        drawCharts(perSec, stopper, chartOpts);
+        drawEquityCharts(a, b, chartOpts);
+      }
     }
   }
 
@@ -7027,7 +7072,9 @@ ${referenceBlock}
     $("calc-status").textContent = "База цен удалена.";
   });
   OPT_BUTTONS.forEach(({ btnId, kind }) => {
-    $(btnId).addEventListener("click", () => toggleOptim(kind));
+    const btn = $(btnId);
+    if (!btn) return;
+    btn.addEventListener("click", () => { void toggleOptim(kind); });
   });
   $("calc-sec-all-shares").addEventListener("change", () => onMarketCheckboxChange("shares", "calc-sec-all-shares"));
   $("calc-sec-all-futures").addEventListener("change", () => onMarketCheckboxChange("futures", "calc-sec-all-futures"));
