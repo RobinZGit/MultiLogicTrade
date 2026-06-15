@@ -104,7 +104,11 @@ h2:first-child{margin-top:0;}
 .chart-fail{min-height:4.5rem;display:flex;flex-direction:column;justify-content:center;}
 .chart-fail .chart-fail-msg{margin:0;font-size:.85rem;color:#b91c1c;}
 .chart-sec-title{margin:0 0 .4rem;font-size:.88rem;font-weight:600;color:#374151;font-family:Consolas,monospace;}
+.chart-equity-delta-bar{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin:1rem 0 .35rem;padding:.5rem .65rem;border:1px solid var(--border);border-radius:8px;background:#f8fafc;}
+.chart-equity-delta-bar label{font-size:.88rem;font-weight:600;color:#374151;}
+.chart-equity-delta-bar select{font-size:.88rem;padding:.25rem .45rem;border-radius:6px;border:1px solid var(--border);}
 .chart-equity-section{margin-top:1.35rem;padding-top:1.1rem;border-top:2px solid var(--accent);}
+.calc-reverse-bracket{font-weight:500;color:#475569;}
 .chart-equity-section-title{margin:0 0 .85rem;font-size:1.05rem;font-weight:700;color:#1e3a5f;}
 .chart-equity-total{margin:0 0 .85rem;padding:.75rem;border:2px solid var(--accent);border-radius:10px;background:linear-gradient(180deg,#eef4ff 0%,#fff 70%);}
 .chart-equity-total .chart-sec-title{font-size:1rem;color:#1e3a5f;}
@@ -672,9 +676,9 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="live-ob-trend-confirm-panel">
 <span>Подтверждать тренд по стакану (<code>@OBT</code>)</span>
 </label>
-<label class="indicator-toggle live-reverse-panel-toggle" id="live-reverse-panel-wrap" for="live-reverse-panel" title="@@Reverse — та же настройка, что кнопка в «Параметры управления»">
+<label class="indicator-toggle live-reverse-panel-toggle" id="live-reverse-panel-wrap" for="live-reverse-panel" title="Реверс (покупка ↔ продажа) — та же настройка, что кнопка в «Параметры управления» (@@Reverse)">
 <input type="checkbox" id="live-reverse-panel">
-<span><span class="at-token-global">@@Reverse</span></span>
+<span>Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span></span>
 </label>
 </div>
 <div class="live-trading-stats">
@@ -794,7 +798,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="param-reverse" hidden>
 <div class="calc-reverse-bar">
 <button type="button" id="param-reverse-toggle" class="calc-reverse-toggle-btn" aria-pressed="false">
-<span class="at-token-global">@@Reverse</span> — <span class="calc-reverse-toggle-label">Включить реверс (покупка ↔ продажа)</span>
+Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span> — <span class="calc-reverse-toggle-label">Включить</span>
 </button>
 <button class="calc-btn calc-btn-secondary calc-opt-btn calc-opt-btn-icon" type="button" id="opt-reverse" data-opt="reverse">⚡</button>
 </div>
@@ -816,11 +820,11 @@ body.calc-running .help-ftr{opacity:.75;}
 </div></div>
 <div class="calc-field"><label for="stopper-ref">База SL/TP портфеля, ₽</label>
 <input id="stopper-ref" type="number" value="0" min="0" step="1000" title="0 — авто: equity на первой свече окна"></div>
-<div class="calc-field"><label for="vol-maxpos"><span class="at-token-global">@@MaxPos</span> — макс. позиций портфеля</label>
+<div class="calc-field"><label for="vol-maxpos">Максимальное количество позиций <span class="at-token-global">(@@MaxPos)</span></label>
 <input id="vol-maxpos" type="number" value="10" min="1" max="200" step="1" title="Плечо = MaxPos × Volume% / 100. Лимит gross = депозит × MaxPos × Volume%"></div>
 </div>
 <p class="note" style="margin:.45rem 0 0">Общепортфельный Stopper (вкладка «Stopper» робота): equity = сумма по инструментам. При срабатывании — закрытие всех позиций, база обновляется. <strong>Плечо</strong> = <code>@@MaxPos × Volume% / 100</code> (Volume% — в «Доп. параметрах»).</p>
-<p class="calc-reverse-badge" id="calc-reverse-badge" hidden><span class="at-token-global">@@Reverse</span> включён — покупка ↔ продажа</p>
+<p class="calc-reverse-badge" id="calc-reverse-badge" hidden>Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span> включён</p>
 <p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@Reverse=выкл @@SL=2 @@TP=10 @@ATR=14</p>
 </div>
 
@@ -897,7 +901,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="calc-field"><label for="commission-pct">Commission, %</label></label>
 <input id="commission-pct" type="number" value="0.04" min="0" max="10" step="0.0001" title="% от суммы сделки (оборота): покупка и продажа. 0.04 = 0.04%."></div>
 </div>
-<p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. <strong>@@MaxPos</strong> — в блоке «Параметры управления» выше.</p>
+<p class="note">Deposit percent: лот = (депозит × Volume / 100) / цена. Contracts: фиксированный лот. Contract currency: Volume / цена. <strong>Максимальное количество позиций</strong> (<code>@@MaxPos</code>) — в блоке «Параметры управления» выше.</p>
 <p class="note">Комиссия: <strong>Commission, %</strong> от суммы каждой сделки (|цена × объём|); удерживается при покупке и продаже. FINRESP и % годовых в блоке выше уже <strong>с учётом комиссии</strong>.</p>
 
 <p class="extra-section">Учёт открытых лотов (песочница)</p>
@@ -999,6 +1003,16 @@ body.calc-running .help-ftr{opacity:.75;}
 <div><label for="calc-end">Правая граница</label><input id="calc-end" type="range" min="0" max="0" value="0" disabled><small id="calc-end-label">—</small></div>
 </div>
 
+<div class="chart-equity-delta-bar" id="chart-equity-delta-bar" hidden>
+<label for="equity-delta-period">Приращение FINRESP за</label>
+<select id="equity-delta-period" title="Ступенчатая линия Δ на графиках equity">
+<option value="1h">1 час</option>
+<option value="4h">4 часа</option>
+<option value="1d" selected>1 день</option>
+<option value="1w">1 неделя</option>
+<option value="1mo">1 месяц</option>
+</select>
+</div>
 <div class="chart-card" id="calc-chart-equity" hidden></div>
 <div class="chart-card" id="calc-chart" hidden></div>
 
@@ -1096,11 +1110,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-reverse-entry-maxpos"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-14-equity-delta-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-reverse-entry-maxpos"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-14-equity-delta-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-reverse-entry-maxpos"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-14-equity-delta-labels"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1114,7 +1128,7 @@ body.calc-running .help-ftr{opacity:.75;}
  * Блоки ниже помечены комментариями // === … ===
  */
 (() => {
-  const CALC_PAGE_VERSION = "2026-06-14-reverse-entry-maxpos";
+  const CALC_PAGE_VERSION = "2026-06-14-equity-delta-labels";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1661,6 +1675,7 @@ body.calc-running .help-ftr{opacity:.75;}
     lastResult: null,
     equityConfigMarkers: [],
     lastEquityConfigFp: null,
+    lastEquityChartCtx: null,
     prevSelectCount: 0,
     runGeneration: 0,
     runCancelRequested: false,
@@ -1763,7 +1778,7 @@ body.calc-running .help-ftr{opacity:.75;}
     { kind: "lr", btnId: "opt-lr", inputId: "param-lr", label: "@LR", integer: true, position: true },
     { kind: "lin-k", btnId: "opt-lin-k", inputId: "param-lin-k", label: "@K", position: true },
     { kind: "strict", btnId: "opt-strict", inputId: "param-strict", label: "@Strict", integer: true, position: true },
-    { kind: "reverse", btnId: "opt-reverse", inputId: "param-reverse", label: "@@Reverse", boolean: true, position: true },
+    { kind: "reverse", btnId: "opt-reverse", inputId: "param-reverse", label: "Реверс", boolean: true, position: true },
     { kind: "p-sl", btnId: "opt-stopper-sl", inputId: "stopper-sl-mult", label: "@@SL" },
     { kind: "p-tp", btnId: "opt-stopper-tp", inputId: "stopper-tp-mult", label: "@@TP" },
     { kind: "p-atr", btnId: "opt-stopper-atr", inputId: "stopper-atr-len", label: "@@ATR", integer: true },
@@ -1939,8 +1954,11 @@ body.calc-running .help-ftr{opacity:.75;}
       logicCatalogVersion: 4,
       logicLabels: { ...state.logicLabels },
       randomPriceShift: !!$("random-price-shift")?.checked
-    };
-  }
+    },
+    charts: {
+      equityDeltaPeriod: equityDeltaPeriod()
+    }
+  };
 
   /** Сохранение: `saveConfig`. */
   function saveConfig() {
@@ -2044,6 +2062,7 @@ body.calc-running .help-ftr{opacity:.75;}
       if ($("random-price-shift")) {
         $("random-price-shift").checked = !!cfg.randomPriceShift;
       }
+      setValueIfExists("equity-delta-period", cfg.charts?.equityDeltaPeriod || "1d");
       if (cfg.prefixes?.stocks != null && String(cfg.prefixes.stocks).trim()) {
         setValueIfExists("prefix-stocks", cfg.prefixes.stocks);
       }
@@ -4292,7 +4311,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Подсветка блока @@ и кнопки реверса. */
   function reverseToggleLabel(on) {
-    return on ? "Отключить реверс (покупка ↔ продажа)" : "Включить реверс (покупка ↔ продажа)";
+    return on ? "Выключить" : "Включить";
   }
 
   /** Включение/выключение @@Reverse с подтверждением (кнопка и галочка live). */
@@ -4307,8 +4326,8 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     const liveActive = typeof isLiveTradingSession === "function" && isLiveTradingSession();
     let msg = want
-      ? "Подтверждаете включение @@Reverse?\n\nИзменится только вход: Op long → short, Op short → long. Выход по Cl и SL/TP — как у открытой позиции (без реверса)."
-      : "Отключить @@Reverse?\n\nВход вернётся к обычному: Op long → long, Op short → short.";
+      ? "Подтверждаете включение реверса (покупка ↔ продажа)?\n\nИзменится только вход: Op long → short, Op short → long. Выход по Cl и SL/TP — как у открытой позиции (без реверса)."
+      : "Отключить реверс (покупка ↔ продажа)?\n\nВход вернётся к обычному: Op long → long, Op short → short.";
     if (liveActive) {
       msg += "\n\nВ live-режиме сначала будут закрыты все открытые позиции по рынку, затем переключится реверс.";
     }
@@ -4436,6 +4455,13 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!box) return;
     box.innerHTML = html ?? "";
     box.hidden = !String(box.innerHTML).trim();
+    if (box.id === "calc-chart-equity") syncEquityDeltaBar(!box.hidden);
+  }
+
+  /** Показать/скрыть выбор периода приращения FINRESP над equity-графиками. */
+  function syncEquityDeltaBar(show) {
+    const bar = $("chart-equity-delta-bar");
+    if (bar) bar.hidden = !show;
   }
 
   /** Отрисовка элемента live-панели: `renderFromParams`. */
@@ -5237,13 +5263,112 @@ ${markers}
     return [...byIdx.entries()].map(([idx, label]) => ({ idx, kind: "config", scope: "config", label }));
   }
 
+  const EQUITY_DELTA_PERIOD_OPTIONS = [
+    { id: "1h", label: "1 час" },
+    { id: "4h", label: "4 часа" },
+    { id: "1d", label: "1 день" },
+    { id: "1w", label: "1 неделя" },
+    { id: "1mo", label: "1 месяц" }
+  ];
+
+  /** Период ступенчатого приращения FINRESP на equity-графиках. */
+  function equityDeltaPeriod() {
+    return $("equity-delta-period")?.value || "1d";
+  }
+
+  /** Разбор времени свечи equity (МСК, YYYY-MM-DD HH:MM:SS). */
+  function parseEquityRowTimeParts(time) {
+    const s = String(time || "").trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!m) return null;
+    return {
+      y: +m[1],
+      mo: +m[2],
+      d: +m[3],
+      h: +(m[4] ?? 0),
+      mi: +(m[5] ?? 0)
+    };
+  }
+
+  /** Ключ периода для бакетизации приращения equity. */
+  function equityPeriodBucketKey(time, periodId) {
+    const p = parseEquityRowTimeParts(time);
+    if (!p) return String(time || "");
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const dayKey = `${p.y}-${pad2(p.mo)}-${pad2(p.d)}`;
+    if (periodId === "1mo") return `${p.y}-${pad2(p.mo)}`;
+    if (periodId === "1d") return dayKey;
+    if (periodId === "1w") {
+      const dt = new Date(Date.UTC(p.y, p.mo - 1, p.d));
+      const dow = dt.getUTCDay();
+      const toMon = (dow + 6) % 7;
+      dt.setUTCDate(dt.getUTCDate() - toMon);
+      return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+    }
+    if (periodId === "4h") return `${dayKey} ${pad2(Math.floor(p.h / 4) * 4)}`;
+    return `${dayKey} ${pad2(p.h)}`;
+  }
+
+  /** Ступенчатый ряд: приращение equity внутри каждого периода (конец − начало бакета). */
+  function buildEquityIncrementSeries(rows, periodId) {
+    if (!rows?.length) return [];
+    const out = new Array(rows.length).fill(0);
+    let bucketStart = 0;
+    let curKey = equityPeriodBucketKey(rows[0]?.time, periodId);
+    const flush = (endIdx) => {
+      const eqStart = rows[bucketStart]?.eq ?? 0;
+      const eqEnd = rows[endIdx]?.eq ?? eqStart;
+      const inc = eqEnd - eqStart;
+      for (let j = bucketStart; j <= endIdx; j++) out[j] = inc;
+    };
+    for (let i = 1; i < rows.length; i++) {
+      const k = equityPeriodBucketKey(rows[i]?.time, periodId);
+      if (k !== curKey) {
+        flush(i - 1);
+        bucketStart = i;
+        curKey = k;
+      }
+    }
+    flush(rows.length - 1);
+    return out;
+  }
+
+  /** Полилиния ступенчатого ряда (горизонталь внутри периода, скачок на границе). */
+  function buildStepPolylinePoints(rows, values, x, yFn) {
+    if (!rows.length) return "";
+    const parts = [];
+    for (let i = 0; i < rows.length; i++) {
+      const xi = x(i);
+      const yi = yFn(values[i] ?? 0);
+      if (i === 0) parts.push(`${xi.toFixed(1)},${yi.toFixed(1)}`);
+      else {
+        const yPrev = yFn(values[i - 1] ?? 0);
+        parts.push(`${xi.toFixed(1)},${yPrev.toFixed(1)}`);
+        parts.push(`${xi.toFixed(1)},${yi.toFixed(1)}`);
+      }
+    }
+    return parts.join(" ");
+  }
+
+  /** Перерисовка equity из кэша (смена периода приращения без пересчёта). */
+  function redrawEquityChartsFromCache() {
+    const ctx = state.lastEquityChartCtx;
+    if (!ctx) return;
+    renderEquityChartsFromData(ctx.a, ctx.b, ctx.data, ctx.drawOpts);
+  }
+
   /** Построение структуры данных: `buildEquityChartSvg`. */
   function buildEquityChartSvg(rows, finresp, title, compact, strokeColor, chartDecor) {
     if (!rows?.length) return "";
     const decor = chartDecor || { vLines: [], modeRegions: [] };
+    const periodId = decor.incrementPeriod || equityDeltaPeriod();
+    const incSeries = decor.showIncrement === false ? null : buildEquityIncrementSeries(rows, periodId);
+    const hasInc = !!incSeries?.length;
     const w = 820;
     const h = compact ? 190 : 240;
-    const left = 72, right = 28, top = 26, bottom = 58;
+    const left = 72;
+    const right = hasInc ? 58 : 28;
+    const top = 26, bottom = 58;
     const plotW = w - left - right;
     const plotH = h - top - bottom;
     const vals = rows.map((r) => r?.eq).filter((v) => v != null);
@@ -5284,6 +5409,32 @@ ${markers}
     const zeroLine = zeroY
       ? `<line x1="${left}" y1="${zeroY}" x2="${w - right}" y2="${zeroY}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" opacity=".7"/>`
       : "";
+    let incLine = "";
+    let incYLabels = "";
+    let incAxisLabel = "";
+    let incZeroLine = "";
+    if (hasInc) {
+      let incMin = Math.min(...incSeries, 0);
+      let incMax = Math.max(...incSeries, 0);
+      if (incMin === incMax) {
+        incMin -= 1;
+        incMax += 1;
+      }
+      const incPad = Math.max((incMax - incMin) * 0.12, 1);
+      const incLo = incMin - incPad;
+      const incHi = incMax + incPad;
+      const yInc = (v) => top + (incHi - v) * plotH / (incHi - incLo);
+      const incTicks = niceTicks(incLo, incHi, 4);
+      incYLabels = incTicks.map((v) =>
+        `<text x="${w - right + 10}" y="${(yInc(v) + 3.5).toFixed(1)}" text-anchor="start" font-size="9" fill="#7c3aed" font-family="Consolas,monospace">${axisPrice(v)}</text>`).join("");
+      if (incLo < 0 && incHi > 0) {
+        const iz = yInc(0).toFixed(1);
+        incZeroLine = `<line x1="${left}" y1="${iz}" x2="${w - right}" y2="${iz}" stroke="#c4b5fd" stroke-width="1" stroke-dasharray="3 5" opacity=".85"/>`;
+      }
+      const incOpacity = faded ? 0.5 : 0.92;
+      incLine = `<polyline fill="none" stroke="#7c3aed" stroke-width="${compact ? 1.7 : 2.1}" stroke-linejoin="round" opacity="${incOpacity}" points="${buildStepPolylinePoints(rows, incSeries, x, yInc)}"/>`;
+      incAxisLabel = `<text x="${w - 4}" y="${top - 8}" text-anchor="end" font-size="10" fill="#7c3aed" font-weight="600">Δ, ₽</text>`;
+    }
     const strokeW = decor.strokeW ?? (compact ? 1.8 : 2.2);
     const configLines = buildStopVLines(decor.vLines || [], x, top, h - bottom);
     const modeBands = buildModeRegionBands(rows, decor.modeRegions, x, top, h - bottom);
@@ -5293,20 +5444,25 @@ ${markers}
     const modeLegend = decor.modeRegions?.length
       ? " · зелёная область — песочница · розовая — реальная торговля"
       : "";
+    const periodLabel = EQUITY_DELTA_PERIOD_OPTIONS.find((o) => o.id === periodId)?.label || periodId;
+    const incLegend = hasInc ? ` · ступенька Δ — приращение за ${periodLabel}` : "";
     const caption = decor.caption ?? (faded
       ? "Справочный equity (логика не участвует в торговле / сумме)"
-      : `Equity по выбранным логикам${configLegend}${modeLegend}`);
+      : `Equity по выбранным логикам${configLegend}${modeLegend}${incLegend}`);
     const finLabelSize = decor.prominentFin ? (compact ? 14 : 16) : (compact ? 12 : 14);
     return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}">
 <rect width="${w}" height="${h}" fill="#fff"/>
 ${modeBands}
-${gridH}${gridV}${zeroLine}${configLines}
+${gridH}${gridV}${zeroLine}${incZeroLine}${configLines}
 <line x1="${left}" y1="${top}" x2="${left}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
 <line x1="${left}" y1="${h - bottom}" x2="${w - right}" y2="${h - bottom}" stroke="#94a3b8" stroke-width="1.2"/>
-${yLabels}${xLabels}
+${hasInc ? `<line x1="${w - right}" y1="${top}" x2="${w - right}" y2="${h - bottom}" stroke="#c4b5fd" stroke-width="1" opacity=".9"/>` : ""}
+${yLabels}${xLabels}${incYLabels}
 <text x="${left - 10}" y="${top - 8}" text-anchor="end" font-size="10" fill="#475569" font-weight="600">Equity, ₽</text>
+${incAxisLabel}
 <text x="${(left + w - right) / 2}" y="${h - 1}" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">Время</text>
 <polyline fill="none" stroke="${color}" stroke-width="${strokeW}" opacity="${lineOpacity}"${dashLine} points="${eqLine}"/>
+${incLine}
 ${pointDot}
 <text x="${w - right - 4}" y="${top + 12}" text-anchor="end" fill="${finColor}" font-size="${finLabelSize}" font-weight="700" font-family="Consolas,monospace" opacity="${lineOpacity}">FINRESP ${fmt(finresp)} ₽</text>
 <text x="${left + 4}" y="${top + 12}" font-size="9" fill="#64748b">${caption}</text>
@@ -5384,10 +5540,12 @@ ${pointDot}
     const box = $("calc-chart-equity");
     if (!box) return;
     if (liveSession && !state.packs.length) {
+      state.lastEquityChartCtx = null;
       drawLiveEquityPlaceholders();
       return;
     }
     if (!state.packs.length) {
+      state.lastEquityChartCtx = null;
       syncChartBox(box, "");
       return;
     }
@@ -5396,14 +5554,18 @@ ${pointDot}
     const selectedSet = new Set(activeKeys);
 
     if (!data) {
+      state.lastEquityChartCtx = null;
       syncChartBox(box, "");
       return;
     }
 
+    state.lastEquityChartCtx = { a, b, data, drawOpts: opts };
+    const incPeriod = equityDeltaPeriod();
     const { runs, times } = data;
     const hasFinrespSource = !!finrespEquityRowsForChart(a, b, times);
     const hasPerLogicRuns = catalogKeys.some((key) => runs[key]?.rows?.length);
     if (!hasPerLogicRuns && !hasFinrespSource) {
+      state.lastEquityChartCtx = null;
       syncChartBox(box, !activeKeys.length
         ? `<p class="note">Выберите хотя бы одну логику в списке «Логика» для equity.</p>`
         : "");
@@ -5433,12 +5595,16 @@ ${pointDot}
       ),
       prominentFin: true,
       strokeW: 2.8,
+      incrementPeriod: incPeriod,
       caption: "Equity портфеля — совпадает с FINRESP Σ в блоке результатов"
     };
-    const decorBase = chartDecorFromRows(
-      refRows.length ? refRows : totalRows,
-      configMarkersForRows(totalRows)
-    );
+    const decorBase = {
+      ...chartDecorFromRows(
+        refRows.length ? refRows : totalRows,
+        configMarkersForRows(totalRows)
+      ),
+      incrementPeriod: incPeriod
+    };
 
     const logicBlocks = catalogKeys.map((key) => {
       const selected = selectedSet.has(key);
@@ -5456,7 +5622,7 @@ ${pointDot}
         const wrapClass = selected ? "chart-mini" : "chart-mini chart-mini--inactive";
         return `<div class="${wrapClass}"><p class="chart-sec-title">${heading}</p>${absentNote}<div class="chart-mini-empty">Нет свечей в live-сессии</div></div>`;
       }
-      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected };
+      const decor = { ...chartDecorFromRows(rows, configMarkersForRows(rows)), faded: !selected, incrementPeriod: incPeriod };
       const fin = rows.at(-1).eq;
       const lineColor = selected ? equityLogicColor(key) : undefined;
       const svg = buildEquityChartSvg(rows, fin, `Equity ${key}`, true, lineColor, decor);
@@ -5491,6 +5657,7 @@ ${finrespSvg}
         ...decorBase,
         dashed: true,
         strokeW: 2.6,
+        incrementPeriod: incPeriod,
         caption: "Справочно: каждая логика отдельно, кривые складываются · без портф. Stopper"
       };
       const totalSvg = buildEquityChartSvg(
@@ -5795,7 +5962,7 @@ ${referenceBlock}
     if (stopper?.events?.length) status += ` | Stopper: ${stopper.events.length} сраб.`;
     else if (stopperConfig().useSl || stopperConfig().useTp) status += " | Stopper вкл.";
     if (randomPriceShiftEnabled()) status += " | сдвиг индикаторов ±0,1%";
-    if (params().Reverse) status += " | @@Reverse вкл.";
+    if (params().Reverse) status += " | Реверс вкл.";
     if (opts.optimNote) {
       const bestLabel = optimValueLabel(state.optim.active, state.optim.bestValue);
       status += ` | Опт. ${opts.optimNote}: FINRESP ${fmt(agg.finresp)} ₽ | лучшее ${bestLabel} → ${fmt(state.optim.bestFinresp)} ₽`;
@@ -6329,6 +6496,10 @@ ${referenceBlock}
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("param-reverse-toggle")?.addEventListener("click", toggleReverseInteractive);
+  $("equity-delta-period")?.addEventListener("change", () => {
+    saveConfig();
+    redrawEquityChartsFromCache();
+  });
   ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
