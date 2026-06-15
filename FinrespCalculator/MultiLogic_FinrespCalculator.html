@@ -352,7 +352,8 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-trade-history-panel .trade-source-cell{max-width:9rem;font-size:.76rem;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .live-trade-history-subhead td{padding:.45rem .35rem .2rem;font-size:.72rem;font-weight:700;color:#64748b;border-bottom:1px solid var(--border);background:#f8fafc;}
 .live-trading-panel--sandbox .live-trading-stat b{color:#166534;}
-.live-trading-panel--sandbox .live-trading-stat-commission span{color:#15803d;}
+.live-trading-stat-commission span,
+.calc-metric-commission span{color:#b91c1c;}
 .live-trading-panel--sandbox.live-trading-panel--active{
   border:4px solid #15803d;
   background:linear-gradient(180deg,#d1fae5 0%,#ecfdf5 38%,#f0fdf4 100%);
@@ -461,7 +462,6 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .live-trading-panel--sandbox .live-trading-stat-free-cash span{color:#14532d;}
 .live-trading-stats-hint{grid-column:1/-1;margin:0;font-size:.78rem;color:#6b7280;line-height:1.45;}
 .live-trading-stat-free-cash span.live-cash-negative{color:#b91c1c;}
-.live-trading-stat-commission span{color:#b91c1c;}
 .live-trading-stat-finresult span.live-fin-positive{color:#047857;}
 .live-trading-stat-finresult span.live-fin-negative{color:#b91c1c;}
 .live-trading-panel--sandbox .live-trading-stat-finresult span.live-fin-positive{color:#15803d;}
@@ -1128,11 +1128,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-live-finresp-metrics"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-commission-red"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-live-finresp-metrics"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-commission-red"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-live-finresp-metrics"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-commission-red"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1149,7 +1149,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-live-finresp-metrics";
+  const CALC_PAGE_VERSION = "2026-06-15-commission-red";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -2391,10 +2391,9 @@ body.calc-running .help-ftr{opacity:.75;}
     if (!el) return;
     if (!Number.isFinite(commission) || commission <= 0) {
       el.textContent = "0";
-      el.style.color = "";
-      return;
+    } else {
+      el.textContent = `−${fmt(commission)} ₽`;
     }
-    el.textContent = `−${fmt(commission)} ₽`;
     el.style.color = "#b91c1c";
   }
 

@@ -3834,11 +3834,10 @@
     if (cp) {
       if (!Number.isFinite(state.live.commissionPaid) || state.live.commissionPaid <= 0) {
         cp.textContent = "0";
-        cp.style.color = "";
       } else {
-        cp.textContent = `-${fmt(state.live.commissionPaid, 2)}`;
-        cp.style.color = isLiveSandbox() ? "#15803d" : "#b91c1c";
+        cp.textContent = `−${fmt(state.live.commissionPaid, 2)}`;
       }
+      cp.style.color = "#b91c1c";
     }
     checkSandboxPortfolioStopperNotify();
   }
