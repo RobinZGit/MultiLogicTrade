@@ -10,14 +10,27 @@ h1{font-size:1.45rem;margin-bottom:.5rem}
 a{color:#1d4ed8}
 ul{padding-left:1.25rem}
 code{background:#f3f4f6;padding:.1rem .35rem;border-radius:4px;font-size:.92em}
+.note{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;font-size:.95rem;margin:1rem 0}
+.note strong{display:block;margin-bottom:.35rem}
 </style>
 </head>
 <body>
 <h1>MultiLogicTrade</h1>
 <p>FINRESP-калькулятор, реальная и фейковая торговля T-Bank, справки MultiLogic.</p>
-<p><strong>Локально:</strong> не открывайте HTML двойным кликом (<code>file://</code>) — MOEX не загрузится.
-Запустите <code>serve-calculator.ps1</code> в корне репозитория (откроется <code>http://127.0.0.1:8765/MultiLogic_FinrespCalculator.html</code>).
+
+<p class="note"><strong>Онлайн (ПК, планшет, телефон)</strong>
+<a href="https://robinzgit.github.io/MultiLogicTrade/FinrespCalculator/MultiLogic_FinrespCalculator.html">калькулятор на GitHub Pages</a>
+· <a href="https://robinzgit.github.io/MultiLogicTrade/FinrespCalculator/MultiLogic_FinrespCalculator_Help.html">справка</a>
+— не нужен zip и локальный сервер.</p>
+
+<p><strong>Локально на ПК:</strong> не открывайте HTML двойным кликом (<code>file://</code>) — MOEX не загрузится.
+Запустите <code>serve-calculator.ps1</code> в корне репозитория (откроется <code>http://127.0.0.1:8765/…</code>).
 Через <code>file://</code> работают песочница и T-Bank, но не загрузка свечей с MOEX.</p>
+
+<p class="note"><strong>Android / планшет (скачанный zip)</strong>
+Не открывайте <code>index.html</code> из «Загрузок» — адрес <code>content://…</code> даёт браузеру только один файл, ссылки на <code>FinrespCalculator/…</code> не работают.
+Распакуйте папку и откройте сайт по <code>http://</code>: Termux — <code>cd ~/storage/downloads/MultiLogicTrade</code>, затем <code>python -m http.server 8765</code>, в Chrome — <code>http://127.0.0.1:8765/index.html</code>.
+Или используйте <a href="https://robinzgit.github.io/MultiLogicTrade/index.html">эту страницу на GitHub Pages</a>.</p>
 <ul>
 <li><a href="FinrespCalculator/MultiLogic_FinrespCalculator.html"><strong>Калькулятор FINRESP</strong></a> · <a href="FinrespCalculator/MultiLogic_FinrespCalculator_Help.html">справка</a></li>
 <li><a href="MultiLogic_LogicHelp.html">Справка по роботу — строки логики L1…L5</a></li>

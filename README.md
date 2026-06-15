@@ -22,4 +22,7 @@
 
 ## GitHub Pages
 
-https://robinzgit.github.io/MultiLogicTrade/FinrespCalculator/MultiLogic_FinrespCalculator.html
+- Индекс: https://robinzgit.github.io/MultiLogicTrade/index.html  
+- Калькулятор: https://robinzgit.github.io/MultiLogicTrade/FinrespCalculator/MultiLogic_FinrespCalculator.html  
+
+На **Android / планшете** не открывайте скачанный `index.html` из файлового менеджера (`content://…` — ссылки на соседние HTML не работают). Используйте GitHub Pages или локальный HTTP (`python -m http.server` в Termux в распакованной папке).
