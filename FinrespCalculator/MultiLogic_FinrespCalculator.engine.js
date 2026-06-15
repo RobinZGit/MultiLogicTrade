@@ -265,12 +265,14 @@
       "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
     sma_corridor_anti:
       "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
-    CM:
+    CML:
       "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) "
       + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
-      + "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo))) "
+      + SLTP + "Note(custom-sma-CM-long-LinReg)",
+    CMS:
+      "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo))) "
       + "Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) OnFlip(Close))) "
-      + SLTP + "Note(custom-sma-CM-trend-LinReg)",
+      + SLTP + "Note(custom-sma-CM-short-LinReg)",
   };
 
   const BUILTIN_META = [
@@ -318,10 +320,16 @@
       key: "sma_corridor_anti"
     },
     {
-      id: "CM",
-      name: "Стратегия CM (CMA + LinReg на входе) — тренд, Op/Cl long+short",
+      id: "CML",
+      name: "CM — лонг (CMA + LinReg на Op, Cl по CMA)",
       type: "logic_line",
-      key: "CM"
+      key: "CML"
+    },
+    {
+      id: "CMS",
+      name: "CM — шорт (CMA + LinReg на Op, Cl по CMA)",
+      type: "logic_line",
+      key: "CMS"
     }
   ];
 

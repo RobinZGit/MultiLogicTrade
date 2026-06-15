@@ -235,7 +235,9 @@ button.extra-params-toggle{border:none;background:none;padding:0;font:inherit;cu
 .logic-grid{display:grid;gap:.75rem;margin-top:.75rem;}
 .logic-grid label{font-size:.82rem;color:var(--muted);display:block;margin-bottom:.2rem;}
 .logic-grid textarea{width:100%;min-height:4.5rem;font-family:Consolas,monospace;font-size:.78rem;padding:.45rem;border:1px solid var(--border);border-radius:6px;resize:vertical;}
-.logic-line-row{margin-bottom:.65rem;}
+.logic-line-row--cm-long{border-left:3px solid #16a34a;padding-left:.55rem;}
+.logic-line-row--cm-short{border-left:3px solid #dc2626;padding-left:.55rem;}
+.logic-catalog-cm-head{margin:.85rem 0 .35rem;font-size:.9rem;font-weight:600;color:#374151;border-bottom:1px solid var(--border);padding-bottom:.25rem;}
 .logic-line-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.35rem .65rem;margin-bottom:.25rem;}
 .logic-line-head label{font-size:.82rem;color:var(--muted);margin:0;font-weight:600;}
 .logic-line-actions{display:flex;flex-wrap:wrap;gap:.35rem;}
@@ -1155,11 +1157,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-random-trades-logic"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-cml-cms-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-random-trades-logic"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-cml-cms-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-random-trades-logic"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-cml-cms-split"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1176,7 +1178,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-cm-linreg-op";
+  const CALC_PAGE_VERSION = "2026-06-15-cml-cms-split";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -1720,7 +1722,7 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
-    logicLineKeys: ["RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CM", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLineKeys: ["RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CML", "CMS", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
@@ -3933,9 +3935,34 @@ body.calc-running .help-ftr{opacity:.75;}
   // === Выбор логики (calc-logic, множественный) ===
 
   const DEFAULT_LOGIC_LINE_KEYS = [
-    "RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CM",
+    "RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CML", "CMS",
     "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
   ];
+
+  /** CM (long+short) → CML + CMS в каталоге; старый ключ CM скрываем. */
+  function migrateCmLogicKeys() {
+    if (!Array.isArray(state.hiddenLogicKeys)) state.hiddenLogicKeys = [];
+    const hidden = new Set(state.hiddenLogicKeys);
+    if (!hidden.has("CM")) {
+      state.hiddenLogicKeys.push("CM");
+      hidden.add("CM");
+    }
+    if (!Array.isArray(state.logicLineKeys)) return;
+    const cmIdx = state.logicLineKeys.indexOf("CM");
+    if (cmIdx < 0) return;
+    const insert = [];
+    if (!state.logicLineKeys.includes("CML")) insert.push("CML");
+    if (!state.logicLineKeys.includes("CMS")) insert.push("CMS");
+    state.logicLineKeys.splice(cmIdx, 1, ...insert);
+    if (state.customLines?.CM && E.DEFAULT_LOGIC_LINES) {
+      if (!state.customLines.CML && E.DEFAULT_LOGIC_LINES.CML) {
+        state.customLines.CML = E.DEFAULT_LOGIC_LINES.CML;
+      }
+      if (!state.customLines.CMS && E.DEFAULT_LOGIC_LINES.CMS) {
+        state.customLines.CMS = E.DEFAULT_LOGIC_LINES.CMS;
+      }
+    }
+  }
 
   /** Подпись логики в списке выбора. */
   function logicDisplayName(id) {
@@ -3949,6 +3976,7 @@ body.calc-running .help-ftr{opacity:.75;}
   function ensureLogicLineKeys() {
     if (!Array.isArray(state.hiddenLogicKeys)) state.hiddenLogicKeys = [];
     const hidden = new Set(state.hiddenLogicKeys);
+    migrateCmLogicKeys();
     if (!Array.isArray(state.logicLineKeys) || !state.logicLineKeys.length) {
       state.logicLineKeys = DEFAULT_LOGIC_LINE_KEYS.filter((k) => !hidden.has(k));
     }
@@ -4714,8 +4742,10 @@ body.calc-running .help-ftr{opacity:.75;}
       text = "SMA(…;Spread=…)(Trend|Anti): коридор ±K×ATR вокруг SMA; внутри — без сделок. K в строке (напр. 1ATR) или @SmaCorridor из поля «Коридор SMA».";
     } else if (/CMA\s*\([^)]*Vol/i.test(line)) {
       text = "CMA(…;P=…;Vol)(Ab|Bl): объём ∝ |Close−CMA|; веса (price/Σprice)^@CmaPow, Σвесов=1.";
-    } else if (/Op\s*\(\s*Long\s*\(\s*CMA/i.test(line) || /Op\s*\(\s*Short\s*\(\s*CMA/i.test(line)) {
-      text = "CM (CMA + LinReg на Op): long — выше CMA (Ab) и AbUp; short — ниже CMA (Bl) и BlLo; Cl — только CMA + OnFlip(Close). Нужны CMA и LinReg.";
+    } else if (/Op\s*\(\s*Long\s*\(\s*CMA/i.test(line)) {
+      text = "CML: long — выше CMA (Ab) и LinReg AbUp; Cl — ниже CMA (Bl) + OnFlip(Close). Нужны CMA и LinReg.";
+    } else if (/Op\s*\(\s*Short\s*\(\s*CMA/i.test(line)) {
+      text = "CMS: short — ниже CMA (Bl) и LinReg BlLo; Cl — выше CMA (Ab) + OnFlip(Close). Нужны CMA и LinReg.";
     } else if (/SMA\s*\([^)]*Vol/i.test(line)) {
       text = "SMA(…;Vol)(Ab|Bl): объём сделки ∝ |Close−SMA|; Ab — покупка выше SMA, Bl — ниже. SL/TP — @SL / @TP.";
     } else if (line.trim()) {
@@ -4746,9 +4776,19 @@ body.calc-running .help-ftr{opacity:.75;}
     const box = $("logic-lines");
     if (!box) return;
     box.innerHTML = "";
+    let cmCatalogHead = false;
     for (const key of state.logicLineKeys) {
+      if ((key === "CML" || key === "CMS") && !cmCatalogHead) {
+        const sec = document.createElement("p");
+        sec.className = "logic-catalog-cm-head";
+        sec.textContent = "Стратегия CM (CMA + LinReg) — отдельно лонг и шорт";
+        box.appendChild(sec);
+        cmCatalogHead = true;
+      }
       const wrap = document.createElement("div");
-      wrap.className = "logic-line-row";
+      wrap.className = "logic-line-row"
+        + (key === "CML" ? " logic-line-row--cm-long" : "")
+        + (key === "CMS" ? " logic-line-row--cm-short" : "");
       const head = document.createElement("div");
       head.className = "logic-line-head";
       const label = document.createElement("label");
@@ -5414,6 +5454,8 @@ ${markers}
     L2: "#d97706",
     L3: "#7c3aed",
     L4: "#0891b2",
+    CML: "#16a34a",
+    CMS: "#dc2626",
     sma_below: "#0d9488",
     sma_above: "#ea580c",
     sma_corridor_trend: "#4f46e5",
