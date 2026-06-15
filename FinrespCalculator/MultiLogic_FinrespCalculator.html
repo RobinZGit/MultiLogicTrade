@@ -1179,11 +1179,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-avg-price-selected"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-avg-price-title"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-avg-price-selected"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-avg-price-title"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-avg-price-selected"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-avg-price-title"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1200,7 +1200,8 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-avg-price-selected";
+  const CALC_PAGE_VERSION = "2026-06-15-avg-price-title";
+  const AVG_PRICE_CHART_TITLE = "Средневзвешенная цена выбранных инструментов (Close)";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = {
     LOAD_MAX: 33,
@@ -6131,18 +6132,18 @@ ${pointDot}
     const decor = {
       priceChart: true,
       strokeW: 2.5,
-      chartTitleLines: [`Средняя цена close · ${nInst} выбр.`],
+      chartTitleLines: [`${AVG_PRICE_CHART_TITLE} · ${nInst} выбр.`],
       caption: "Σ close выбранных в списке бумаг / N (простое среднее)"
     };
     const svg = buildEquityChartSvg(
-      rows, last, "Средняя цена выбранных инструментов", false, "#0d9488", decor
+      rows, last, AVG_PRICE_CHART_TITLE, false, "#0d9488", decor
     );
     if (!svg) return "";
     const instNote = rows.at(-1).instCount < nInst
       ? ` На последней свече данных: ${rows.at(-1).instCount}/${nInst} инстр.`
       : "";
     return `<div class="chart-equity-avg-price" data-equity-copy-block>
-${equityChartCopyHeaderHtml(`<p class="chart-sec-title">Средневзвешенная цена рынка (close)</p>`)}
+${equityChartCopyHeaderHtml(`<p class="chart-sec-title">${AVG_PRICE_CHART_TITLE}</p>`)}
 <p class="chart-equity-avg-price-hint">По бумагам из списка «Акции (фьючерсы)» выше: 1, 2 или все выбранные — среднее арифметическое close на свече.${instNote}</p>
 ${svg}
 </div>`;

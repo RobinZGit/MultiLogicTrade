@@ -5158,7 +5158,7 @@
 <div class="chart-mini-empty">Equity = FINRESP Σ — ждём свечи…</div>
 </div>`;
     const avgPriceBlock = `<div class="chart-equity-avg-price">
-<p class="chart-sec-title">Средневзвешенная цена рынка (close)</p>
+<p class="chart-sec-title">Средневзвешенная цена выбранных инструментов (Close)</p>
 <div class="chart-mini-empty">Средняя цена close — ждём свечи…</div>
 </div>`;
     const referenceBlock = activeKeys.length
