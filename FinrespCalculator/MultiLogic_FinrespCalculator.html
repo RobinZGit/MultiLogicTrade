@@ -894,6 +894,12 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="calc-field"><label for="param-sma-corridor"><span class="at-token">@SmaCorridor</span> — SMA, ×ATR</label>
 <input id="param-sma-corridor" type="number" value="1" min="0" max="50" step="any" title="Ширина коридора в ATR вокруг SMA, не в свечах">
 </div>
+<div class="calc-field"><label for="param-cma-len"><span class="at-token">@CmaLen</span> — CMA, свечей</label>
+<input id="param-cma-len" type="number" value="100" min="2" max="500" step="1" title="Длина окна кастомной SMA (CMA)">
+</div>
+<div class="calc-field"><label for="param-cma-pow"><span class="at-token">@CmaPow</span> — CMA, степень</label>
+<input id="param-cma-pow" type="number" value="1" min="0" max="10" step="0.1" title="Степень веса price^P (0 = обычная SMA, 1 = взвешивание ценой)">
+</div>
 <div class="calc-field"><label for="param-lr"><span class="at-token">@LR</span> — LinReg, свечей</label>
 <div class="calc-field-opt-row">
 <input id="param-lr" type="number" value="20" min="2" max="500" step="1" title="Длина линейной регрессии в барах (свечах), не в ATR">
@@ -910,7 +916,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <button class="calc-btn calc-btn-secondary calc-opt-btn" type="button" id="opt-strict" data-opt="strict">⚡</button>
 </div></div>
 </div>
-<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@ — если в строке: @SL=2 @TP=6 ATR=14 @SmaCorridor=1 @LR=20 @K=2×ATR @Strict=3</p>
+<p class="calc-at-summary" id="calc-at-summary" aria-live="polite">@ — если в строке: @SL=2 @TP=6 ATR=14 @SmaCorridor=1 @CmaLen=100 @CmaPow=1 @LR=20 @K=2×ATR @Strict=3</p>
 </div>
 </div>
 <p class="note" id="position-sl-hint" hidden></p>
@@ -1166,7 +1172,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-default-commission-0-02";
+  const CALC_PAGE_VERSION = "2026-06-15-cma-indicator-cm-logic";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -1703,7 +1709,7 @@ body.calc-running .help-ftr{opacity:.75;}
     bulkMode: null,
     movedSlider: "end",
     customLines: { ...E.DEFAULT_LOGIC_LINES },
-    logicLineKeys: ["RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
+    logicLineKeys: ["RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CM", "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"],
     pendingLogicImportKey: null,
     hiddenLogicKeys: [],
     logicLabels: {},
@@ -1981,6 +1987,8 @@ body.calc-running .help-ftr{opacity:.75;}
         tp: $("param-tp")?.value || "",
         atrSl: $("param-atr-sl")?.value || "",
         smaCorridor: $("param-sma-corridor")?.value || "",
+        cmaLen: $("param-cma-len")?.value || "",
+        cmaPow: $("param-cma-pow")?.value || "",
         lr: $("param-lr")?.value || "",
         linK: $("param-lin-k")?.value || "",
         strict: $("param-strict")?.value || "",
@@ -2099,6 +2107,8 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-tp", cfg.params?.tp);
       setValueIfExists("param-atr-sl", cfg.params?.atrSl);
       setValueIfExists("param-sma-corridor", cfg.params?.smaCorridor);
+      setValueIfExists("param-cma-len", cfg.params?.cmaLen);
+      setValueIfExists("param-cma-pow", cfg.params?.cmaPow);
       setValueIfExists("param-lr", cfg.params?.lr);
       setValueIfExists("param-lin-k", cfg.params?.linK);
       setValueIfExists("param-strict", cfg.params?.strict);
@@ -2608,6 +2618,8 @@ body.calc-running .help-ftr{opacity:.75;}
       TP: tp,
       slTpAtrLen: atrLen,
       smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr),
+      CmaLen: Math.max(2, Math.round(+$("param-cma-len").value || E.DEFAULT_PARAMS.CmaLen)),
+      CmaPow: Math.max(0, +$("param-cma-pow").value ?? E.DEFAULT_PARAMS.CmaPow),
       Reverse: !!$("param-reverse")?.checked
     };
   }
@@ -3846,7 +3858,7 @@ body.calc-running .help-ftr{opacity:.75;}
   // === Выбор логики (calc-logic, множественный) ===
 
   const DEFAULT_LOGIC_LINE_KEYS = [
-    "RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4",
+    "RND", "TBC", "UT", "UCT", "L5", "L1", "L2", "L3", "L4", "CM",
     "sma_below", "sma_above", "sma_corridor_trend", "sma_corridor_anti"
   ];
 
@@ -4113,6 +4125,8 @@ body.calc-running .help-ftr{opacity:.75;}
     setValueIfExists("param-tp", p.TP);
     setValueIfExists("param-atr-sl", p.slTpAtrLen);
     setValueIfExists("param-sma-corridor", p.smaCorridorAtr);
+    setValueIfExists("param-cma-len", p.CmaLen);
+    setValueIfExists("param-cma-pow", p.CmaPow);
     setValueIfExists("param-lr", p.LR);
     setValueIfExists("param-lin-k", p.LinK);
     setValueIfExists("param-strict", p.Strict);
@@ -4603,11 +4617,13 @@ body.calc-running .help-ftr{opacity:.75;}
     const tp = $("param-tp")?.value ?? "—";
     const atr = $("param-atr-sl")?.value ?? "—";
     const sma = $("param-sma-corridor")?.value ?? "—";
+    const cmaLen = $("param-cma-len")?.value ?? "—";
+    const cmaPow = $("param-cma-pow")?.value ?? "—";
     const lr = $("param-lr")?.value ?? "—";
     const k = $("param-lin-k")?.value ?? "—";
     const strict = $("param-strict")?.value ?? "—";
     logicEl.textContent =
-      `@ — если в строке: @SL=${sl} @TP=${tp} ATR=${atr} @SmaCorridor=${sma} @LR=${lr} @K=${k}×ATR @Strict=${strict}`;
+      `@ — если в строке: @SL=${sl} @TP=${tp} ATR=${atr} @SmaCorridor=${sma} @CmaLen=${cmaLen} @CmaPow=${cmaPow} @LR=${lr} @K=${k}×ATR @Strict=${strict}`;
   }
 
   /** Обновление: `updatePositionSlHint`. */
@@ -4621,6 +4637,8 @@ body.calc-running .help-ftr{opacity:.75;}
       text = `Выбрано ${ids.length} логик: на вход проверяются по порядку сверху вниз; выход и SL/TP — у логики, открывшей позицию.`;
     } else if (/SMA\s*\([^)]*(?:Spread|Corridor)=/i.test(line)) {
       text = "SMA(…;Spread=…)(Trend|Anti): коридор ±K×ATR вокруг SMA; внутри — без сделок. K в строке (напр. 1ATR) или @SmaCorridor из поля «Коридор SMA».";
+    } else if (/CMA\s*\([^)]*Vol/i.test(line)) {
+      text = "CMA(…;P=…;Vol)(Ab|Bl): объём ∝ |Close−CMA|; веса price^@CmaPow; Ab — лонг выше / шорт ниже CMA. @CmaLen — длина, @CmaPow — степень.";
     } else if (/SMA\s*\([^)]*Vol/i.test(line)) {
       text = "SMA(…;Vol)(Ab|Bl): объём сделки ∝ |Close−SMA|; Ab — покупка выше SMA, Bl — ниже. SL/TP — @SL / @TP.";
     } else if (line.trim()) {
@@ -6960,7 +6978,7 @@ ${referenceBlock}
   bindEquityChartCopyUi();
   bindEquityDeltaPeriodUi();
   bindLogicPickerUi();
-  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
+  ["vol-value", "vol-deposit", "vol-maxpos", "commission-pct", "param-sl", "param-tp", "param-atr-sl", "param-lr", "param-lin-k", "param-sma-corridor", "param-cma-len", "param-cma-pow", "param-strict", "stopper-sl-mult", "stopper-tp-mult", "stopper-atr-len", "stopper-ref"].forEach((id) => {
     $(id).addEventListener("change", () => { syncLeverageDisplay(); renderFromParams(); saveConfig(); });
     $(id).addEventListener("input", () => { syncLeverageDisplay(); renderFromParams(); });
   });

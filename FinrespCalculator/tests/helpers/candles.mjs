@@ -25,6 +25,7 @@ export function makeCandles(sec, count, options) {
 
 export const ALL_INDICATORS = {
   sma: true,
+  cma: true,
   atr: true,
   stoch: true,
   linreg: true,

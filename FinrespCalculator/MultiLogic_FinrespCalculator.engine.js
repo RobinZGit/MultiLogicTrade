@@ -15,7 +15,7 @@
 (function (root) {
   "use strict";
 
-  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 6, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, Reverse: false };
+  const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 6, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, CmaLen: 100, CmaPow: 1, Reverse: false };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
     useSl: false,
@@ -58,6 +58,7 @@
 
   const INDICATOR_OPTIONS = Object.freeze([
     { key: "sma", label: "SMA" },
+    { key: "cma", label: "CMA" },
     { key: "atr", label: "ATR" },
     { key: "stoch", label: "Stoch" },
     { key: "linreg", label: "LinReg" },
@@ -263,7 +264,9 @@
     sma_corridor_trend:
       "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
     sma_corridor_anti:
-      "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)"
+      "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
+    CM:
+      "CMA(@CmaLen;P=@CmaPow;Vol)(Ab) SL[@SL] TP[@TP] Note(custom-sma-CM)"
   };
 
   const BUILTIN_META = [
@@ -309,6 +312,12 @@
       name: "SMA-эталон, анти-тренд — коридор ATR",
       type: "logic_line",
       key: "sma_corridor_anti"
+    },
+    {
+      id: "CM",
+      name: "Стратегия с кастомным SMA (CM) — лонг выше / шорт ниже CMA",
+      type: "logic_line",
+      key: "CM"
     }
   ];
 
@@ -324,6 +333,8 @@
       .replace(/@SL/g, String(p.SL))
       .replace(/@TP/g, String(p.TP))
       .replace(/@SmaCorridor/g, String(p.smaCorridorAtr ?? DEFAULT_PARAMS.smaCorridorAtr))
+      .replace(/@CmaLen/g, String(p.CmaLen ?? DEFAULT_PARAMS.CmaLen))
+      .replace(/@CmaPow/g, String(p.CmaPow ?? DEFAULT_PARAMS.CmaPow))
       .replace(/@K/g, String(p.LinK ?? DEFAULT_PARAMS.LinK));
   }
 
@@ -738,6 +749,24 @@
     };
   }
 
+  /** CMA: взвешенная средняя цен; веса = price^power (power=0 → SMA). */
+  function cmaSeries(closes, len, power) {
+    const out = new Array(closes.length).fill(null);
+    const pow = Number.isFinite(+power) ? +power : 0;
+    for (let i = len - 1; i < closes.length; i++) {
+      let sumW = 0;
+      let sumWP = 0;
+      for (let j = i - len + 1; j <= i; j++) {
+        const price = closes[j];
+        const w = Math.pow(Math.max(price, 1e-12), pow);
+        sumW += w;
+        sumWP += w * price;
+      }
+      out[i] = sumW > 0 ? sumWP / sumW : null;
+    }
+    return out;
+  }
+
   /** Подпрограмма `smaSeries`. */
   function smaSeries(closes, len) {
     const out = new Array(closes.length).fill(null);
@@ -942,6 +971,7 @@
       this.candles = candles;
       this.closes = candles.map((c) => c.close);
       this._sma = new Map();
+      this._cma = new Map();
       this._atr = new Map();
       this._stoch = new Map();
       this._linreg = new Map();
@@ -957,6 +987,12 @@
       const k = len;
       if (!this._sma.has(k)) this._sma.set(k, smaSeries(this.closes, len));
       return this._sma.get(k);
+    }
+    cma(len, power) {
+      const pow = Number.isFinite(+power) ? +power : 0;
+      const key = `${len};${pow}`;
+      if (!this._cma.has(key)) this._cma.set(key, cmaSeries(this.closes, len, pow));
+      return this._cma.get(key);
     }
     atr(len) {
       if (!this._atr.has(len)) this._atr.set(len, atrSeries(this.candles, len));
@@ -1033,6 +1069,14 @@
     if (kind === "sma") {
       const len = pm.L || parseInt(atom.params, 10) || 100;
       const v = cache.sma(len)[idx];
+      if (v == null) return false;
+      return evalThreshold(sigU === "AB" ? "AB" : sigU === "BL" ? "BL" : sig, v, close);
+    }
+    if (kind === "cma") {
+      const len = pm.L || parseInt(atom.params, 10) || 100;
+      const powRaw = pm.P ?? pm.Pow ?? pm.pow ?? pm.Deg ?? pm.deg;
+      const pow = powRaw != null && powRaw !== "" ? parseFloat(powRaw) : 1;
+      const v = cache.cma(len, Number.isFinite(pow) ? pow : 1)[idx];
       if (v == null) return false;
       return evalThreshold(sigU === "AB" ? "AB" : sigU === "BL" ? "BL" : sig, v, close);
     }
@@ -1599,6 +1643,12 @@
         const len = pm.L || parseInt(atom.params, 10) || 100;
         ind.sma = cache.sma(len)[idx];
       }
+      if (kind === "cma") {
+        const len = pm.L || parseInt(atom.params, 10) || 100;
+        const powRaw = pm.P ?? pm.Pow ?? pm.pow ?? pm.Deg ?? pm.deg;
+        const pow = powRaw != null && powRaw !== "" ? parseFloat(powRaw) : 1;
+        ind.cma = cache.cma(len, Number.isFinite(pow) ? pow : 1)[idx];
+      }
       if (kind === "linreg") {
         const len = pm.L || parseInt(atom.params, 10) || 20;
         const kMult = parseLinRegK(pm);
@@ -1654,6 +1704,10 @@
             ind.smaLower = s - band;
           }
         }
+      } else if (spec.type === "cma_spread") {
+        const len = spec.cmaLen || 100;
+        const pow = Number.isFinite(spec.cmaPow) ? spec.cmaPow : 1;
+        ind.cma = cache.cma(len, pow)[idx];
       }
     }
     return ind;
@@ -2125,6 +2179,139 @@
     };
   }
 
+  /** CMA-эталон с Vol: объём ∝ |Close−CMA|, Ab — лонг выше / шорт ниже. */
+  function simulateCmaSpread(candles, cmaLen, cmaPow, side, startIdx, endIdx, volConfig, options) {
+    const opts = options || {};
+    const signalCandles = opts.signalCandles || candles;
+    const slAtr = Math.max(0, Number(opts.slAtr) || 0);
+    const tpAtr = Math.max(0, Number(opts.tpAtr) || 0);
+    const atrLen = Math.max(2, Number(opts.slTpAtrLen) || DEFAULT_PARAMS.slTpAtrLen);
+    const useStops = slAtr > 0 || tpAtr > 0;
+    const cache = opts.indicatorCache || new IndicatorCache(signalCandles);
+    const atrSlTp = useStops ? cache.atr(atrLen) : null;
+    const signalCloses = signalCandles.map((c) => c.close);
+    const tradeCloses = candles.map((c) => c.close);
+    const pow = Number.isFinite(+cmaPow) ? +cmaPow : 1;
+    const cma = cache.cma(cmaLen, pow);
+    const initial = opts.initial || {};
+    let cash = initial.cash || 0;
+    let pos = initial.pos || 0;
+    let entryPrice = initial.entryPrice ?? null;
+    let commissionPaid = initial.commission || 0;
+    let buys = 0;
+    let sells = 0;
+    const rows = [];
+    const capAt = (price) => maxAbsPositionAt(price, volConfig, opts);
+    const from = Math.max(0, startIdx);
+    const to = Math.min(endIdx, candles.length - 1);
+    const barSpan = Math.max(1, to - from + 1);
+    const barProgressStep = opts.yieldUi
+      ? Math.max(1, Math.floor(barSpan / 24))
+      : Math.max(1, Math.floor(barSpan / 48));
+
+    for (let i = from; i <= to; i++) {
+      const candle = candles[i];
+      if (!candle) continue;
+      if (typeof opts.onProgress === "function" && (i === to || (i - from) % barProgressStep === 0)) {
+        opts.onProgress(i - from + 1, barSpan, candles[i]?.time);
+      }
+      const price = tradeCloses[i];
+      const signalPrice = signalCloses[i];
+      const s = cma[i];
+      let buy = 0;
+      let sell = 0;
+      let posStop = null;
+      const posBefore = pos;
+
+      if (useStops && pos !== 0 && entryPrice != null) {
+        const a = atrSlTp[i];
+        if (a != null && a > 0) {
+          let hit = false;
+          if (pos > 0) {
+            if (slAtr > 0 && price <= entryPrice - slAtr * a) {
+              hit = true;
+              posStop = "sl";
+            } else if (tpAtr > 0 && price >= entryPrice + tpAtr * a) {
+              hit = true;
+              posStop = "tp";
+            }
+          } else {
+            if (slAtr > 0 && price >= entryPrice + slAtr * a) {
+              hit = true;
+              posStop = "sl";
+            } else if (tpAtr > 0 && price <= entryPrice - tpAtr * a) {
+              hit = true;
+              posStop = "tp";
+            }
+          }
+          if (hit) {
+            cash += pos * price;
+            const comm = commissionCost(price, Math.abs(pos), volConfig);
+            cash -= comm;
+            commissionPaid += comm;
+            sells += Math.abs(pos);
+            pos = 0;
+            entryPrice = null;
+            portfolioSyncPos(opts, 0, price);
+          }
+        }
+      }
+
+      if (s != null) {
+        const d = signalPrice - s;
+        const scale = calcTradeVolume(price, volConfig) / Math.max(price, 1e-9);
+        if (side === "above") {
+          buy = Math.max(d, 0) * scale;
+          sell = Math.max(-d, 0) * scale;
+        } else {
+          buy = Math.max(-d, 0) * scale;
+          sell = Math.max(d, 0) * scale;
+        }
+        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
+        const cap = capAt(price);
+        if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
+        if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
+        cash += price * (sell - buy);
+        const comm = commissionCost(price, buy + sell, volConfig);
+        cash -= comm;
+        commissionPaid += comm;
+        pos += buy - sell;
+        buys += buy;
+        sells += sell;
+        portfolioSyncPos(opts, pos, price);
+      }
+
+      if (pos === 0) {
+        entryPrice = null;
+      } else if (posBefore === 0 || Math.sign(pos) !== Math.sign(posBefore)) {
+        entryPrice = price;
+      }
+
+      pushRow(rows, candle, {
+        cma: s,
+        buy,
+        sell,
+        posStop,
+        cash,
+        pos,
+        commission: commissionPaid,
+        eq: cash + pos * (price || 0),
+        ...smaTradeMarkerFields(posBefore, pos, posStop, opts.logicId)
+      }, posBefore);
+    }
+    const last = rows.at(-1);
+    return {
+      rows,
+      finresp: last?.eq ?? 0,
+      cash: last?.cash ?? 0,
+      pos: last?.pos ?? 0,
+      commission: commissionPaid,
+      buys,
+      sells,
+      entryPrice
+    };
+  }
+
   /**
    * SMA-эталон с коридором ±K×ATR вокруг SMA.
    * trend: выше верхней границы — покупка, ниже нижней — продажа (объём ∝ выход за коридор).
@@ -2352,6 +2539,35 @@
     return null;
   }
 
+  /** CMA(N;P=…;Vol)(Ab|Bl) → объёмная модель вокруг кастомной SMA. */
+  function parseCmaModelFromLine(line) {
+    const raw = String(line || "");
+    const atomRe = /CMA\s*\(\s*([^)]*)\s*\)\s*\(\s*([^)]+)\s*\)/gi;
+    let m;
+    while ((m = atomRe.exec(raw)) !== null) {
+      const paramsRaw = m[1];
+      const pm = parseParamsMap(paramsRaw);
+      const sigU = m[2].replace(/\s+/g, "").toUpperCase();
+      const cmaLen = Math.max(
+        1,
+        Number(pm.L) || (/^\d+/.test(String(paramsRaw).trim()) ? parseInt(paramsRaw, 10) : 100)
+      );
+      const powRaw = pm.P ?? pm.Pow ?? pm.pow ?? pm.Deg ?? pm.deg;
+      const cmaPow = powRaw != null && powRaw !== "" ? parseFloat(powRaw) : 1;
+
+      if (/(\bVol\b|Vol=)/i.test(paramsRaw)) {
+        const side = sigU === "BL" || sigU === "VOLBL" ? "below" : "above";
+        return {
+          model: "spread",
+          cmaLen,
+          cmaPow: Number.isFinite(cmaPow) ? cmaPow : 1,
+          side
+        };
+      }
+    }
+    return null;
+  }
+
   /**
    * Одна логика каталога → spec для runOnCandles (Op/Cl или SMA с Vol / Spread).
    */
@@ -2392,6 +2608,22 @@
         tpAtr: Math.max(0, Number(p.TP) || 0),
         slTpAtrLen: Math.max(2, Number(p.slTpAtrLen) || DEFAULT_PARAMS.slTpAtrLen),
         disabled: !isIndicatorEnabled(indicatorSelection, "sma") || !isIndicatorEnabled(indicatorSelection, "atr"),
+        indicators: normalizeIndicatorSelection(indicatorSelection)
+      };
+    }
+    const cmaModel = parseCmaModelFromLine(line);
+    if (cmaModel?.model === "spread") {
+      return {
+        type: "cma_spread",
+        cmaLen: cmaModel.cmaLen,
+        cmaPow: cmaModel.cmaPow,
+        side: cmaModel.side,
+        line,
+        logicId,
+        slAtr: Math.max(0, Number(p.SL) || 0),
+        tpAtr: Math.max(0, Number(p.TP) || 0),
+        slTpAtrLen: Math.max(2, Number(p.slTpAtrLen) || DEFAULT_PARAMS.slTpAtrLen),
+        disabled: !isIndicatorEnabled(indicatorSelection, "cma"),
         indicators: normalizeIndicatorSelection(indicatorSelection)
       };
     }
@@ -2467,13 +2699,14 @@
       if (reverse) sig = swapEntryExecHits(sig);
       return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
     }
-    if (spec.type === "sma_spread" || spec.type === "sma_corridor") {
+    if (spec.type === "sma_spread" || spec.type === "sma_corridor" || spec.type === "cma_spread") {
       const last = opts.lastRow || {};
       return {
         ready: true,
         barIndex: b,
         logicId: spec.logicId || spec.type,
-        smaModel: true,
+        smaModel: spec.type !== "cma_spread",
+        cmaModel: spec.type === "cma_spread",
         lastBuy: +last.buy || 0,
         lastSell: +last.sell || 0
       };
@@ -2511,6 +2744,15 @@
     }
     if (spec.type === "sma_corridor") {
       return simulateSmaCorridor(candles, spec.smaLen, spec.mode, spec.corridorAtr, startIdx, endIdx, vol, {
+        ...opts,
+        logicId: spec.logicId,
+        slAtr: spec.slAtr,
+        tpAtr: spec.tpAtr,
+        slTpAtrLen: spec.slTpAtrLen
+      });
+    }
+    if (spec.type === "cma_spread") {
+      return simulateCmaSpread(candles, spec.cmaLen, spec.cmaPow, spec.side, startIdx, endIdx, vol, {
         ...opts,
         logicId: spec.logicId,
         slAtr: spec.slAtr,
@@ -4674,6 +4916,7 @@
     applyRandomPriceShift,
     RANDOM_PRICE_SHIFT_MAX,
     smaSeries,
+    cmaSeries,
     tradeMarkersFromBar,
     swapEntryExecHits,
     tradeSignalHint,

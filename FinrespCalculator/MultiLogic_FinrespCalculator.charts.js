@@ -8,7 +8,7 @@
 
   const PRICE_KEYS = [
     "high", "low", "open", "close",
-    "sma", "smaUpper", "smaLower",
+    "sma", "smaUpper", "smaLower", "cma",
     "linregUp", "linregDn", "linregMid",
     "bollingerUp", "bollingerDn", "bollingerMid",
     "vwap"
@@ -24,6 +24,7 @@
 
   const IND_LINE = [
     { key: "sma", stroke: "#d97706", width: 1, dash: "5 4", opacity: 0.85, label: "SMA — скользящая средняя" },
+    { key: "cma", stroke: "#c026d3", width: 1, dash: "4 3", opacity: 0.85, label: "CMA — кастомная SMA (веса price^P)" },
     { key: "smaUpper", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75, label: "SMA — верх коридора (±K×ATR)" },
     { key: "smaLower", stroke: "#f59e0b", width: 0.9, dash: "2 4", opacity: 0.75, label: "SMA — низ коридора (±K×ATR)" },
     { key: "linregMid", stroke: "#7c3aed", width: 1, dash: null, opacity: 0.7, label: "LinReg — линия регрессии (центр)" },
