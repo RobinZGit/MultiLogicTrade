@@ -123,6 +123,22 @@ a{color:var(--accent);}
 <p class="note"><span class="delta">δδ</span>(<code>k</code>) — короткая запись многочлена «0…010…0». Свёртки: <span class="delta">δδ</span>(<code>i</code>) <span class="op">*</span> <span class="delta">δδ</span>(<code>j</code>) = <span class="delta">δδ</span>(<code>i+j</code>). Примеры: <span class="delta">δδ</span>(2) = <span class="coef">(0; 0; 1; 0; …)</span>, <span class="delta">δδ</span>(3) = <span class="coef">(0; 0; 0; 1; 0; …)</span>.</p>
 
 <div class="warn">
+<strong>Что такое <span class="delta">δδ</span> (часто читают «дельта-дельта», не «дубль-эль»).</strong>
+<p style="margin:.35rem 0 0">Это <strong>две греческие буквы δ (дельта)</strong> подряд — наша запись <strong>дискретной δ-функции</strong> (импульса Кронекера) по номеру бара.</p>
+<ul style="margin:.4rem 0 0">
+<li><span class="delta">δδ</span>(<code>k</code>) — многочлен-вектор: на позиции <code>k</code> стоит <strong>1</strong>, на всех остальных — <strong>0</strong>. В таблице коэффициенты такого вектора показаны <span class="coef">янтарным</span> цветом: <span class="coef">(0; …; 0; 1; 0; …)</span>.</li>
+<li>Сама буква <span class="delta">δδ</span> в тексте — <strong>фиолетовая</strong> (как в легенде сверху). Не путать с <span class="coef">коэффициентами</span> в скобках — они янтарные, но это просто числа внутри многочлена.</li>
+<li><strong>Зачем:</strong> сдвиг ряда на <code>n</code> баров назад: «взять вчерашнее закрытие» = <span class="mkt">pp</span> <span class="op">*</span> <span class="delta">δδ</span>(1). Разность цен: <span class="mkt">pp</span> − <span class="mkt">pp</span> <span class="op">*</span> <span class="delta">δδ</span>(1).</li>
+<li><strong>Не</strong> латинская <code>ll</code> (Low), <strong>не</strong> операция умножения — только «единичный импульс на баре <code>k</code>».</li>
+</ul>
+<pre class="formula" style="margin-top:.55rem"><span class="delta">δδ</span>(0) = <span class="coef">(1; 0; 0; 0; …)</span>     «только бар 0»
+<span class="delta">δδ</span>(1) = <span class="coef">(0; 1; 0; 0; …)</span>     «только бар 1» — сдвиг на 1
+<span class="delta">δδ</span>(3) = <span class="coef">(0; 0; 0; 1; 0; …)</span>   «только бар 3»
+
+На баре t: коэффициент (<span class="mkt">pp</span> * <span class="delta">δδ</span>(n))<sub>t</sub> = p<sub>t−n</sub>   (цена n баров назад)</pre>
+</div>
+
+<div class="warn">
 <strong>Хвост.</strong> При <span class="poly">ss</span> = <span class="mkt">pp</span> <span class="op">*</span> <span class="poly">ww</span> коэффициенты <code>s₀…s<sub>N−2</sub></code> — неполная свёртка. Пока <strong>не используем</strong>; берём <code>k ≥ N−1</code>.
 </div>
 
@@ -211,11 +227,92 @@ MOM_k = p_k − p_{k−k}</pre>
 
 r_k = m_k / p_{k−k}</pre>
 
-<h2 id="regression">4. LinReg / наклон</h2>
+<h2 id="regression">4. LinReg — линейная регрессия и канал</h2>
 
-<pre class="formula"><span class="poly">ww</span>_LIN = <span class="coef">(w₀; w₁; …; w_{N−1})</span>,   w_j ∝ j − (N−1)/2
+<p>В MultiLogic / калькуляторе: <code>LinReg(@LR; Dev=2)</code> или <code>LinReg(@LR; K=@K)</code> (канал ±K×ATR для UT/UCT). Длина окна <code>N = @LR</code> — в <strong>свечах</strong>. На баре <code>k</code> берём последние <code>N</code> закрытий <code>p_{k−N+1}, …, p_k</code>.</p>
 
-<span class="poly">ss</span>_SLOPE = <span class="mkt">pp</span> * <span class="poly">ww</span>_LIN</pre>
+<h3>4.1. Окно и оси (как в движке)</h3>
+<p>Внутри окна номер бара <code>j = 0 … N−1</code>: <code>j = 0</code> — самая старая свеча в окне, <code>j = N−1</code> — текущая. Цена <code>y_j = p_{k−N+1+j}</code>.</p>
+<pre class="formula">x_j = j                          горизонтальная ось (время внутри окна)
+y_j = p_{k−N+1+j}                вертикаль — Close
+
+Среднее по окну: ȳ_k = (p_{k−N+1} + … + p_k) / N = (<span class="mkt">pp</span> * <span class="poly">ww</span>_SMA)<sub>k</sub>
+<span class="poly">ww</span>_SMA = <span class="coef">(1/N; 1/N; …; 1/N)</span>   длина N</pre>
+
+<h3>4.2. Наклон (первый коэффициент регрессии, slope)</h3>
+<p>Наклон прямой МНК (метод наименьших квадратов) по точкам <code>(j, y_j)</code>:</p>
+<pre class="formula">β_k = [ N·Σ_j (j·y_j) − (Σ_j j)·(Σ_j y_j) ] / [ N·Σ_j j² − (Σ_j j)² ]
+
+В движке: β_k = (N·sumXY − sumX·sumY) / (N·sumXX − sumX·sumX)</pre>
+
+<p>Через <strong>свёртку</strong> с антисимметричными весами (центр окна в <code>(N−1)/2</code>):</p>
+<pre class="formula">x̄ = (N − 1) / 2
+S_xx = Σ_{j=0}^{N−1} (j − x̄)²
+
+<span class="poly">ww</span>_SLOPE = <span class="coef">( w₀; w₁; …; w_{N−1} )</span>,   w_j = (j − x̄) / S_xx
+
+β_k = (<span class="mkt">pp</span> * <span class="poly">ww</span>_SLOPE)<sub>k</sub> = Σ_{j=0}^{N−1} w_j · p_{k−N+1+j}</pre>
+
+<p class="note"><strong>Пример N = 5:</strong> <code>x̄ = 2</code>, <code>S_xx = 10</code>, <span class="poly">ww</span>_SLOPE = <span class="coef">(−0,2; −0,1; 0; 0,1; 0,2)</span>. Положительный β_k — цена в окне в среднем растёт слева направо.</p>
+
+<p>Знак тренда в <code>Regime(LinReg; …)</code>: сравнивают β на текущем баре с β <code>SlopeLb</code> баров назад (не отдельный индикатор, а разность двух наклонов).</p>
+
+<h3>4.3. Уровень линии (второй коэффициент — intercept и значение на текущем баре)</h3>
+<p>Регрессия <code>ŷ_j = α_k + β_k · j</code>. <strong>Intercept</strong> (значение прямой на <code>j = 0</code>, начало окна):</p>
+<pre class="formula">α_k = ȳ_k − β_k · x̄ = ȳ_k − β_k · (N − 1) / 2
+
+Через многочлены:
+α_k = (<span class="mkt">pp</span> * <span class="poly">ww</span>_SMA)<sub>k</sub> − (<span class="mkt">pp</span> * <span class="poly">ww</span>_SLOPE)<sub>k</sub> · (N − 1) / 2</pre>
+
+<p><strong>Центр канала LinReg</strong> на текущем баре — значение прямой на <code>j = N−1</code> (конец окна). В коде это <code>linregMid</code> / <code>c1</code>:</p>
+<pre class="formula">mid_k = α_k + β_k · (N − 1) = ȳ_k + β_k · (N − 1) / 2
+
+<span class="poly">ss</span>_mid = (<span class="mkt">pp</span> * <span class="poly">ww</span>_SMA) + (<span class="mkt">pp</span> * <span class="poly">ww</span>_SLOPE) <span class="op">#</span> <span class="coef">( (N−1)/2; (N−1)/2; … )</span></pre>
+
+<p class="note">Здесь <span class="op">#</span> — <strong>покомпонентное</strong> умножение на константу <code>(N−1)/2</code> в каждой позиции (скаляр размазан по ряду). Сложение <span class="poly">aa</span> + <span class="poly">bb</span> — тоже покомпонентное.</p>
+
+<p>Значение на <strong>начале</strong> окна (для справки): <code>α_k = mid_k − β_k · (N − 1)</code>.</p>
+
+<h3>4.4. Полосы ±Dev (стандартное отклонение остатков)</h3>
+<p>Остаток на точке <code>j</code>: <code>e_j = y_j − (α_k + β_k · j)</code>. В многочленах на баре <code>k</code> для каждого <code>j</code> нужна разность «цена минус подгонка»; компактная запись через подгонку на всём окне:</p>
+<pre class="formula"><span class="poly">ss</span>_fit = … α_k + β_k·j на окне …     (подогнанная прямая по N точкам)
+<span class="poly">ss</span>_res = <span class="mkt">pp</span> − <span class="poly">ss</span>_fit                  остатки (покомпонентно в окне)
+
+σ_k = sqrt( (1/N) · Σ_j e_j² )
+    = sqrt( ( (<span class="poly">ss</span>_res <span class="op">#</span> <span class="poly">ss</span>_res) * <span class="poly">ww</span>_SMA )<sub>k</sub> )</pre>
+
+<p>Границы канала при <code>Dev = 2</code> (как в L1…L5, TBC):</p>
+<pre class="formula"><span class="poly">ss</span>_up = <span class="poly">ss</span>_mid + <span class="coef">(2; 2; …)</span> <span class="op">#</span> <span class="poly">ss</span>_σ
+<span class="poly">ss</span>_lo = <span class="poly">ss</span>_mid − <span class="coef">(2; 2; …)</span> <span class="op">#</span> <span class="poly">ss</span>_σ
+
+AbUp / BlLo в Op/Cl: сравнение <span class="mkt">pp</span> с <span class="poly">ss</span>_up или <span class="poly">ss</span>_lo на баре k</pre>
+
+<h3>4.5. Канал ±K×ATR (UT / UCT)</h3>
+<p>Центр тот же <span class="poly">ss</span>_mid; ширина от ATR (см. §5), не от σ остатков:</p>
+<pre class="formula"><span class="poly">ss</span>_ATR = <span class="poly">rr</span> * <span class="poly">ww</span>_SMA          из §5, длина ATR по параметру индикатора
+
+<span class="poly">ss</span>_up = <span class="poly">ss</span>_mid + <span class="coef">(K; K; …)</span> <span class="op">#</span> <span class="poly">ss</span>_ATR
+<span class="poly">ss</span>_lo = <span class="poly">ss</span>_mid − <span class="coef">(K; K; …)</span> <span class="op">#</span> <span class="poly">ss</span>_ATR</pre>
+
+<p class="note"><code>K = @K</code> в калькуляторе — множитель ATR (по умолчанию 2), не число свечей.</p>
+
+<h3>4.6. Сводка LinReg только через <span class="op">*</span>, <span class="op">#</span>, <span class="op">/#</span>, ±</h3>
+<pre class="formula"><span class="poly">ww</span>_SMA   = <span class="coef">(1/N; …; 1/N)</span>
+<span class="poly">ww</span>_SLOPE = <span class="coef">( (0−x̄)/S_xx; …; (N−1−x̄)/S_xx )</span>,  x̄ = (N−1)/2
+
+β   = <span class="mkt">pp</span> * <span class="poly">ww</span>_SLOPE                         наклон
+ȳ   = <span class="mkt">pp</span> * <span class="poly">ww</span>_SMA                          среднее Close в окне
+mid = ȳ + β <span class="op">#</span> <span class="coef">((N−1)/2; …)</span>              центр LinReg на текущем баре
+σ   = sqrt( ((<span class="mkt">pp</span> − fit) <span class="op">#</span> (<span class="mkt">pp</span> − fit)) * <span class="poly">ww</span>_SMA )   Dev-канал
+up/lo = mid ± Dev <span class="op">#</span> σ   или   mid ± K <span class="op">#</span> <span class="poly">ss</span>_ATR</pre>
+
+<table class="ind">
+<tr><th>Величина</th><th>Смысл в роботе</th><th>Многочлены</th></tr>
+<tr><td>β_k</td><td>наклон тренда в окне</td><td><span class="mkt">pp</span> <span class="op">*</span> <span class="poly">ww</span>_SLOPE</td></tr>
+<tr><td>α_k</td><td>уровень прямой на <code>j=0</code></td><td>ȳ − β·(N−1)/2</td></tr>
+<tr><td>mid_k = linregMid</td><td>центр канала на текущей свече</td><td>ȳ + β·(N−1)/2</td></tr>
+<tr><td>linregUp / linregDn</td><td>верх / низ канала</td><td>mid ± Dev<span class="op">#</span>σ или mid ± K<span class="op">#</span>ATR</td></tr>
+</table>
 
 <h2 id="volatility">5. Волатильность</h2>
 
@@ -407,6 +504,7 @@ F_T = Σ_{k=0..T} p_k·(e_k − b_k) + p_T·Σ_{k=0..T}(b_k − e_k)</pre>
 VWAP:    <span class="poly">ss</span> = (<span class="poly">tt</span> <span class="op">#</span> <span class="mkt">vv</span>) * <span class="coef">(1; 1; …)</span>  <span class="op">/#</span>  (<span class="mkt">vv</span> * <span class="coef">(1; 1; …)</span>)   с сессией
 Сдвиг:   <span class="delta">δδ</span>(<code>n</code>) = <span class="coef">(0; …; 0; 1; 0; …)</span>,   <span class="mkt">pp</span> * <span class="delta">δδ</span>(<code>n</code>)
 Разность: <span class="mkt">pp</span> − <span class="mkt">pp</span> * <span class="delta">δδ</span>(1)
+LinReg:  β = <span class="mkt">pp</span> * <span class="poly">ww</span>_SLOPE;  mid = (<span class="mkt">pp</span> * <span class="poly">ww</span>_SMA) + β <span class="op">#</span> (N−1)/2;  up/lo = mid ± Dev<span class="op">#</span>σ или ± K<span class="op">#</span>ATR
 
 Композ.: <span class="poly">pp</span>(<span class="poly">qq</span>) — подстановка ряда;  <span class="poly">pp</span>(8) = Σ p<sub>k</sub>8<sup>k</sup>;  выборка бара: <span class="poly">pp</span> * <span class="delta">δδ</span>(8)
 
