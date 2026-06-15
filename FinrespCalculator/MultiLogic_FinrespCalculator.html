@@ -1128,11 +1128,11 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
-<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-commission-red"
+<script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-15-equity-delta-label"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-commission-red"
+<script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-15-equity-delta-label"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.chartsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.charts.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
-<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-commission-red"
+<script src="MultiLogic_FinrespCalculator.live.js?v=2026-06-15-equity-delta-label"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.liveFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.live.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script>
 /*
@@ -1149,7 +1149,7 @@ body.calc-running .help-ftr{opacity:.75;}
   window.__mlFinresp = window.__mlFinresp || {};
   window.__mlFinresp.bootPhase = "started";
   window.__mlFinresp.lastBootError = null;
-  const CALC_PAGE_VERSION = "2026-06-15-commission-red";
+  const CALC_PAGE_VERSION = "2026-06-15-equity-delta-label";
   const ML_CONFIG_KEY = "multilogic.finresp.config.v1";
   const CALC_PROGRESS = { LOAD_MAX: 33, FINRESP_START: 33, FINRESP_MAX: 66, CHARTS_START: 88, RUN_MAX: 99 };
   const FINRESP_STALE_MSG = "Параметры изменены — нажмите «Рассчитать».";
@@ -5514,7 +5514,7 @@ ${markers}
       `<option value="${o.value}"${o.value === period ? " selected" : ""}>${o.label}</option>`
     ).join("");
     return `<div class="chart-equity-delta-bar chart-equity-delta-bar--section">
-<label for="equity-delta-period">Показывать превращения FINRESP ниже графика equity за</label>
+<label for="equity-delta-period">Показывать приращение FINRESP-п ниже графика эквити за</label>
 <select id="equity-delta-period" title="Таймфрейм баров Δ (можно отличаться от таймфрейма расчёта)">
 ${opts}
 </select>
@@ -5627,7 +5627,7 @@ ${opts}
     const yPosLbl = `<text x="${left - 8}" y="${(yInc(incHi) + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#94a3b8" font-family="Consolas,monospace">${axisPrice(incHi)}</text>`;
     const yNegLbl = `<text x="${left - 8}" y="${(yInc(incLo) + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#94a3b8" font-family="Consolas,monospace">${axisPrice(incLo)}</text>`;
     const yZeroLbl = `<text x="${left - 8}" y="${(y0 + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="#64748b" font-family="Consolas,monospace">0</text>`;
-    return `<div class="chart-equity-delta-panel${faded ? " chart-equity-delta-panel--inactive" : ""}" role="img" aria-label="Приращение FINRESP за ${periodLabel}">
+    return `<div class="chart-equity-delta-panel${faded ? " chart-equity-delta-panel--inactive" : ""}" role="img" aria-label="Приращение FINRESP-п за ${periodLabel}">
 <svg viewBox="0 0 ${w} ${h}" class="chart-equity-delta-svg">
 <rect width="${w}" height="${h}" fill="${faded ? "#f8fafc" : "#fafafa"}"/>
 ${zeroLine}
