@@ -1087,7 +1087,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="calc-sec-hint" style="margin:.35rem 0 .15rem">Строка статуса — серый текст ниже FINRESP и % годовых (сообщения о загрузке MOEX, ошибках, окне расчёта):</p>
 <p class="calc-status" id="calc-status">Выберите бумаги и логику, нажмите «Рассчитать».</p>
 <div class="calc-reverse-bar" style="margin:.35rem 0 .5rem;gap:.5rem;flex-wrap:wrap">
-<button type="button" class="calc-btn calc-btn-secondary" id="calc-protocol-download" disabled title="Скачать протокол сделок последнего расчёта (JSON)">Скачать протокол (JSON)</button>
+<button type="button" class="calc-btn calc-btn-secondary" id="calc-protocol-download" title="Скачать протокол сделок последнего расчёта (JSON)">Скачать протокол (JSON)</button>
 <button type="button" class="calc-btn calc-btn-secondary" id="calc-protocol-load" title="Загрузить ранее сохранённый протокол (JSON)">Загрузить протокол (JSON)</button>
 <span class="calc-sec-hint" id="calc-protocol-hint" style="margin:0">Протокол появится после «Рассчитать».</span>
 </div>
@@ -4296,7 +4296,10 @@ body.calc-running .help-ftr{opacity:.75;}
     const btn = $("calc-protocol-download");
     const hint = $("calc-protocol-hint");
     const proto = state.lastProtocol || null;
-    if (btn) btn.disabled = !proto;
+    if (btn) {
+      btn.setAttribute("aria-disabled", proto ? "false" : "true");
+      btn.style.opacity = proto ? "" : ".6";
+    }
     if (hint) {
       hint.textContent = proto
         ? `Событий: ${proto.eventsTotal} · формат: ${proto.format}`
