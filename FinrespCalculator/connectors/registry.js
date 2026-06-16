@@ -1,6 +1,7 @@
 /*
  * Live broker connector registry for MultiLogic FINRESP.
  * Loaded BEFORE connector implementations and MultiLogic_FinrespCalculator.live.js.
+ * (Named registry.js — not _registry.js — so GitHub Pages serves the file without Jekyll exclude.)
  */
 (function (root) {
   "use strict";

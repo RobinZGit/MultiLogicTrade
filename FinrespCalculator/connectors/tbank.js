@@ -5,9 +5,23 @@
 (function (root) {
   "use strict";
 
-  const REG = root.MultiLogicFinrespConnectors;
-  if (!REG || typeof REG.register !== "function") {
-    throw new Error("MultiLogicFinrespConnectors registry must load before connectors/tbank.js");
+  const REG = root.MultiLogicFinrespConnectors = root.MultiLogicFinrespConnectors || {};
+  const factories = REG._factories = REG._factories || new Map();
+  if (typeof REG.register !== "function") {
+    REG.register = (id, factory) => {
+      factories.set(String(id), factory);
+      return factory;
+    };
+  }
+  if (typeof REG.get !== "function") {
+    REG.get = (id) => factories.get(String(id));
+  }
+  if (typeof REG.create !== "function") {
+    REG.create = (id, deps) => {
+      const factory = REG.get(id);
+      if (!factory) throw new Error(`Connector not registered: ${id}`);
+      return factory(deps);
+    };
   }
 
   /** @param {object} d */

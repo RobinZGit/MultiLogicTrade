@@ -99,11 +99,30 @@
 
   /** Ленивый экземпляр T-Bank коннектора (connectors/tbank.js). */
   let brokerInst = null;
+
+  function hasConnectors() {
+    const REG = root.MultiLogicFinrespConnectors;
+    return !!(REG && typeof REG.create === "function" && typeof REG.get === "function" && REG.get("tbank"));
+  }
+
+  function fillTbankAccountsFromStorage() {
+    if (!state.tbank.accounts.length) {
+      state.tbank.selectedAccountId = "";
+      return;
+    }
+    const saved = state.tbank.selectedAccountId || safeStorageGet(TBANK_ACCOUNT_STORE_KEY);
+    if (saved && state.tbank.accounts.some((a) => a.id === saved)) {
+      state.tbank.selectedAccountId = saved;
+    } else {
+      state.tbank.selectedAccountId = state.tbank.accounts[0]?.id || "";
+    }
+    if (state.tbank.selectedAccountId) safeStorageSet(TBANK_ACCOUNT_STORE_KEY, state.tbank.selectedAccountId);
+  }
+
   function getBroker() {
     if (!brokerInst) {
-      const REG = root.MultiLogicFinrespConnectors;
-      if (!REG || typeof REG.create !== "function") {
-        throw new Error("MultiLogicFinrespConnectors не загружен — подключите connectors/_registry.js и connectors/tbank.js до live.js");
+      if (!hasConnectors()) {
+        throw new Error("Коннектор T-Bank не загружен (connectors/registry.js и connectors/tbank.js). Обновите страницу Ctrl+F5.");
       }
       brokerInst = REG.create("tbank", {
         state,
@@ -6381,16 +6400,22 @@ ${referenceBlock}
   }
 
   function fillTbankAccounts() {
-    getBroker().fillAccountsFromStorage();
+    if (hasConnectors()) getBroker().fillAccountsFromStorage();
+    else fillTbankAccountsFromStorage();
     syncTbankSettingsState();
   }
 
   function selectedTbankHostId() {
-    return getBroker().selectedHostId();
+    if (hasConnectors()) return getBroker().selectedHostId();
+    const id = safeStorageGet(TBANK_HOST_STORE_KEY) || "tinkoff";
+    return TBANK_REST_BASES[id] ? id : "tinkoff";
   }
 
   function setTbankHostId(id) {
-    return getBroker().setHostId(id);
+    if (hasConnectors()) return getBroker().setHostId(id);
+    const safeId = TBANK_REST_BASES[id] ? id : "tinkoff";
+    safeStorageSet(TBANK_HOST_STORE_KEY, safeId);
+    return safeId;
   }
 
   async function tbankRequest(serviceMethod, body) {
