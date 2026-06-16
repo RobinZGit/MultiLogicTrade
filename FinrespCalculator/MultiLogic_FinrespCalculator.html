@@ -6282,6 +6282,20 @@ ${svg}
     return `<p class="note">Окно ползунков: ${t0} — ${t1} · ${n} свечей. Equity и график цены — одно окно; линия на 0, пока L1 не открыла позицию.</p>`;
   }
 
+  /** Подпись параметров управления для equity-блока. */
+  function equityControlParamsHtml() {
+    const g = $("calc-at-summary-global")?.textContent || "";
+    const l = $("calc-at-summary")?.textContent || "";
+    const gTrim = g.trim();
+    const lTrim = l.trim();
+    if (!gTrim && !lTrim) return "";
+    const esc = escSvgText; // достаточно для HTML текста
+    const parts = [];
+    if (gTrim) parts.push(`<span>@@: <code>${esc(gTrim)}</code></span>`);
+    if (lTrim) parts.push(`<span>@: <code>${esc(lTrim)}</code></span>`);
+    return `<p class="note">Параметры управления: ${parts.join(" · ")}</p>`;
+  }
+
   /** Контекст отрисовки equity или признак раннего выхода. */
   function prepareEquityChartCtx(a, b, data, drawOpts) {
     const opts = drawOpts || {};
@@ -6384,6 +6398,7 @@ ${svg}
         sectionTitle,
         deltaBarHtml: equityDeltaPeriodBarHtml(),
         windowNoteHtml: equityWindowNote(a, b),
+        controlParamsHtml: equityControlParamsHtml(),
         liveNoteHtml,
         markerNoteHtml
       }
@@ -6501,6 +6516,7 @@ ${avgPriceBlock}
 <p class="chart-equity-section-title">${ctx.sectionTitle}</p>
 ${ctx.deltaBarHtml}
 ${ctx.windowNoteHtml}
+${ctx.controlParamsHtml}
 ${ctx.liveNoteHtml}${ctx.markerNoteHtml}
 ${finrespBlock}
 ${referenceBlock}
@@ -6536,6 +6552,7 @@ ${referenceBlock}
     section.insertAdjacentHTML("beforeend", `<p class="chart-equity-section-title">${ctx.sectionTitle}</p>`);
     section.insertAdjacentHTML("beforeend", ctx.deltaBarHtml);
     section.insertAdjacentHTML("beforeend", ctx.windowNoteHtml);
+    if (ctx.controlParamsHtml) section.insertAdjacentHTML("beforeend", ctx.controlParamsHtml);
     if (ctx.liveNoteHtml) section.insertAdjacentHTML("beforeend", ctx.liveNoteHtml);
     if (ctx.markerNoteHtml) section.insertAdjacentHTML("beforeend", ctx.markerNoteHtml);
 
