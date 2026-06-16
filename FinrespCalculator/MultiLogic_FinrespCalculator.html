@@ -1233,6 +1233,21 @@ body.calc-running .help-ftr{opacity:.75;}
   if (sbEl) sbEl.addEventListener("change", onModeChange);
 })();
 </script>
+<script src="indicators/_registry.js?v=dev-indicators-split"
+  onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.indicatorsFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружены файлы индикаторов (indicators/*).\\nПроверьте, что папка indicators лежит рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
+<script src="indicators/_utils.js?v=dev-indicators-split"></script>
+<script src="indicators/sma.js?v=dev-indicators-split"></script>
+<script src="indicators/cma.js?v=dev-indicators-split"></script>
+<script src="indicators/atr.js?v=dev-indicators-split"></script>
+<script src="indicators/stoch.js?v=dev-indicators-split"></script>
+<script src="indicators/tot/totstoch.js?v=dev-indicators-split"></script>
+<script src="indicators/linreg.js?v=dev-indicators-split"></script>
+<script src="indicators/bollinger.js?v=dev-indicators-split"></script>
+<script src="indicators/momentum.js?v=dev-indicators-split"></script>
+<script src="indicators/vwap.js?v=dev-indicators-split"></script>
+<script src="indicators/cci.js?v=dev-indicators-split"></script>
+<script src="indicators/macd.js?v=dev-indicators-split"></script>
+<script src="indicators/rand.js?v=dev-indicators-split"></script>
 <script src="MultiLogic_FinrespCalculator.engine.js?v=2026-06-16-totstoch-v1"
   onerror="window.__mlFinresp=window.__mlFinresp||{};window.__mlFinresp.engineFailed=true;var p=window.__mlFinresp.preboot;if(p){p.setTechPre('ОШИБКА: не загружен MultiLogic_FinrespCalculator.engine.js\\nФайл должен лежать рядом с HTML.\\nCtrl+F5 или запустите serve-calculator.ps1');p.syncLivePanelFromMode();}"></script>
 <script src="MultiLogic_FinrespCalculator.charts.js?v=2026-06-16-totstoch-v1"

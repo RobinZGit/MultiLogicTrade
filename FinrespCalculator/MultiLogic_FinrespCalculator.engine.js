@@ -15,6 +15,16 @@
 (function (root) {
   "use strict";
 
+  // === Indicators registry (loaded from FinrespCalculator/indicators/*.js before this file) ===
+  const IND = root.MultiLogicFinrespIndicators || {};
+  function requireIndFn(name) {
+    const fn = IND[name];
+    if (typeof fn !== "function") {
+      throw new Error(`Indicator function missing: ${name}. Load FinrespCalculator/indicators/*.js before engine.js`);
+    }
+    return fn;
+  }
+
   const DEFAULT_PARAMS = { LR: 20, Strict: 3, SL: 2, TP: 6, slTpAtrLen: 14, smaCorridorAtr: 1, LinK: 2, CmaLen: 100, CmaPow: 1, Reverse: false };
   /** Портфельный stop-loss/take-profit по equity и ATR (defaults). */
   const DEFAULT_STOPPER = {
@@ -594,6 +604,7 @@
 
   /** Детерминированный [0,1) для Rand на баре (воспроизводимый бэктест). */
   function deterministic01(idx, salt) {
+    // Kept for backward compatibility; new path uses indicators/rand.js
     let x = ((idx + 1) * 374761393 + (salt | 0) * 668265263) >>> 0;
     x = Math.imul(x ^ (x >>> 13), 1274126177) >>> 0;
     return (x >>> 0) / 4294967296;
@@ -601,6 +612,9 @@
 
   /** Состояние Rand на баре: попытка входа и сторона long/short. */
   function randBarRoll(cache, idx, pm) {
+    const fn = IND.randBarRoll;
+    if (typeof fn === "function") return fn(cache, idx, pm);
+    // Fallback: legacy local implementation
     if (!cache._randRolls) cache._randRolls = new Map();
     const seed = parseInt(pm.Seed || pm.seed || "0", 10) || 0;
     const pRaw = pm.P ?? pm.p ?? "12%";
@@ -809,225 +823,62 @@
    * P = 0 → равные веса → SMA.
    */
   function cmaSeries(closes, len, power) {
-    const out = new Array(closes.length).fill(null);
-    const pow = Number.isFinite(+power) ? +power : 0;
-    for (let i = len - 1; i < closes.length; i++) {
-      let priceSum = 0;
-      for (let j = i - len + 1; j <= i; j++) {
-        priceSum += Math.max(closes[j], 1e-12);
-      }
-      if (priceSum <= 0) continue;
-      let sumW = 0;
-      let sumWP = 0;
-      for (let j = i - len + 1; j <= i; j++) {
-        const price = Math.max(closes[j], 1e-12);
-        const normPrice = price / priceSum;
-        const rawW = Math.pow(normPrice, pow);
-        sumW += rawW;
-        sumWP += rawW * price;
-      }
-      out[i] = sumW > 0 ? sumWP / sumW : null;
-    }
-    return out;
+    return requireIndFn("cmaSeries")(closes, len, power);
   }
 
   /** Подпрограмма `smaSeries`. */
   function smaSeries(closes, len) {
-    const out = new Array(closes.length).fill(null);
-    let sum = 0;
-    for (let i = 0; i < closes.length; i++) {
-      sum += closes[i];
-      if (i >= len) sum -= closes[i - len];
-      if (i >= len - 1) out[i] = sum / len;
-    }
-    return out;
+    return requireIndFn("smaSeries")(closes, len);
   }
 
   /** Подпрограмма `emaSeries`. */
   function emaSeries(values, len) {
-    const out = new Array(values.length).fill(null);
-    const k = 2 / (len + 1);
-    let prev = null;
-    for (let i = 0; i < values.length; i++) {
-      const v = values[i];
-      if (v == null) continue;
-      if (prev == null) {
-        prev = v;
-        out[i] = v;
-        continue;
-      }
-      prev = v * k + prev * (1 - k);
-      out[i] = prev;
-    }
-    return out;
+    return requireIndFn("emaSeries")(values, len);
   }
 
   /** Подпрограмма `atrSeries`. */
   function atrSeries(candles, len) {
-    const out = new Array(candles.length).fill(null);
-    const trs = [];
-    for (let i = 0; i < candles.length; i++) {
-      const c = candles[i];
-      const prev = i > 0 ? candles[i - 1].close : c.close;
-      trs.push(Math.max(c.high - c.low, Math.abs(c.high - prev), Math.abs(c.low - prev)));
-      if (i >= len - 1) {
-        let s = 0;
-        for (let j = i - len + 1; j <= i; j++) s += trs[j];
-        out[i] = s / len;
-      }
-    }
-    return out;
+    return requireIndFn("atrSeries")(candles, len);
   }
 
   /** Подпрограмма `stochSeries`. */
   function stochSeries(candles, kLen, kSmooth, dSmooth) {
-    const kRaw = new Array(candles.length).fill(null);
-    for (let i = 0; i < candles.length; i++) {
-      if (i < kLen - 1) continue;
-      let lo = Infinity, hi = -Infinity;
-      for (let j = i - kLen + 1; j <= i; j++) {
-        lo = Math.min(lo, candles[j].low);
-        hi = Math.max(hi, candles[j].high);
-      }
-      kRaw[i] = hi === lo ? 50 : (candles[i].close - lo) / (hi - lo) * 100;
-    }
-    const smooth = (src, n) => {
-      const o = new Array(src.length).fill(null);
-      let sum = 0;
-      for (let i = 0; i < src.length; i++) {
-        if (src[i] == null) continue;
-        sum += src[i];
-        if (i >= n) sum -= src[i - n] ?? 0;
-        if (i >= n - 1) o[i] = sum / n;
-      }
-      return o;
-    };
-    const k = smooth(kRaw, kSmooth);
-    const d = smooth(k, dSmooth);
-    return { k, d };
+    return requireIndFn("stochSeries")(candles, kLen, kSmooth, dSmooth);
   }
 
   /** Подпрограмма `linRegSeries`. */
   function linRegSeries(closes, len, devMult) {
-    const up = new Array(closes.length).fill(null);
-    const center = new Array(closes.length).fill(null);
-    const down = new Array(closes.length).fill(null);
-    for (let i = len - 1; i < closes.length; i++) {
-      let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-      for (let j = 0; j < len; j++) {
-        const x = j;
-        const y = closes[i - len + 1 + j];
-        sumX += x; sumY += y; sumXY += x * y; sumXX += x * x;
-      }
-      const slope = (len * sumXY - sumX * sumY) / (len * sumXX - sumX * sumX);
-      const intercept = (sumY - slope * sumX) / len;
-      const c0 = intercept;
-      const c1 = intercept + slope * (len - 1);
-      let varSum = 0;
-      for (let j = 0; j < len; j++) {
-        const y = closes[i - len + 1 + j];
-        const fit = intercept + slope * j;
-        varSum += (y - fit) ** 2;
-      }
-      const std = Math.sqrt(varSum / len);
-      center[i] = c1;
-      up[i] = c1 + devMult * std;
-      down[i] = c1 - devMult * std;
-    }
-    return { up, center, down };
+    return requireIndFn("linRegSeries")(closes, len, devMult);
   }
 
   /** LinReg-центр ± K×ATR (канал Parsa / Universal Counter Trend). */
   function linRegAtrSeries(closes, candles, len, kMult, atrLen) {
-    const center = linRegSeries(closes, len, 2).center;
-    const atr = atrSeries(candles, atrLen);
-    const up = new Array(closes.length).fill(null);
-    const down = new Array(closes.length).fill(null);
-    const k = Math.max(0, Number(kMult) || 0);
-    for (let i = 0; i < closes.length; i++) {
-      const mid = center[i];
-      const a = atr[i];
-      if (mid == null || a == null || k <= 0) continue;
-      up[i] = mid + k * a;
-      down[i] = mid - k * a;
-    }
-    return { up, down, center };
+    return requireIndFn("linRegAtrSeries")(closes, candles, len, kMult, atrLen);
   }
 
   /** Подпрограмма `bollingerSeries`. */
   function bollingerSeries(closes, len, devMult) {
-    const up = new Array(closes.length).fill(null);
-    const center = new Array(closes.length).fill(null);
-    const down = new Array(closes.length).fill(null);
-    for (let i = len - 1; i < closes.length; i++) {
-      let sum = 0;
-      for (let j = i - len + 1; j <= i; j++) sum += closes[j];
-      const ma = sum / len;
-      let varSum = 0;
-      for (let j = i - len + 1; j <= i; j++) varSum += (closes[j] - ma) ** 2;
-      const std = Math.sqrt(varSum / len);
-      center[i] = ma;
-      up[i] = ma + devMult * std;
-      down[i] = ma - devMult * std;
-    }
-    return { up, center, down };
+    return requireIndFn("bollingerSeries")(closes, len, devMult);
   }
 
   /** Подпрограмма `momentumSeries`. */
   function momentumSeries(closes, len) {
-    const out = new Array(closes.length).fill(null);
-    for (let i = len; i < closes.length; i++) {
-      out[i] = closes[i] - closes[i - len];
-    }
-    return out;
+    return requireIndFn("momentumSeries")(closes, len);
   }
 
   /** Подпрограмма `vwapSeries`. */
   function vwapSeries(candles) {
-    const out = new Array(candles.length).fill(null);
-    let pvSum = 0;
-    let volSum = 0;
-    let currentDay = null;
-    for (let i = 0; i < candles.length; i++) {
-      const c = candles[i];
-      const day = String(c.time || "").slice(0, 10);
-      if (day && day !== currentDay) {
-        currentDay = day;
-        pvSum = 0;
-        volSum = 0;
-      }
-      const price = (c.high + c.low + c.close) / 3;
-      const vol = Number.isFinite(c.volume) && c.volume > 0 ? c.volume : 1;
-      pvSum += price * vol;
-      volSum += vol;
-      if (volSum > 0) out[i] = pvSum / volSum;
-    }
-    return out;
+    return requireIndFn("vwapSeries")(candles);
   }
 
   /** Подпрограмма `cciSeries`. */
   function cciSeries(candles, len) {
-    const out = new Array(candles.length).fill(null);
-    const tp = candles.map((c) => (c.high + c.low + c.close) / 3);
-    for (let i = len - 1; i < candles.length; i++) {
-      let s = 0;
-      for (let j = i - len + 1; j <= i; j++) s += tp[j];
-      const ma = s / len;
-      let md = 0;
-      for (let j = i - len + 1; j <= i; j++) md += Math.abs(tp[j] - ma);
-      md /= len;
-      out[i] = md === 0 ? 0 : (tp[i] - ma) / (0.015 * md);
-    }
-    return out;
+    return requireIndFn("cciSeries")(candles, len);
   }
 
   /** Подпрограмма `macdSeries`. */
   function macdSeries(closes, fast, slow, signal) {
-    const ef = emaSeries(closes, fast);
-    const es = emaSeries(closes, slow);
-    const macd = closes.map((_, i) => (ef[i] != null && es[i] != null ? ef[i] - es[i] : null));
-    const sig = emaSeries(macd.map((v) => v ?? 0), signal);
-    return { macd, signal: sig };
+    return requireIndFn("macdSeries")(closes, fast, slow, signal);
   }
 
   class IndicatorCache {
@@ -1072,7 +923,10 @@
     }
     totStoch(k1, k2, d) {
       const key = `${k1}-${k2}-${d}`;
-      if (!this._totStoch.has(key)) this._totStoch.set(key, stochSeries(this.totCandles, k1, k2, d));
+      if (!this._totStoch.has(key)) {
+        const fn = IND.totStochSeries || stochSeries;
+        this._totStoch.set(key, fn(this.totCandles, k1, k2, d));
+      }
       return this._totStoch.get(key);
     }
     linreg(len, dev) {
