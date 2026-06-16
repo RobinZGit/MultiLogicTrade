@@ -1648,14 +1648,15 @@
     return !!(options && (options.reverse || options.preparedRun?.reverse));
   }
 
-  /** Реверс сигналов: инверсия условий Ab/Bl и сравнений (влияет на Op и Cl). */
+  /**
+   * Реверс сигналов: инверсия уровней Ab/Bl, K/CCI/RSI и т.п.
+   * XOR с ReverseSides: инверсия активна, когда включён ровно один из двух реверсов.
+   * Так из FTS получаются 4 уникальных угла: FTS, FTT, FTS_S, FTT_S.
+   */
   function isReverseSignalsEnabled(options) {
-    const raw = !!(options && (options.reverseSignals || options.preparedRun?.reverseSignals));
-    if (!raw) return false;
-    // При включённом ReverseSides инверсия уровней не применяется: иначе два реверса
-    // дают «двойной переворот» (L_ct → S_ct), а не зеркало S_tr (FTT_S для FTS).
-    if (isReverseSidesEnabled(options)) return false;
-    return true;
+    const rawSignals = !!(options && (options.reverseSignals || options.preparedRun?.reverseSignals));
+    const rawSides = isReverseSidesEnabled(options);
+    return rawSignals !== rawSides;
   }
 
   /** Сигналы Op/Cl с учётом @@ReverseSignals и @@ReverseSides (единый порядок для входа и выхода). */
@@ -1842,9 +1843,7 @@
   }
 
   /** Кэш индикаторов по свечам (для обогащения строк графика). */
-  function createIndicatorCache(candles) {
-    return new IndicatorCache(candles);
-  }
+  function createIndicatorCache(candles) { return new IndicatorCache(candles); }
 
   /**
    * Сигналы одной строки логики на баре i: вход long/short (Op) и выход (Cl).
@@ -4909,7 +4908,7 @@
         }
         const unit = workUnits.find((w) => w.pi === pi);
         const signalCandles = signalPacks?.[pi] || candles;
-        const indicatorCache = cfg ? new IndicatorCache(signalCandles) : null;
+        const indicatorCache = cfg ? createIndicatorCache(signalCandles) : null;
         const preparedRun = cfg ? buildGridSimulationPrep(spec, params, vol, indicatorCache, opts) : null;
         const runOpts = {
           sec,

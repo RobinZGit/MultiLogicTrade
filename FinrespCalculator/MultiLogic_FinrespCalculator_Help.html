@@ -153,12 +153,12 @@ th{background:#f8fafc;width:28%;}
 <tr><td><strong>@@SL / @@TP / @@ATR</strong></td><td>Портфельный Stopper по суммарной equity</td></tr>
 </table>
 <p class="note">Сводка <code>@@ReverseSides=… @@MaxPos=… плечо=…</code> под полями @@. Volume% (10% по умолчанию) — в «Доп. параметрах» §9.1.</p>
-<p class="note"><strong>Совместное включение</strong>: при одновременном <code>@@ReverseSides</code> и <code>@@ReverseSignals</code> инверсия уровней (ReverseSignals) <em>не применяется</em> — остаётся только своп сторон. Так из лонг-контртренда (FTS) получается шорт-тренд (FTT_S), а не шорт-контртренд (FTS_S). Таблица для TotStoch-логик:</p>
+<p class="note"><strong>Совместное включение (XOR)</strong>: инверсия уровней (ReverseSignals) применяется, когда включён <em>ровно один</em> из двух реверсов — Signals или Sides, но не оба. Своп сторон (ReverseSides) — когда включён Sides. Порядок: сначала инверсия уровней, затем своп сторон. Таблица для TotStoch-логик из FTS:</p>
 <ul>
-<li>без реверсов → FTS (лонг, контртренд);</li>
-<li>только ReverseSignals → FTT (лонг, тренд);</li>
-<li>только ReverseSides или оба реверса → FTT_S (шорт, тренд);</li>
-<li>ReverseSignals без ReverseSides даёт смену тренд/контртренд на той же стороне; оба реверса вместе эквивалентны только ReverseSides.</li>
+<li>без реверсов → <strong>FTS</strong> (лонг, контртренд);</li>
+<li>только ReverseSignals → <strong>FTT</strong> (лонг, тренд);</li>
+<li>только ReverseSides → <strong>FTS_S</strong> (шорт, контртренд);</li>
+<li>оба реверса → <strong>FTT_S</strong> (шорт, тренд) — «обратная» логика, эквивалент нативной FTT_S.</li>
 </ul>
 
 <h2 id="cache">6. База цен MOEX (доп. параметры)</h2>

@@ -106,31 +106,35 @@ describe("tradeMarkersFromBar", () => {
     assert.equal(swapped.shortClHit, true);
   });
 
-  it("FTS with reverseSides or both reverses matches native FTT_S", () => {
+  it("FTS reverses form four unique corners (XOR signals, sides swap)", () => {
     const candles = makeCandles("GAZP", BAR_COUNT);
     const a = 120;
     const b = candles.length - 1;
     const ind = { stoch: true, totstoch: true };
-    const specFttS = E.resolveLogicSpec("FTT_S", {}, E.DEFAULT_PARAMS, ind);
-    const specFts = E.resolveLogicSpec("FTS", {}, E.DEFAULT_PARAMS, ind);
     const base = { sec: "GAZP" };
-    const native = E.runOnCandles(candles, specFttS, a, b, E.DEFAULT_PARAMS, vol, base);
-    const sidesOnly = E.runOnCandles(candles, specFts, a, b, { ...E.DEFAULT_PARAMS, ReverseSides: true }, vol, {
-      ...base,
-      reverseSides: true
-    });
-    const both = E.runOnCandles(candles, specFts, a, b, {
-      ...E.DEFAULT_PARAMS,
-      ReverseSides: true,
-      ReverseSignals: true
-    }, vol, {
-      ...base,
-      reverseSides: true,
-      reverseSignals: true
-    });
-    assert.equal(sidesOnly.finresp, native.finresp);
-    assert.equal(both.finresp, native.finresp);
-    assert.equal(sidesOnly.buys, native.buys);
-    assert.equal(both.sells, native.sells);
+    const spec = (key) => E.resolveLogicSpec(key, {}, E.DEFAULT_PARAMS, ind);
+    const runFts = (p, o) => E.runOnCandles(candles, spec("FTS"), a, b, p, vol, { ...base, ...o });
+
+    const none = runFts(E.DEFAULT_PARAMS, {});
+    const signalsOnly = runFts({ ...E.DEFAULT_PARAMS, ReverseSignals: true }, { reverseSignals: true });
+    const sidesOnly = runFts({ ...E.DEFAULT_PARAMS, ReverseSides: true }, { reverseSides: true });
+    const both = runFts(
+      { ...E.DEFAULT_PARAMS, ReverseSides: true, ReverseSignals: true },
+      { reverseSides: true, reverseSignals: true }
+    );
+    const nativeFtt = E.runOnCandles(candles, spec("FTT"), a, b, E.DEFAULT_PARAMS, vol, base);
+    const nativeFtsS = E.runOnCandles(candles, spec("FTS_S"), a, b, E.DEFAULT_PARAMS, vol, base);
+    const nativeFttS = E.runOnCandles(candles, spec("FTT_S"), a, b, E.DEFAULT_PARAMS, vol, base);
+
+    assert.equal(none.finresp, E.runOnCandles(candles, spec("FTS"), a, b, E.DEFAULT_PARAMS, vol, base).finresp);
+    assert.equal(signalsOnly.finresp, nativeFtt.finresp);
+    assert.equal(sidesOnly.finresp, nativeFtsS.finresp);
+    assert.equal(both.finresp, nativeFttS.finresp);
+    assert.notEqual(none.finresp, signalsOnly.finresp);
+    assert.notEqual(none.finresp, sidesOnly.finresp);
+    assert.notEqual(none.finresp, both.finresp);
+    assert.notEqual(signalsOnly.finresp, sidesOnly.finresp);
+    assert.notEqual(signalsOnly.finresp, both.finresp);
+    assert.notEqual(sidesOnly.finresp, both.finresp);
   });
 });
