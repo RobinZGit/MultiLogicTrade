@@ -1071,7 +1071,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
 </div>
 
-<div class="calc-result-hero" aria-label="Итог FINRESP">
+<div class="calc-result-hero" id="calc-result-hero" aria-label="Итог FINRESP">
 <div class="calc-metric-primary calc-metric-finresp"><b>FINRESP Σ (с комиссией)</b><span id="calc-finresp">—</span></div>
 <div class="calc-metric-primary calc-metric-gross"><b title="Сумма FINRESP и комиссий — справочно, не складывать с FINRESP">До комиссий (справочно)</b><span id="calc-finresp-gross">—</span></div>
 <div class="calc-metric-primary calc-metric-commission"><b title="Уже вычтены из FINRESP выше">Комиссии (в FINRESP)</b><span id="calc-commission">—</span></div>
@@ -3278,7 +3278,7 @@ body.calc-running .help-ftr{opacity:.75;}
 
   /** Подпрограмма: после расчёта прокрутить к блоку FINRESP/результатов. */
   function scrollResultsIntoView() {
-    const el = $("finresp-calc");
+    const el = $("calc-result-hero") || $("finresp-calc");
     if (!el || typeof el.scrollIntoView !== "function") return;
     el.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
   }
