@@ -217,172 +217,17 @@
     return false;
   }
 
-  const TREND_REGIME =
-    "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;OnFlip=Close;Entry=MatchSide) ";
-  const BOKOVIK_REGIME =
-    "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close;Entry=FlatOnly) ";
-  const TBC_REGIME =
-    "Strict(@Strict) Regime(LinReg;L=@LR;Dev=2;SlopeLb=3;SlopeDead=0.05%;OnFlip=Close) ";
-  const UCT_REGIME =
-    "Strict(@Strict) Regime(LinReg;L=@LR;SlopeLb=3;OnFlip=Close) ";
-  const SLTP = " SL[@SL] TP[@TP] ";
+  const LOG_REG = root.MultiLogicFinrespLogics;
+  if (!LOG_REG || typeof LOG_REG.defaultLines !== "function") {
+    throw new Error("MultiLogicFinrespLogics не загружен — подключите logics/*.js перед engine.js");
+  }
+  const DEFAULT_LOGIC_LINES = LOG_REG.defaultLines();
+  const BUILTIN_META = LOG_REG.builtinMeta();
 
-  const DEFAULT_LOGIC_LINES = {
-    RND:
-      "Op(Long(Rand(P=12%)(IsOk))) Op(Short(Rand(P=12%)(IsOk))) SL[1%] TP[5%] Note(Случайные сделки)",
-    TBC: TBC_REGIME +
-      "Op(Long(SMA(100)(Bl) AND Stoch(14-3-3;Lmin=90;Smax=10)(K<=10) AND MACD(12,26,9)(Macd<Sig))) " +
-      "Cl(Long(SMA(100)(Ab) AND Stoch(14-3-3;Lmin=90;Smax=10)(K>=90) AND MACD(12,26,9)(Macd>Sig))) " +
-      SLTP + "Note(test-counter-bokovik)",
-    UT: UCT_REGIME +
-      "Op(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K)(AbLinK))) " +
-      "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) " +
-      "Op(Short(SMA(100)(Bl) AND LinReg(@LR;K=@K)(BlLinK))) " +
-      "Cl(Short(SMA(100)(Ab) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) " +
-      SLTP + "Note(universal-trend)",
-    UCT: UCT_REGIME +
-      "Op(Long(SMA(100)(Bl) AND LinReg(@LR;K=@K)(BlLinK))) " +
-      "Cl(Long(SMA(100)(Ab) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(AbRegK) OnFlip(Close))) " +
-      "Op(Short(SMA(100)(Ab) AND LinReg(@LR;K=@K)(AbLinK))) " +
-      "Cl(Short(SMA(100)(Bl) AND LinReg(@LR;K=@K;Anchor=Open;Drift=RegDrift)(BlRegK) OnFlip(Close))) " +
-      SLTP + "Note(universal-counter-trend)",
-    L1: TREND_REGIME +
-      "Op(Long(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND MACD(12,26,9)(Macd>Sig))) " +
-      "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;Dev=2)(BlLo) AND CCI(20;Lmin=100;Smax=-100)(CCI<=-100) AND MACD(12,26,9)(Macd<Sig)) OnFlip(Close))" +
-      SLTP + "Note(lon-trend)",
-    L2: BOKOVIK_REGIME +
-      "Op(Long(SMA(100)(Ab) AND Stoch(14-3-3;Lmin=90;Smax=10)(K<=10) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND MACD(12,26,9)(Macd>Sig))) " +
-      "Cl(Long(SMA(100)(Bl) AND Stoch(14-3-3;Lmin=90;Smax=10)(K>=90) AND MACD(12,26,9)(Macd<Sig)) OnFlip(Close))" +
-      SLTP + "Note(lon-bokovik)",
-    L3: TREND_REGIME +
-      "Op(Short(SMA(100)(Bl) AND LinReg(@LR;Dev=2)(BlLo) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND CCI(20;Lmin=100;Smax=-100)(CCI<=-100) AND MACD(12,26,9)(Macd<Sig))) " +
-      "Cl(Short(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND MACD(12,26,9)(Macd>Sig)) OnFlip(Close))" +
-      SLTP + "Note(short-trend)",
-    L4: BOKOVIK_REGIME +
-      "Op(Short(SMA(100)(Bl) AND Stoch(14-3-3;Lmin=90;Smax=10)(K>=90) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND MACD(12,26,9)(Macd<Sig))) " +
-      "Cl(Short(SMA(100)(Ab) AND Stoch(14-3-3;Lmin=90;Smax=10)(K<=10) AND MACD(12,26,9)(Macd>Sig)) OnFlip(Close))" +
-      SLTP + "Note(short-bokovik)",
-    L5: TREND_REGIME +
-      "Op(Long(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND Bollinger(20;Dev=2)(AbUp) AND VWAP()(Ab) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND Stoch(14-3-3;Lmin=80;Smax=20)(K>=80) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND Momentum(10)(MOM>0) AND MACD(12,26,9)(Macd>Sig))) " +
-      "Cl(Long(SMA(100)(Bl) AND LinReg(@LR;Dev=2)(BlLo) AND Bollinger(20;Dev=2)(BlLo) AND VWAP()(Bl) AND Stoch(14-3-3;Lmin=80;Smax=20)(K<=20) AND CCI(20;Lmin=100;Smax=-100)(CCI<=-100) AND Momentum(10)(MOM<0) AND MACD(12,26,9)(Macd<Sig)) OnFlip(Close)) " +
-      "Op(Short(SMA(100)(Bl) AND LinReg(@LR;Dev=2)(BlLo) AND Bollinger(20;Dev=2)(BlLo) AND VWAP()(Bl) AND ATR(14;Gr=3%;Lb=5)(GrOk) AND Stoch(14-3-3;Lmin=80;Smax=20)(K<=20) AND CCI(20;Lmin=100;Smax=-100)(CCI<=-100) AND Momentum(10)(MOM<0) AND MACD(12,26,9)(Macd<Sig))) " +
-      "Cl(Short(SMA(100)(Ab) AND LinReg(@LR;Dev=2)(AbUp) AND Bollinger(20;Dev=2)(AbUp) AND VWAP()(Ab) AND Stoch(14-3-3;Lmin=80;Smax=20)(K>=80) AND CCI(20;Lmin=100;Smax=-100)(CCI>=100) AND Momentum(10)(MOM>0) AND MACD(12,26,9)(Macd>Sig)) OnFlip(Close))" +
-      SLTP + "Note(LmaxTrend)",
-    sma_below:
-      "SMA(100;Vol)(Bl) SL[@SL] TP[@TP] Note(SMA-Vol-below)",
-    sma_above:
-      "SMA(100;Vol)(Ab) SL[@SL] TP[@TP] Note(SMA-Vol-above)",
-    sma_corridor_trend:
-      "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
-    sma_corridor_anti:
-      "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
-    FTS:
-      "Op(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
-      + "Cl(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
-      + SLTP + "Note(futures-total-stoch-anti)",
-    FTT:
-      "Op(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
-      + "Cl(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
-      + SLTP + "Note(futures-total-stoch-trend)",
-    FTS_S:
-      "Op(Short(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
-      + "Cl(Short(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
-      + SLTP + "Note(futures-total-stoch-anti-short)",
-    FTT_S:
-      "Op(Short(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
-      + "Cl(Short(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
-      + SLTP + "Note(futures-total-stoch-trend-short)",
-    CML:
-      "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) "
-      + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
-      + SLTP + "Note(custom-sma-CM-long-LinReg)",
-    CMS:
-      "Op(Short(CMA(@CmaLen;P=@CmaPow)(Bl) AND LinReg(@LR;Dev=2)(BlLo))) "
-      + "Cl(Short(CMA(@CmaLen;P=@CmaPow)(Ab) OnFlip(Close))) "
-      + SLTP + "Note(custom-sma-CM-short-LinReg)",
-  };
-
-  const BUILTIN_META = [
-    {
-      id: "RND",
-      name: "Случайные сделки — random long/short, SL 1% / TP 5%",
-      type: "logic_line",
-      key: "RND"
-    },
-    {
-      id: "TBC",
-      name: "TBC — test counter-bokovik (лонг)",
-      type: "logic_line",
-      key: "TBC"
-    },
-    {
-      id: "UT",
-      name: "Universal Trend — LinReg K×ATR + RegDrift",
-      type: "logic_line",
-      key: "UT"
-    },
-    {
-      id: "UCT",
-      name: "Universal Counter Trend — LinReg K×ATR + RegDrift",
-      type: "logic_line",
-      key: "UCT"
-    },
-    { id: "L5", name: "L5 — LmaxTrend, лонг+шорт тренд", type: "logic_line", key: "L5" },
-    { id: "L1", name: "L1 — лонг, тренд", type: "logic_line", key: "L1" },
-    { id: "L2", name: "L2 — лонг, боковик", type: "logic_line", key: "L2" },
-    { id: "L3", name: "L3 — шорт, тренд", type: "logic_line", key: "L3" },
-    { id: "L4", name: "L4 — шорт, боковик", type: "logic_line", key: "L4" },
-    { id: "sma_below", name: "Ниже SMA — объём |Close−SMA|", type: "logic_line", key: "sma_below" },
-    { id: "sma_above", name: "Выше SMA — объём |Close−SMA|", type: "logic_line", key: "sma_above" },
-    {
-      id: "sma_corridor_trend",
-      name: "SMA-эталон, тренд — коридор ATR",
-      type: "logic_line",
-      key: "sma_corridor_trend"
-    },
-    {
-      id: "sma_corridor_anti",
-      name: "SMA-эталон, анти-тренд — коридор ATR",
-      type: "logic_line",
-      key: "sma_corridor_anti"
-    },
-    {
-      id: "FTS",
-      name: "Фьючерс: TotStoch+Stoch (лонг), контртренд 20↔80",
-      type: "logic_line",
-      key: "FTS"
-    },
-    {
-      id: "FTT",
-      name: "Фьючерс: TotStoch+Stoch (лонг), тренд 80↔20",
-      type: "logic_line",
-      key: "FTT"
-    },
-    {
-      id: "FTS_S",
-      name: "Фьючерс: TotStoch+Stoch (шорт), контртренд 80↔20",
-      type: "logic_line",
-      key: "FTS_S"
-    },
-    {
-      id: "FTT_S",
-      name: "Фьючерс: TotStoch+Stoch (шорт), тренд 20↔80",
-      type: "logic_line",
-      key: "FTT_S"
-    },
-    {
-      id: "CML",
-      name: "CM — лонг (CMA + LinReg на Op, Cl по CMA)",
-      type: "logic_line",
-      key: "CML"
-    },
-    {
-      id: "CMS",
-      name: "CM — шорт (CMA + LinReg на Op, Cl по CMA)",
-      type: "logic_line",
-      key: "CMS"
-    }
-  ];
+  const PARSER = root.MultiLogicFinrespParser;
+  if (!PARSER || typeof PARSER.parseLogicLine !== "function") {
+    throw new Error("MultiLogicFinrespParser не загружен — подключите logics/parser.js перед engine.js");
+  }
 
   const ORDER_BOOK_TREND_TOKEN = "@OBT";
   const DEFAULT_OB_IMBALANCE = 0.12;
@@ -2452,12 +2297,7 @@
 
   /** Разрешение id/метаданных: `resolveLogicLineRaw`. */
   function resolveLogicLineRaw(logicId, customLines) {
-    const lines = customLines || {};
-    if (Object.prototype.hasOwnProperty.call(lines, logicId)) {
-      return String(lines[logicId] ?? "");
-    }
-    if (DEFAULT_LOGIC_LINES[logicId] != null) return DEFAULT_LOGIC_LINES[logicId];
-    return "";
+    return LOG_REG.resolveLine(logicId, customLines);
   }
 
   /** Разбор строки/времени/ключа: `parseAtrMultToken`. */
@@ -2558,7 +2398,7 @@
       return { type: "logic_line", parsed: null, line: "", logicId, disabled: true };
     }
     const line = substituteParams(rawLine, p);
-    const smaModel = parseSmaModelFromLine(line);
+    const smaModel = PARSER.parseSmaModelFromLine(line);
     if (smaModel?.model === "spread") {
       return {
         type: "sma_spread",
@@ -2591,7 +2431,7 @@
         indicators: normalizeIndicatorSelection(indicatorSelection)
       };
     }
-    const cmaModel = parseCmaModelFromLine(line);
+    const cmaModel = PARSER.parseCmaModelFromLine(line);
     if (cmaModel?.model === "spread") {
       return {
         type: "cma_spread",
@@ -2607,7 +2447,21 @@
         indicators: normalizeIndicatorSelection(indicatorSelection)
       };
     }
-    const parsed = applySlTpParams(parseLogicLine(line, p, indicatorSelection), p);
+    const baseParsed = PARSER.parseLogicLine(line);
+    const opLongAtoms = filterAtomsByIndicators(baseParsed.opLongAtoms, indicatorSelection);
+    const opShortAtoms = filterAtomsByIndicators(baseParsed.opShortAtoms, indicatorSelection);
+    const clLongAtoms = filterAtomsByIndicators(baseParsed.clLongAtoms, indicatorSelection);
+    const clShortAtoms = filterAtomsByIndicators(baseParsed.clShortAtoms, indicatorSelection);
+    const parsed = applySlTpParams({
+      ...baseParsed,
+      opLongAtoms,
+      opShortAtoms,
+      clLongAtoms,
+      clShortAtoms,
+      opAtoms: [...opLongAtoms, ...opShortAtoms],
+      clAtoms: [...clLongAtoms, ...clShortAtoms],
+      indicators: normalizeIndicatorSelection(indicatorSelection)
+    }, p);
     return { type: "logic_line", parsed, line, logicId };
   }
 

@@ -6,6 +6,7 @@ import vm from "node:vm";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ENGINE_PATH = join(__dirname, "..", "..", "MultiLogic_FinrespCalculator.engine.js");
 const INDICATOR_DIR = join(__dirname, "..", "..", "indicators");
+const LOGIC_DIR = join(__dirname, "..", "..", "logics");
 const INDICATOR_SCRIPTS = [
   "_registry.js",
   "_utils.js",
@@ -22,6 +23,30 @@ const INDICATOR_SCRIPTS = [
   "rand.js",
   join("tot", "totstoch.js")
 ].map((p) => join(INDICATOR_DIR, p));
+const LOGIC_SCRIPTS = [
+  "parser.js",
+  "registry.js",
+  "fragments.js",
+  "rnd.js",
+  "tbc.js",
+  "ut.js",
+  "uct.js",
+  "l5.js",
+  "l1.js",
+  "l2.js",
+  "l3.js",
+  "l4.js",
+  "sma_below.js",
+  "sma_above.js",
+  "sma_corridor_trend.js",
+  "sma_corridor_anti.js",
+  "fts.js",
+  "ftt.js",
+  "fts_s.js",
+  "ftt_s.js",
+  "cml.js",
+  "cms.js"
+].map((p) => join(LOGIC_DIR, p));
 
 /** Загрузка browser-IIFE движка в Node (без DOM). */
 export function loadEngine() {
@@ -30,6 +55,10 @@ export function loadEngine() {
   context.globalThis = context;
   vm.createContext(context);
   for (const p of INDICATOR_SCRIPTS) {
+    const src = readFileSync(p, "utf8");
+    vm.runInContext(src, context, { filename: p });
+  }
+  for (const p of LOGIC_SCRIPTS) {
     const src = readFileSync(p, "utf8");
     vm.runInContext(src, context, { filename: p });
   }
