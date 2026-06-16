@@ -733,9 +733,9 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="live-ob-trend-confirm-panel">
 <span>Подтверждать тренд по стакану (<code>@OBT</code>)</span>
 </label>
-<label class="indicator-toggle live-reverse-panel-toggle" id="live-reverse-panel-wrap" for="live-reverse-panel" title="Реверс (покупка ↔ продажа) — та же настройка, что кнопка в «Параметры управления» (@@Reverse)">
+<label class="indicator-toggle live-reverse-panel-toggle" id="live-reverse-panel-wrap" for="live-reverse-panel" title="Реверс сторон (Long ↔ Short) — та же настройка, что кнопка в «Параметры управления» (@@ReverseSides)">
 <input type="checkbox" id="live-reverse-panel">
-<span>Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span></span>
+<span>Реверс сторон <span class="calc-reverse-bracket">(Long ↔ Short)</span></span>
 </label>
 </div>
 <div class="live-trading-stats">
@@ -868,7 +868,7 @@ body.calc-running .help-ftr{opacity:.75;}
 <input type="checkbox" id="param-reverse-signals" hidden>
 <div class="calc-reverse-bar">
 <button type="button" id="param-reverse-toggle" class="calc-reverse-toggle-btn" aria-pressed="false">
-Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span> — <span class="calc-reverse-toggle-label">Включить</span>
+Реверс сторон <span class="calc-reverse-bracket">(Long ↔ Short)</span> — <span class="calc-reverse-toggle-label">Включить</span>
 </button>
 <button type="button" id="param-reverse-signals-toggle" class="calc-reverse-toggle-btn" aria-pressed="false" title="Инвертировать сигналы в строках логики: Ab↔Bl, AbUp↔BlLo, >=↔<= и т.п.">
 Реверс сигналов <span class="calc-reverse-bracket">(Ab↔Bl, ≥↔≤)</span> — <span class="calc-reverse-toggle-label">Включить</span>
@@ -897,8 +897,8 @@ body.calc-running .help-ftr{opacity:.75;}
 <input id="vol-maxpos" type="number" value="10" min="1" max="200" step="1" title="Плечо = MaxPos × Volume% / 100. Лимит gross = депозит × MaxPos × Volume%"></div>
 </div>
 <p class="note" style="margin:.45rem 0 0">Общепортфельный Stopper (вкладка «Stopper» робота): equity = сумма по инструментам. При срабатывании — закрытие всех позиций, база обновляется. <strong>Плечо</strong> = <code>@@MaxPos × Volume% / 100</code> (Volume% — в «Доп. параметрах»).</p>
-<p class="calc-reverse-badge" id="calc-reverse-badge" hidden>Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span> включён</p>
-<p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@Reverse=выкл @@SL=2 @@TP=10 @@ATR=14</p>
+<p class="calc-reverse-badge" id="calc-reverse-badge" hidden>Реверс сторон <span class="calc-reverse-bracket">(Long ↔ Short)</span> включён</p>
+<p class="calc-at-summary calc-at-summary--global" id="calc-at-summary-global" aria-live="polite">@@ReverseSides=выкл @@SL=2 @@TP=10 @@ATR=14</p>
 </div>
 
 <div class="calc-at-divider calc-at-divider--logic" role="separator"><span>@ — действуют только если явно указано в строке логики</span></div>
@@ -1887,7 +1887,7 @@ body.calc-running .help-ftr{opacity:.75;}
     { kind: "lr", btnId: "opt-lr", inputId: "param-lr", label: "@LR", integer: true, position: true },
     { kind: "lin-k", btnId: "opt-lin-k", inputId: "param-lin-k", label: "@K", position: true },
     { kind: "strict", btnId: "opt-strict", inputId: "param-strict", label: "@Strict", integer: true, position: true },
-    { kind: "reverse", btnId: "opt-reverse", inputId: "param-reverse", label: "Реверс", boolean: true, position: true },
+    { kind: "reverse", btnId: "opt-reverse", inputId: "param-reverse", label: "Реверс сторон", boolean: true, position: true },
     { kind: "p-sl", btnId: "opt-stopper-sl", inputId: "stopper-sl-mult", label: "@@SL" },
     { kind: "p-tp", btnId: "opt-stopper-tp", inputId: "stopper-tp-mult", label: "@@TP" },
     { kind: "p-atr", btnId: "opt-stopper-atr", inputId: "stopper-atr-len", label: "@@ATR", integer: true },
@@ -2045,7 +2045,7 @@ body.calc-running .help-ftr{opacity:.75;}
         lr: $("param-lr")?.value || "",
         linK: $("param-lin-k")?.value || "",
         strict: $("param-strict")?.value || "",
-        reverse: !!$("param-reverse")?.checked,
+        reverseSides: !!$("param-reverse")?.checked,
         reverseSignals: !!$("param-reverse-signals")?.checked,
         sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
@@ -2167,7 +2167,7 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-lin-k", cfg.params?.linK);
       setValueIfExists("param-strict", cfg.params?.strict);
       if ($("param-reverse")) {
-        $("param-reverse").checked = !!(cfg.params?.reverse ?? cfg.params?.Reverse);
+        $("param-reverse").checked = !!(cfg.params?.reverseSides ?? cfg.params?.ReverseSides ?? cfg.params?.reverse ?? cfg.params?.Reverse);
       }
       if ($("param-reverse-signals")) {
         $("param-reverse-signals").checked = !!(cfg.params?.reverseSignals ?? cfg.params?.ReverseSignals);
@@ -2677,7 +2677,7 @@ body.calc-running .help-ftr{opacity:.75;}
       smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr),
       CmaLen: Math.max(2, Math.round(+$("param-cma-len").value || E.DEFAULT_PARAMS.CmaLen)),
       CmaPow: Math.max(0, +$("param-cma-pow").value ?? E.DEFAULT_PARAMS.CmaPow),
-      Reverse: !!$("param-reverse")?.checked,
+      ReverseSides: !!$("param-reverse")?.checked,
       ReverseSignals: !!$("param-reverse-signals")?.checked
     };
   }
@@ -3684,7 +3684,7 @@ body.calc-running .help-ftr{opacity:.75;}
       case "strict":
         return { params: { ...p, Strict: Math.max(1, Math.min(5, Math.round(cv))) }, stopper: sc };
       case "reverse":
-        return { params: { ...p, Reverse: !!cv }, stopper: sc };
+        return { params: { ...p, ReverseSides: !!cv }, stopper: sc };
       case "p-sl": {
         const slMult = Math.max(0, cv);
         return { params: p, stopper: { ...sc, slMult, useSl: slMult > 0 } };
@@ -4289,7 +4289,7 @@ body.calc-running .help-ftr{opacity:.75;}
     setValueIfExists("param-lr", p.LR);
     setValueIfExists("param-lin-k", p.LinK);
     setValueIfExists("param-strict", p.Strict);
-    if ($("param-reverse")) $("param-reverse").checked = !!p.Reverse;
+    if ($("param-reverse")) $("param-reverse").checked = !!(p.ReverseSides ?? p.Reverse);
     setValueIfExists("stopper-sl-mult", s.slMult);
     setValueIfExists("stopper-tp-mult", s.tpMult);
     setValueIfExists("stopper-atr-len", s.atrLen);
@@ -4667,7 +4667,7 @@ body.calc-running .help-ftr{opacity:.75;}
     return on ? "Выключить" : "Включить";
   }
 
-  /** Включение/выключение @@Reverse с подтверждением (кнопка и галочка live). */
+  /** Включение/выключение @@ReverseSides с подтверждением (кнопка и галочка live). */
   async function setReverseInteractive(targetOn, sourceId) {
     const input = $("param-reverse");
     if (!input) return;
@@ -4679,11 +4679,9 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     const liveActive = typeof isLiveTradingSession === "function" && isLiveTradingSession();
     let msg = want
-      ? "Подтверждаете включение реверса (покупка ↔ продажа)?\n\nИзменится только вход: Op long → short, Op short → long. Выход по Cl и SL/TP — как у открытой позиции (без реверса)."
-      : "Отключить реверс (покупка ↔ продажа)?\n\nВход вернётся к обычному: Op long → long, Op short → short.";
-    if (liveActive) {
-      msg += "\n\nВ live-режиме сначала будут закрыты все открытые позиции по рынку, затем переключится реверс.";
-    }
+      ? "Включить реверс сторон (Long ↔ Short)?\n\nОн меняет местами сигналы long/short для Op и Cl: Op(Long)↔Op(Short) и Cl(Long)↔Cl(Short). Также меняется логика выхода по Op противоположной стороны.\n\nЭто влияет и на вход, и на выход."
+      : "Отключить реверс сторон (Long ↔ Short)?\n\nOp/Cl снова будут интерпретироваться без свопа сторон.";
+    if (liveActive) msg += "\n\nВ live-режиме сначала будут закрыты все открытые позиции по рынку, затем переключится реверс.";
     if (!window.confirm(msg)) {
       syncReverseUi(sourceId);
       return;
@@ -4702,7 +4700,7 @@ body.calc-running .help-ftr{opacity:.75;}
     syncReverseSignalsUi();
   }
 
-  /** Переключатель @@Reverse в блоке параметров. */
+  /** Переключатель @@ReverseSides в блоке параметров. */
   function toggleReverseInteractive() {
     const on = !!$("param-reverse")?.checked;
     void setReverseInteractive(!on, "param-reverse-toggle");
@@ -4746,7 +4744,7 @@ body.calc-running .help-ftr{opacity:.75;}
     if (st && on) {
       const base = "Реверс сигналов включён: Ab↔Bl, AbUp↔BlLo, AbLinK↔BlLinK, AbRegK↔BlRegK, K/CCI/MOM: >=↔<= и >↔<=.";
       st.textContent = both
-        ? `${base} ВНИМАНИЕ: одновременно включён реверс входов (покупка↔продажа) — проверьте смысл Op/Cl.`
+        ? `${base} ВНИМАНИЕ: одновременно включён реверс сторон (Long↔Short) — проверьте смысл стратегии Op/Cl.`
         : base;
     }
   }
@@ -4765,7 +4763,7 @@ body.calc-running .help-ftr{opacity:.75;}
     saveConfig();
   }
 
-  /** Галочка @@Reverse в блоке «Реальная торговля» (= param-reverse). */
+  /** Галочка @@ReverseSides в блоке «Реальная торговля» (= param-reverse). */
   function bindLiveReversePanelUi() {
     const panel = $("live-reverse-panel");
     if (!panel || panel.dataset.reverseBound) return;
@@ -4806,7 +4804,7 @@ body.calc-running .help-ftr{opacity:.75;}
     const pRef = $("stopper-ref")?.value ?? "—";
     if (globalEl) {
       globalEl.textContent =
-        `@@Reverse=${reverse} @@ReverseSignals=${reverseSignals} @@MaxPos=${maxPos} плечо=${levText} `
+        `@@ReverseSides=${reverse} @@ReverseSignals=${reverseSignals} @@MaxPos=${maxPos} плечо=${levText} `
         + `@@SL=${pSl} @@TP=${pTp} @@ATR=${pAtr} база=${pRef} ₽`;
     }
     if (!logicEl) return;
@@ -6885,7 +6883,7 @@ ${referenceBlock}
     if (stopper?.events?.length) status += ` | Stopper: ${stopper.events.length} сраб.`;
     else if (stopperConfig().useSl || stopperConfig().useTp) status += " | Stopper вкл.";
     if (randomPriceShiftEnabled()) status += " | сдвиг индикаторов ±0,1%";
-    if (params().Reverse) status += " | Реверс вкл.";
+    if (params().ReverseSides) status += " | Реверс сторон вкл.";
     if (opts.optimNote) {
       const bestLabel = optimValueLabel(state.optim.active, state.optim.bestValue);
       status += ` | Опт. ${opts.optimNote}: FINRESP ${fmt(agg.finresp)} ₽ | лучшее ${bestLabel} → ${fmt(state.optim.bestFinresp)} ₽`;

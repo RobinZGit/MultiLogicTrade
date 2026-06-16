@@ -1643,9 +1643,9 @@
     rows.push(row);
   }
 
-  /** Глобальный реверс: сигналы те же, исполнение long↔short (покупка↔продажа). */
-  function isReverseEnabled(options) {
-    return !!(options && options.reverse);
+  /** Реверс сторон (Long↔Short): меняет местами long/short сигналы Op и Cl. */
+  function isReverseSidesEnabled(options) {
+    return !!(options && (options.reverse || options.preparedRun?.reverse));
   }
 
   /** Реверс сигналов: инверсия условий Ab/Bl и сравнений (влияет на Op и Cl). */
@@ -1682,16 +1682,7 @@
     return s;
   }
 
-  /** Инверсия только Op (вход): long↔short. Cl и выход — без реверса. */
-  function swapEntryExecHits(sig) {
-    return {
-      ...sig,
-      longOpHit: sig.shortOpHit,
-      shortOpHit: sig.longOpHit
-    };
-  }
-
-  /** @deprecated Используйте swapEntryExecHits — полный swap ломал выход по Cl. */
+  /** Swap сторон для сигналов Op/Cl (используется в @@ReverseSides). */
   function swapLogicExecHits(sig) {
     return {
       ...sig,
@@ -1975,7 +1966,7 @@
         entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
           const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null), { reverseSignals: isReverseSignalsEnabled(opts) });
-          const esig = isReverseEnabled(opts) ? swapEntryExecHits(sig) : sig;
+          const esig = isReverseSidesEnabled(opts) ? swapLogicExecHits(sig) : sig;
           if (esig.longOpHit === esig.shortOpHit) continue;
           const lot = resolveOpenLot(price, volConfig, opts);
           if (lot <= 0) continue;
@@ -2111,7 +2102,7 @@
         markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
         sell += flatten(price);
       }
-      const entrySig = isReverseEnabled(opts) ? swapEntryExecHits(sig) : sig;
+      const entrySig = isReverseSidesEnabled(opts) ? swapLogicExecHits(sig) : sig;
       if (pos === 0 && entrySig.longOpHit !== entrySig.shortOpHit) {
         const lot = resolveOpenLot(price, volConfig, opts);
         if (lot > 0) {
@@ -2249,7 +2240,7 @@
           buy = Math.max(-d, 0) * scale;
           sell = Math.max(d, 0) * scale;
         }
-        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
+        if (isReverseSidesEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
         const cap = capAt(price);
         if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
         if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
@@ -2382,7 +2373,7 @@
           buy = Math.max(-d, 0) * scale;
           sell = Math.max(d, 0) * scale;
         }
-        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
+        if (isReverseSidesEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
         const cap = capAt(price);
         if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
         if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
@@ -2524,7 +2515,7 @@
           if (isTrend) sell = excess * scale;
           else buy = excess * scale;
         }
-        if (isReverseEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
+        if (isReverseSidesEnabled(opts)) ({ buy, sell } = swapTradeVolumes(buy, sell));
         const cap = capAt(price);
         if (pos + buy - sell > cap) buy = Math.max(0, cap - pos + sell);
         if (pos + buy - sell < -cap) sell = Math.max(0, pos + buy + cap);
@@ -2794,7 +2785,7 @@
     const cache = new IndicatorCache(candles);
     const pos = +opts.pos || 0;
     const posCtx = buildPosCtx(pos, opts.entryBarIdx ?? null, opts.entryMid ?? null, opts.entryBeta ?? null);
-    const reverse = opts.reverse != null ? !!opts.reverse : !!p.Reverse;
+    const reverse = opts.reverseSides != null ? !!opts.reverseSides : opts.reverse != null ? !!opts.reverse : !!(p.ReverseSides ?? p.Reverse);
 
     if (spec.type === "multi_logic") {
       const hits = [];
@@ -2802,7 +2793,7 @@
         if (!s || s.type !== "logic_line" || s.disabled) continue;
         const parsed = applySlTpParams({ ...s.parsed }, p);
         let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
-        if (reverse) sig = swapEntryExecHits(sig);
+        if (reverse) sig = swapLogicExecHits(sig);
         hits.push({ logicId: s.logicId || "?", ...summarizeLogicBarSignals(sig) });
       }
       const primary = hits.find((h) => h.longOp || h.shortOp || h.longCl || h.shortCl) || hits[0] || null;
@@ -2811,7 +2802,7 @@
     if (spec.type === "logic_line") {
       const parsed = applySlTpParams({ ...spec.parsed }, p);
       let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
-      if (reverse) sig = swapEntryExecHits(sig);
+      if (reverse) sig = swapLogicExecHits(sig);
       return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
     }
     if (spec.type === "sma_spread" || spec.type === "sma_corridor" || spec.type === "cma_spread") {
@@ -2841,7 +2832,7 @@
     const p = prep?.p || { ...DEFAULT_PARAMS, ...params };
     const opts = {
       ...(options || {}),
-      reverse: options?.reverse != null ? !!options.reverse : !!p.Reverse
+      reverse: options?.reverseSides != null ? !!options.reverseSides : options?.reverse != null ? !!options.reverse : !!(p.ReverseSides ?? p.Reverse)
     };
     if (!spec || spec.disabled) return simulateNoSignalRows(candles, startIdx, endIdx, opts);
     const vol = prep?.vol || normalizedVolConfig(volConfig);
@@ -3007,7 +2998,7 @@
   function buildGridSimulationPrep(spec, params, volConfig, indicatorCache, options) {
     const p = { ...DEFAULT_PARAMS, ...params };
     const vol = normalizedVolConfig(volConfig);
-    const reverse = options?.reverse != null ? !!options.reverse : !!p.Reverse;
+    const reverse = options?.reverseSides != null ? !!options.reverseSides : options?.reverse != null ? !!options.reverse : !!(p.ReverseSides ?? p.Reverse);
     const reverseSignals = options?.reverseSignals != null ? !!options.reverseSignals : !!p.ReverseSignals;
     const prep = { p, vol, reverse, reverseSignals };
     if (!spec || spec.disabled) return prep;
@@ -5090,7 +5081,7 @@
     smaSeries,
     cmaSeries,
     tradeMarkersFromBar,
-    swapEntryExecHits,
+    swapLogicExecHits,
     tradeSignalHint,
     createIndicatorCache,
     collectChartIndicatorsForSpecs

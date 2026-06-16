@@ -97,12 +97,12 @@ describe("tradeMarkersFromBar", () => {
     assert.equal(m.tradeIn, "long");
   });
 
-  it("swapEntryExecHits swaps only Op, not Cl", () => {
+  it("swapLogicExecHits swaps Op and Cl sides", () => {
     const sig = { longOpHit: true, shortOpHit: false, longClHit: true, shortClHit: false };
-    const swapped = E.swapEntryExecHits(sig);
+    const swapped = E.swapLogicExecHits(sig);
     assert.equal(swapped.longOpHit, false);
     assert.equal(swapped.shortOpHit, true);
-    assert.equal(swapped.longClHit, true);
-    assert.equal(swapped.shortClHit, false);
+    assert.equal(swapped.longClHit, false);
+    assert.equal(swapped.shortClHit, true);
   });
 });
