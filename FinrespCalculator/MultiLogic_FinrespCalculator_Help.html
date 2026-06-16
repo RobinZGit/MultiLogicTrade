@@ -48,6 +48,7 @@ th{background:#f8fafc;width:28%;}
 <a class="calc-btn" href="MultiLogic_FinrespCalculator.html">Калькулятор</a>
 <a class="calc-btn calc-btn-secondary" href="price-cache/">Папка базы цен</a>
 <a class="calc-btn calc-btn-secondary" href="../MultiLogic_LogicHelp.html">Справка по роботу</a>
+<a class="calc-btn calc-btn-secondary" href="../MultiLogic_Literature.html">Литература (breadth / basket / synthetic)</a>
 </div>
 
 <nav class="toc" aria-label="Содержание">
@@ -324,6 +325,11 @@ th{background:#f8fafc;width:28%;}
 <p><strong>TotStoch:</strong> стохастик (14-3-3) считается по TotOHLC, т.е. %K от тотальной цены.</p>
 <p><strong>Вход long:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента.</p>
 <p><strong>Выход long:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента. SL/TP — по полям @SL/@TP.</p>
+
+<h4>FTT — Фьючерс: TotStoch + Stoch (лонг), тренд 80↔20</h4>
+<p><strong>Идея:</strong> трендовый вариант на той же тотальной базе: покупаем, когда рынок «разогнан вверх» одновременно по корзине и по инструменту, выходим при «развороте вниз».</p>
+<p><strong>Вход long:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента.</p>
+<p><strong>Выход long:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента. SL/TP — по полям @SL/@TP.</p>
 
 <h4>CML — CM long (CMA + LinReg на входе)</h4>
 <p><strong>Назначение:</strong> кастомная средняя CMA с показателем степени <code>@CmaPow</code> и длиной <code>@CmaLen</code> — только <strong>лонг</strong>.</p>

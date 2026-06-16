@@ -3276,6 +3276,13 @@ body.calc-running .help-ftr{opacity:.75;}
     await yieldToUi();
   }
 
+  /** Подпрограмма: после расчёта прокрутить к блоку FINRESP/результатов. */
+  function scrollResultsIntoView() {
+    const el = $("finresp-calc");
+    if (!el || typeof el.scrollIntoView !== "function") return;
+    el.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
+  }
+
   /** Подпрограмма `clearCalcProgress`. */
   function clearCalcProgress() {
     const banner = $("calc-progress-banner");
@@ -7060,7 +7067,10 @@ ${referenceBlock}
           $("calc-status").textContent +=
             ` Загружено ${state.packs.length}/${instruments.length}; ошибок MOEX: ${loadedData.failures.length}.`;
         }
-        if (runGen === state.runGeneration) await finishCalcProgress("Расчёт завершён");
+        if (runGen === state.runGeneration) {
+          await finishCalcProgress("Расчёт завершён");
+          scrollResultsIntoView();
+        }
       }
       if (runGen === state.runGeneration) collapseExtraParamsIfOpen();
     } catch (err) {

@@ -270,6 +270,10 @@
       "Op(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
       + "Cl(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
       + SLTP + "Note(futures-total-stoch-anti)",
+    FTT:
+      "Op(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
+      + "Cl(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
+      + SLTP + "Note(futures-total-stoch-trend)",
     CML:
       "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) "
       + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
@@ -329,6 +333,12 @@
       name: "Фьючерс: TotStoch+Stoch (лонг), контртренд 20↔80",
       type: "logic_line",
       key: "FTS"
+    },
+    {
+      id: "FTT",
+      name: "Фьючерс: TotStoch+Stoch (лонг), тренд 80↔20",
+      type: "logic_line",
+      key: "FTT"
     },
     {
       id: "CML",

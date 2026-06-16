@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiLogic — литература: breadth, basket, synthetic</title>
+<style>
+:root{--bg:#f4f6fa;--paper:#fff;--text:#111827;--muted:#5c6370;--border:#dde2eb;--accent:#2563eb;--accent-soft:#eef4ff;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:Segoe UI,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;font-size:15px;}
+.hdr{background:linear-gradient(180deg,#fff 0%,var(--accent-soft) 100%);border-bottom:1px solid var(--border);padding:1.5rem 1.75rem 1.1rem;}
+.hdr h1{margin:0 0 .35rem;font-size:1.55rem;}
+.sub{margin:.2rem 0;color:var(--muted);font-size:.92rem;}
+.layout{max-width:980px;margin:0 auto;padding:1.25rem 1rem 3rem;}
+.main{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:1.5rem 1.75rem 2rem;box-shadow:0 1px 4px rgba(0,0,0,.05);}
+h2{font-size:1.18rem;margin:1.6rem 0 .65rem;padding-bottom:.35rem;border-bottom:2px solid var(--accent);scroll-margin-top:12px;}
+h2:first-child{margin-top:0;}
+p,ul{margin:.55rem 0;}
+ul{padding-left:1.35rem;}
+li{margin:.3rem 0;}
+code{font-family:Consolas,monospace;background:#eef1f6;padding:.1em .35em;border-radius:4px;font-size:.88em;}
+a{color:var(--accent);}
+.toc{margin:.75rem 0 1.25rem;padding:.75rem 1rem;background:#f8fafc;border-radius:8px;border:1px solid var(--border);font-size:.92rem;}
+.toc a{text-decoration:none;}
+.toc a:hover{text-decoration:underline;}
+.tag{display:inline-block;padding:.08rem .45rem;border-radius:999px;border:1px solid var(--border);background:#f8fafc;color:#334155;font-size:.75rem;margin-left:.35rem}
+.note{color:var(--muted);font-size:.93rem;}
+.ftr{text-align:center;padding:1.5rem;color:var(--muted);font-size:.82rem;border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header class="hdr">
+<h1>Литература — «тотальные» индикаторы, basket и synthetic</h1>
+<p class="sub">Подборка базовых источников по market breadth, композитным рядам и корзинным стратегиям.</p>
+<p class="sub">
+<a href="index.html">документация</a> ·
+<a href="FinrespCalculator/MultiLogic_FinrespCalculator.html">калькулятор FINRESP</a> ·
+<a href="FinrespCalculator/MultiLogic_FinrespCalculator_Help.html">справка калькулятора</a> ·
+<a href="MultiLogic_PolynomialIndicators.html">многочлены</a>
+</p>
+</header>
+
+<div class="layout">
+<main class="main">
+
+<nav class="toc" aria-label="Содержание">
+<strong>Содержание:</strong>
+<a href="#breadth">Breadth (market-wide)</a> ·
+<a href="#basket">Basket / synthetic series</a> ·
+<a href="#method">Методика и валидация</a> ·
+<a href="#glossary">Термины</a>
+</nav>
+
+<h2 id="breadth">1) Market breadth / «тотальные» индикаторы рынка</h2>
+<ul>
+<li><strong>Sherman & Marian McClellan — <em>Patterns for Profit</em></strong> <span class="tag">McClellan</span>
+<br>Классический источник по <strong>McClellan Oscillator</strong> и <strong>Summation Index</strong> (одни из самых известных breadth‑индикаторов).</li>
+<li><strong>Gregory L. Morris — <em>Investing With the Trend</em></strong> <span class="tag">trend + breadth</span>
+<br>Трендовые модели, подтверждения «рынком в целом», композитные сигналы; полезно как база интерпретации.</li>
+<li><strong>Martin J. Pring — <em>Technical Analysis Explained</em></strong> <span class="tag">TA base</span>
+<br>Широкий учебник по ТА; breadth и подтверждения тренда рассматриваются в рамках общих принципов.</li>
+<li><strong>John J. Murphy — <em>Technical Analysis of the Financial Markets</em></strong> <span class="tag">TA base</span>
+<br>Фундаментальная книга по ТА; хорошо для «каркаса» понятий (дивергенции, подтверждения, режимы рынка).</li>
+</ul>
+<p class="note">Для быстрых справок по определениям и базовым формулам полезны Investopedia и StockCharts ChartSchool (термины: <em>Market Breadth</em>, <em>Advance/Decline</em>, <em>TRIN/Arms</em>, <em>McClellan</em>).</p>
+
+<h2 id="basket">2) Basket / synthetic series (корзина → синтетическая цена → индикаторы)</h2>
+<ul>
+<li><strong>Ernest P. Chan — <em>Algorithmic Trading</em> / <em>Quantitative Trading</em></strong> <span class="tag">mean‑reversion</span>
+<br>Практика построения простых сигналов (в т.ч. на композитных рядах), нормализации, оценка устойчивости.</li>
+<li><strong>Ganapathy Vidyamurthy — <em>Pairs Trading</em></strong> <span class="tag">spread/ratio</span>
+<br>Спреды/отношения — близкий родственник basket‑подходов; полезно для понимания синтетики и контртренда.</li>
+</ul>
+
+<h2 id="method">3) Методика, устойчивость и валидация (чтобы тотальные признаки не «ломали» тесты)</h2>
+<ul>
+<li><strong>Perry J. Kaufman — <em>Trading Systems and Methods</em></strong> <span class="tag">systems</span>
+<br>Про индикаторы как строительные блоки систем, сглаживания/фильтры, компромиссы чувствительность↔шум.</li>
+<li><strong>Marcos López de Prado — <em>Advances in Financial Machine Learning</em></strong> <span class="tag">validation</span>
+<br>Сильная база про leakage, устойчивую проверку гипотез и переобучение (особенно когда вводятся композитные признаки).</li>
+</ul>
+
+<h2 id="glossary">4) Термины (как это обычно называется)</h2>
+<ul>
+<li><strong>Market breadth</strong> — индикаторы «рынка в целом» (рост/падение ширины рынка, A/D, McClellan и т.п.).</li>
+<li><strong>Composite / synthetic series</strong> — синтетический ряд (индекс/корзина/средняя цена), по которому считают обычные индикаторы (RSI/Stoch/MA…).</li>
+<li><strong>Basket trading</strong> — торговля корзиной инструментов или сигналами, зависящими от корзины.</li>
+<li><strong>Spread / ratio</strong> — синтетика из разности/отношения (часто 2 инструмента, но бывает N‑корзина).</li>
+</ul>
+
+<p class="note">Если попросишь — добавлю к каждому пункту краткий конспект: «что именно брать из книги/статьи» и «как переложить на TotOHLC/TotStoch в нашем калькуляторе».</p>
+
+</main>
+</div>
+
+<footer class="ftr">MultiLogicTrade · литература · <code>MultiLogic_Literature.html</code></footer>
+</body>
+</html>
+
