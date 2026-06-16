@@ -124,7 +124,7 @@
       if (!hasConnectors()) {
         throw new Error("Коннектор T-Bank не загружен (connectors/registry.js и connectors/tbank.js). Обновите страницу Ctrl+F5.");
       }
-      brokerInst = REG.create("tbank", {
+      brokerInst = root.MultiLogicFinrespConnectors.create("tbank", {
         state,
         liveState: state.live,
         TBANK_REST_BASES,
