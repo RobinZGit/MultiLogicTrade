@@ -1656,8 +1656,8 @@
   function reverseSignalOp(op) {
     if (op === ">=") return "<=";
     if (op === "<=") return ">=";
-    if (op === ">") return "<=";
-    if (op === "<") return ">=";
+    if (op === ">") return "<";
+    if (op === "<") return ">";
     return op;
   }
 
@@ -1678,7 +1678,18 @@
     if (u === "BLUP") return "AbDn";
     if (u === "ABDN") return "BlUp";
     const m = u.match(/^(K|CCI|RSI|MOM)(>=|<=|>|<)(-?\d+(?:\.\d+)?)$/);
-    if (m) return `${m[1]}${reverseSignalOp(m[2])}${m[3]}`;
+    if (m) {
+      const kind = m[1];
+      const op = m[2];
+      const v = +m[3];
+      // For bounded oscillators (Stoch K, RSI), invert both direction and level: v -> 100 - v.
+      // This is what you expect when turning "low zone" into "high zone" (20 <-> 80).
+      if ((kind === "K" || kind === "RSI") && Number.isFinite(v)) {
+        const vv = 100 - v;
+        return `${kind}${reverseSignalOp(op)}${vv}`;
+      }
+      return `${kind}${reverseSignalOp(op)}${m[3]}`;
+    }
     return s;
   }
 
