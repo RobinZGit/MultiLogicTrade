@@ -97,6 +97,36 @@
     const findLastIndexAtOrBefore = (...a) => d.findLastIndexAtOrBefore(...a);
     const rowIndexByTime = (...a) => d.rowIndexByTime(...a);
 
+  /** Ленивый экземпляр T-Bank коннектора (connectors/tbank.js). */
+  let brokerInst = null;
+  function getBroker() {
+    if (!brokerInst) {
+      const REG = root.MultiLogicFinrespConnectors;
+      if (!REG || typeof REG.create !== "function") {
+        throw new Error("MultiLogicFinrespConnectors не загружен — подключите connectors/_registry.js и connectors/tbank.js до live.js");
+      }
+      brokerInst = REG.create("tbank", {
+        state,
+        liveState: state.live,
+        TBANK_REST_BASES,
+        TBANK_ACCOUNT_STORE_KEY,
+        TBANK_HOST_STORE_KEY,
+        safeStorageGet,
+        safeStorageSet,
+        moneyValueRub,
+        accountLabel,
+        noteLiveTech,
+        fmt,
+        E,
+        liveOrderTypeUi,
+        resolveOrderPrice,
+        orderBookDepth: 10,
+        onHostFallback: (hostId) => setTbankStatus(`Подключение выполнено через резервный API хост: ${hostId}.`)
+      });
+    }
+    return brokerInst;
+  }
+
   // === HTML ↔ live: функции ниже экспортируются из install() для вызова из HTML ===
   function liveFreeCashRub() {
     if (isLiveSandbox()) {
@@ -1796,10 +1826,7 @@
       const ti = await tbankFindInstrument(picked.sec, picked.market);
       if (!ti) throw new Error(`${picked.sec}: не найден в T-Bank`);
       const instrumentId = ti.uid || ti.figi;
-      const ob = await tbankRequest("MarketDataService/GetOrderBook", {
-        instrumentId,
-        depth: LIVE_ORDER_BOOK_DEPTH
-      });
+      const ob = await getBroker().getOrderBook(instrumentId, LIVE_ORDER_BOOK_DEPTH);
       renderLiveOrderBookView(ob);
     } catch (err) {
       renderLiveOrderBookView(null);
@@ -1835,50 +1862,20 @@
     return (+q.units || 0) + (+q.nano || 0) / 1e9;
   }
 
-  /** Тип цены PostOrder: пункты (фьючерсы/облигации) или валюта (акции/ETF). */
   function tbankOrderPriceType(meta, marketHint) {
-    const kind = String(tbankInstField(meta, "instrumentType", "instrument_type", "instrumentKind") || "").toLowerCase();
-    if (kind.includes("future") || kind.includes("bond") || marketHint === "futures") {
-      return "PRICE_TYPE_POINT";
-    }
-    return "PRICE_TYPE_CURRENCY";
+    return getBroker().orderPriceType(meta, marketHint);
   }
 
-  /** ORDER_TYPE для PostOrder: на MOEX акции — «лучшая цена», не чистая рыночная. */
   function tbankPostOrderTypeEnum(orderType, market) {
-    if (orderType === "limit") return "ORDER_TYPE_LIMIT";
-    return market === "futures" ? "ORDER_TYPE_MARKET" : "ORDER_TYPE_BESTPRICE";
+    return getBroker().postOrderTypeEnum(orderType, market);
   }
 
-  /** Ошибки PostOrder, при которых пробуем лимит по последней цене. */
   function isTbankPostOrderRetryAsLimitError(err) {
-    const msg = String(err?.message || err || "");
-    return /frozen price|Zamorozhennaya czena ne sootvetstvuet|only limit order is allowed|30068|price_type is invalid|30104/i.test(msg);
+    return getBroker().isPostOrderRetryAsLimitError(err);
   }
 
-  /** Запись lastPostOrder при ошибке HTTP PostOrder. */
-  function noteTbankPostOrderFailure(secForPrice, instrumentId, direction, qty, orderType, market, message, reqSummary) {
-    state.live.lastPostOrder = {
-      at: new Date().toISOString(),
-      sec: secForPrice,
-      instrumentId,
-      direction,
-      lots: qty,
-      orderType,
-      market,
-      status: "HTTP_ERROR",
-      message: message || "",
-      ok: false
-    };
-    noteLiveTech("live-tbank-post-reject", secForPrice || instrumentId, `${message || "—"} | ${reqSummary}`);
-  }
-
-  /** Округление лимитной цены до minPriceIncrement инструмента T-Bank. */
   function tbankRoundPriceToIncrement(price, meta) {
-    if (!Number.isFinite(price)) return price;
-    const mpi = quotationToNumber(meta?.minPriceIncrement ?? meta?.min_price_increment);
-    if (!Number.isFinite(mpi) || mpi <= 0) return price;
-    return Math.round(price / mpi) * mpi;
+    return getBroker().roundPriceToIncrement(price, meta);
   }
 
   /** Проверка булева условия: `isLiveSessionOpenPosition`. */
@@ -2399,60 +2396,16 @@
     }, LIVE_POSITIONS_POLL_MS);
   }
 
-  /** T-Bank REST API: `tbankInstField`. */
   function tbankInstField(inst, ...keys) {
-    if (!inst) return undefined;
-    for (const k of keys) {
-      if (inst[k] !== undefined && inst[k] !== null) return inst[k];
-    }
-    return undefined;
+    return getBroker().instField(inst, ...keys);
   }
 
-  /** T-Bank REST API: `tbankInstApiTradable`. */
   function tbankInstApiTradable(inst) {
-    const v = tbankInstField(inst, "apiTradeAvailableFlag", "api_trade_available_flag");
-    return v === undefined ? null : !!v;
+    return getBroker().instApiTradable(inst);
   }
 
-  /** Подпрограмма `scoreTbankInstrument`. */
-  function scoreTbankInstrument(inst, market) {
-    let s = 0;
-    const cc = String(tbankInstField(inst, "classCode", "class_code") || "").toUpperCase();
-    const kind = String(tbankInstField(inst, "instrumentType", "instrument_type", "instrumentKind") || "").toUpperCase();
-    const apiOk = tbankInstApiTradable(inst);
-    if (apiOk === true) s += 200;
-    if (apiOk === false) s -= 100;
-    if (market === "shares") {
-      if (cc === "TQBR") s += 80;
-      else if (cc === "TQTF") s += 40;
-      if (kind.includes("SHARE")) s += 30;
-    }
-    if (market === "futures") {
-      if (cc === "SPBFUT" || cc.includes("FUT")) s += 80;
-    }
-    return s;
-  }
-
-  /** Подпрограмма `pickTbankInstrument`. */
-  function pickTbankInstrument(list, sec, market) {
-    const secU = String(sec || "").trim().toUpperCase();
-    let pool = (list || []).filter((i) => String(i.ticker || "").toUpperCase() === secU);
-    if (!pool.length && market === "futures") {
-      pool = (list || []).filter((i) => String(i.ticker || "").toUpperCase().startsWith(secU));
-    }
-    if (!pool.length) pool = list || [];
-    if (!pool.length) return null;
-    return pool.slice().sort((a, b) => scoreTbankInstrument(b, market) - scoreTbankInstrument(a, market))[0];
-  }
-
-  /** T-Bank REST API: `tbankFindInstrument`. */
   async function tbankFindInstrument(sec, market) {
-    const key = `${market}:${String(sec || "").trim().toUpperCase()}`;
-    if (state.live.instrumentCache.has(key)) return state.live.instrumentCache.get(key);
-    const data = await tbankRequest("InstrumentsService/FindInstrument", { query: String(sec || "").trim() });
-    const inst = pickTbankInstrument(data.instruments || [], sec, market);
-    if (inst) state.live.instrumentCache.set(key, inst);
-    return inst || null;
+    return getBroker().findInstrument(sec, market);
   }
 
   /** Мета инструмента для песочницы без T-Bank (лот=1, цены из свечей/MOEX). */
@@ -2508,47 +2461,12 @@
     };
   }
 
-  /** T-Bank REST API: `tbankGetTradingStatus`. */
   async function tbankGetTradingStatus(instrumentId) {
-    if (!instrumentId) return null;
-    const cacheKey = `ts:${instrumentId}`;
-    if (state.live.tradingStatusCache.has(cacheKey)) return state.live.tradingStatusCache.get(cacheKey);
-    const data = await tbankRequest("MarketDataService/GetTradingStatus", { instrumentId });
-    if (data) state.live.tradingStatusCache.set(cacheKey, data);
-    return data || null;
+    return getBroker().getTradingStatus(instrumentId);
   }
 
-  /** Подпрограмма `tradingStatusApiOk`. */
-  function tradingStatusApiOk(ts) {
-    return !!(ts?.apiTradeAvailableFlag ?? ts?.api_trade_available_flag);
-  }
-
-  /** Подпрограмма `tradingStatusOrderOk`. */
-  function tradingStatusOrderOk(ts, orderTypeOverride) {
-    const isLimit = (orderTypeOverride || liveOrderTypeUi()) === "limit";
-    const flag = isLimit
-      ? (ts?.limitOrderAvailableFlag ?? ts?.limit_order_available_flag)
-      : (ts?.marketOrderAvailableFlag ?? ts?.market_order_available_flag);
-    return flag !== false;
-  }
-
-  /** T-Bank REST API: `tbankValidateTradable`. */
   async function tbankValidateTradable(instrumentId, instMeta, orderTypeOverride) {
-    const apiFromInst = tbankInstApiTradable(instMeta);
-    if (apiFromInst === false) {
-      return { ok: false, reason: "торговля через API недоступна для инструмента" };
-    }
-    const ts = await tbankGetTradingStatus(instrumentId);
-    if (!ts) return { ok: false, reason: "нет статуса торговли" };
-    if (!tradingStatusApiOk(ts)) {
-      return { ok: false, reason: "торговля через API недоступна (api_trade_available_flag)" };
-    }
-    const orderType = orderTypeOverride || liveOrderTypeUi();
-    if (!tradingStatusOrderOk(ts, orderType)) {
-      const ot = orderType === "limit" ? "лимитные" : "рыночные";
-      return { ok: false, reason: `${ot} заявки сейчас недоступны` };
-    }
-    return { ok: true };
+    return getBroker().validateTradable(instrumentId, instMeta, orderTypeOverride);
   }
 
   /** Подпрограмма `summarizeLiveReconcileIssues`. */
@@ -2571,18 +2489,8 @@
     return { ticker, sec: sec || ticker, ...fields };
   }
 
-  /** T-Bank REST API: `tbankGetInstrumentById`. */
   async function tbankGetInstrumentById(instrumentId) {
-    if (!instrumentId) return null;
-    const cacheKey = `id:${instrumentId}`;
-    if (state.live.instrumentCache.has(cacheKey)) return state.live.instrumentCache.get(cacheKey);
-    const data = await tbankRequest("InstrumentsService/GetInstrumentBy", {
-      idType: "INSTRUMENT_ID_TYPE_UID",
-      id: instrumentId
-    });
-    const inst = data.instrument || null;
-    if (inst) state.live.instrumentCache.set(cacheKey, inst);
-    return inst;
+    return getBroker().getInstrumentById(instrumentId);
   }
 
   /** Подпрограмма `piecesToLots`. */
@@ -2618,14 +2526,8 @@
     return { units: String(units), nano };
   }
 
-  /** T-Bank REST API: `tbankGetLastPrice`. */
   async function tbankGetLastPrice(instrumentId) {
-    const data = await tbankRequest("MarketDataService/GetLastPrices", {
-      instrumentId: [instrumentId]
-    });
-    const lp = (data.lastPrices || [])[0];
-    if (!lp?.price) return null;
-    return (+lp.price.units || 0) + (+lp.price.nano || 0) / 1e9;
+    return getBroker().getLastPrice(instrumentId);
   }
 
   /** Live-торговля: `liveCandleSourceUi`. */
@@ -2684,29 +2586,8 @@
     return fromD > tailStart ? fromD : tailStart;
   }
 
-  /** T-Bank REST API: `tbankFetchCandlesRange`. */
   async function tbankFetchCandlesRange(instrumentId, fromDate, toDate, interval) {
-    const chunkDays = E.tbankCandleChunkDays(interval);
-    const candleInterval = E.tbankIntervalForCalcTf(interval);
-    const out = [];
-    let cursor = new Date(fromDate);
-    const end = new Date(toDate);
-    if (end.getHours() === 0 && end.getMinutes() === 0) end.setHours(23, 59, 59, 999);
-    while (cursor <= end) {
-      const chunkEnd = new Date(cursor);
-      chunkEnd.setDate(chunkEnd.getDate() + chunkDays - 1);
-      chunkEnd.setHours(23, 59, 59, 999);
-      const toChunk = chunkEnd > end ? end : chunkEnd;
-      const data = await tbankRequest("MarketDataService/GetCandles", {
-        instrumentId,
-        from: cursor.toISOString(),
-        to: toChunk.toISOString(),
-        interval: candleInterval
-      });
-      out.push(...(data.candles || []));
-      cursor = new Date(toChunk.getTime() + 1000);
-    }
-    return out;
+    return getBroker().fetchCandlesRange(instrumentId, fromDate, toDate, interval);
   }
 
   /** Обновление данных с источника: `refreshLiveTbankTail`. */
@@ -3826,11 +3707,7 @@
     if (!(await ensureTbankTokenUnlocked())) throw new Error("Расшифруйте токен T-Bank.");
     if (!state.tbank.selectedAccountId) await loadTbankAccounts();
     if (liveOrderCancellable(order, false)) {
-      await tbankRequest("OrdersService/CancelOrder", {
-        accountId: state.tbank.selectedAccountId,
-        orderId: order.orderId,
-        orderRequestId: order.orderRequestId || order.orderId
-      });
+      await getBroker().cancelOrder(order.orderId, order.orderRequestId || order.orderId);
       markTradeHistoryCancelled(liveOrderRowId(order));
       return;
     }
@@ -4345,97 +4222,12 @@
     noteLiveTech("live-reconcile-abort", reason, detail);
   }
 
-  /** Проверка ответа PostOrder: отклонённая заявка — ошибка. */
   function tbankPostOrderRejected(data) {
-    const st = String(data?.executionReportStatus || data?.execution_report_status || "").toUpperCase();
-    return st.includes("REJECT");
+    return getBroker().postOrderRejected(data);
   }
 
-  /** POST OrdersService/PostOrder — рыночная (BESTPRICE/MARKET) или лимитная (LIMIT + price). */
   async function tbankPostOrder(instrumentId, direction, lots, secForPrice, options) {
-    const opts = options || {};
-    const qty = Math.max(0, Math.floor(+lots || 0));
-    if (!instrumentId || qty <= 0) return null;
-    const market = opts.market === "futures" ? "futures" : "shares";
-    const orderType = opts.orderType === "limit" || opts.orderType === "market"
-      ? opts.orderType
-      : liveOrderTypeUi();
-    let meta = null;
-    try { meta = await tbankGetInstrumentById(instrumentId); } catch (_) { /* optional */ }
-    const priceType = tbankOrderPriceType(meta, market);
-
-    /** Сборка тела PostOrder и отправка (limit или market/bestprice). */
-    async function sendPostOrder(effectiveType, limitPriceOverride) {
-      const orderId = (crypto.randomUUID && crypto.randomUUID()) || `ml-${Date.now()}`;
-      const body = {
-        accountId: state.tbank.selectedAccountId,
-        instrumentId,
-        quantity: String(qty),
-        direction,
-        orderId,
-        confirmMarginTrade: true,
-        orderType: tbankPostOrderTypeEnum(effectiveType, market),
-        priceType
-      };
-      if (effectiveType === "limit") {
-        let price = limitPriceOverride != null && limitPriceOverride !== "" ? +limitPriceOverride : NaN;
-        if (!Number.isFinite(price) || price <= 0) {
-          price = opts.limitPrice != null && opts.limitPrice !== "" ? +opts.limitPrice : NaN;
-        }
-        if (!Number.isFinite(price) || price <= 0) {
-          price = await resolveOrderPrice(instrumentId, secForPrice, market);
-        }
-        if (!Number.isFinite(price) || price <= 0) {
-          throw new Error(`Нет цены для лимитной заявки (${secForPrice || instrumentId}).`);
-        }
-        price = tbankRoundPriceToIncrement(price, meta);
-        body.price = quotationFromNumber(price);
-      }
-      const reqSummary = `type=${body.orderType} qty=${qty} dir=${direction} priceType=${body.priceType} market=${market}${body.price ? ` price=${quotationToNumber(body.price)}` : ""}`;
-      noteLiveTech("live-tbank-post-req", secForPrice || instrumentId, reqSummary);
-      let data;
-      try {
-        data = await tbankRequest("OrdersService/PostOrder", body);
-      } catch (err) {
-        noteTbankPostOrderFailure(secForPrice, instrumentId, direction, qty, effectiveType, market, err.message, reqSummary);
-        throw err;
-      }
-      const status = data?.executionReportStatus || data?.execution_report_status || "—";
-      state.live.lastPostOrder = {
-        at: new Date().toISOString(),
-        sec: secForPrice,
-        instrumentId,
-        direction,
-        lots: qty,
-        orderType: effectiveType,
-        market,
-        status,
-        message: data?.message || "",
-        orderId: data?.orderId || data?.order_id || orderId,
-        lotsExecuted: data?.lotsExecuted ?? data?.lots_executed,
-        ok: !tbankPostOrderRejected(data)
-      };
-      if (tbankPostOrderRejected(data)) {
-        const msg = data?.message || status || "Заявка отклонена биржей";
-        noteLiveTech("live-tbank-post-reject", secForPrice || instrumentId, `${msg} | ${reqSummary}`);
-        throw new Error(msg);
-      }
-      noteLiveTech("live-tbank-post-ok", secForPrice || instrumentId, `status=${status} exec=${state.live.lastPostOrder.lotsExecuted ?? "—"} | ${reqSummary}`);
-      return data;
-    }
-
-    try {
-      return await sendPostOrder(orderType);
-    } catch (err) {
-      if (orderType !== "limit" && isTbankPostOrderRetryAsLimitError(err)) {
-        const fallbackPrice = await resolveOrderPrice(instrumentId, secForPrice, market);
-        if (Number.isFinite(fallbackPrice) && fallbackPrice > 0) {
-          noteLiveTech("live-tbank-post-retry", secForPrice || instrumentId, `limit @ ${fmt(fallbackPrice, 4)} после: ${err.message}`);
-          return await sendPostOrder("limit", fallbackPrice);
-        }
-      }
-      throw err;
-    }
+    return getBroker().postOrder(instrumentId, direction, lots, secForPrice, options);
   }
 
   /** Разбор строки/времени/ключа: `parseLiveManualInstrumentKey`. */
@@ -4714,32 +4506,8 @@
     }
   }
 
-  /** T-Bank REST API: `tbankPositionsByTicker`. */
   async function tbankPositionsByTicker() {
-    const data = await tbankRequest("OperationsService/GetPositions", {
-      accountId: state.tbank.selectedAccountId
-    });
-    const map = new Map();
-    const ingest = async (items) => {
-      for (const p of items || []) {
-        const instrumentId = p.instrumentUid || p.figi;
-        const pieces = +p.balance || 0;
-        if (!instrumentId || pieces === 0) continue;
-        let meta = await tbankGetInstrumentById(instrumentId);
-        if (!meta) meta = { ticker: p.ticker || instrumentId, lot: p.lot || 1, uid: instrumentId, figi: p.figi };
-        const ticker = String(meta.ticker || p.ticker || "").toUpperCase();
-        if (!ticker) continue;
-        map.set(ticker, {
-          ticker,
-          instrumentId: meta.uid || meta.figi || instrumentId,
-          lot: Math.max(1, +meta.lot || +p.lot || 1),
-          pieces
-        });
-      }
-    };
-    await ingest(data.securities);
-    await ingest(data.futures);
-    return map;
+    return getBroker().positionsByTicker();
   }
 
   /** Песочница: gross-экспозиция открытых позиций в контексте createPortfolioCap. */
@@ -4810,18 +4578,8 @@
     return E.logicUsesObTrend(activeLogicLineRaw());
   }
 
-  /** T-Bank REST API: `tbankFetchOrderBookCached`. */
   async function tbankFetchOrderBookCached(instrumentId) {
-    const cacheKey = String(instrumentId || "");
-    const prev = state.live.obTrendCache.get(cacheKey);
-    const now = Date.now();
-    if (prev?.ob && now - (prev.at || 0) < 2500) return prev.ob;
-    const ob = await tbankRequest("MarketDataService/GetOrderBook", {
-      instrumentId,
-      depth: LIVE_ORDER_BOOK_DEPTH
-    });
-    state.live.obTrendCache.set(cacheKey, { ob, at: now });
-    return ob;
+    return getBroker().fetchOrderBookCached(instrumentId);
   }
 
   /** Live-торговля: `liveObTrendAllowsOrder`. */
@@ -6622,92 +6380,21 @@ ${referenceBlock}
     }
   }
 
-  /** Заполнение select/списка: `fillTbankAccounts`. */
   function fillTbankAccounts() {
-    if (!state.tbank.accounts.length) {
-      state.tbank.selectedAccountId = "";
-      syncTbankSettingsState();
-      return;
-    }
-    const saved = state.tbank.selectedAccountId || safeStorageGet(TBANK_ACCOUNT_STORE_KEY);
-    if (saved && state.tbank.accounts.some((a) => a.id === saved)) {
-      state.tbank.selectedAccountId = saved;
-    } else {
-      state.tbank.selectedAccountId = state.tbank.accounts[0]?.id || "";
-    }
-    if (state.tbank.selectedAccountId) safeStorageSet(TBANK_ACCOUNT_STORE_KEY, state.tbank.selectedAccountId);
+    getBroker().fillAccountsFromStorage();
     syncTbankSettingsState();
   }
 
-  /** Выбранные элементы UI: `selectedTbankHostId`. */
   function selectedTbankHostId() {
-    const id = safeStorageGet(TBANK_HOST_STORE_KEY) || "tinkoff";
-    return TBANK_REST_BASES[id] ? id : "tinkoff";
+    return getBroker().selectedHostId();
   }
 
-  /** Установка значения: `setTbankHostId`. */
   function setTbankHostId(id) {
-    const safeId = TBANK_REST_BASES[id] ? id : "tinkoff";
-    safeStorageSet(TBANK_HOST_STORE_KEY, safeId);
-    return safeId;
+    return getBroker().setHostId(id);
   }
 
-  /** T-Bank REST API: `tbankFetchErrorMessage`. */
-  function tbankFetchErrorMessage(err, hostId) {
-    const raw = err?.message || String(err || "ошибка сети");
-    if (err instanceof TypeError) {
-      return `Не удалось подключиться к ${hostId}. Это обычно TLS/сертификат, сеть, VPN/провайдер или блокировка браузера. Калькулятор попробовал оба официальных API-хоста автоматически.`;
-    }
-    return raw;
-  }
-
-  // === T-Bank REST: HTTP-запросы к Invest API ===
-
-  /** T-Bank REST API: `tbankRequest`. */
   async function tbankRequest(serviceMethod, body) {
-    if (!state.tbank.token) throw new Error("Токен не расшифрован.");
-    const firstHost = selectedTbankHostId();
-    const hostIds = [firstHost, ...Object.keys(TBANK_REST_BASES).filter((id) => id !== firstHost)];
-    let lastNetworkError = null;
-    for (const hostId of hostIds) {
-      try {
-        const res = await fetch(`${TBANK_REST_BASES[hostId]}${serviceMethod}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${state.tbank.token}`
-          },
-          body: JSON.stringify(body || {})
-        });
-        const text = await res.text();
-        let data = {};
-        if (text) {
-          try { data = JSON.parse(text); }
-          catch (_) { data = { raw: text }; }
-        }
-        if (!res.ok) {
-          const msg = data.message || data.error || data.raw || `${res.status} ${res.statusText}`;
-          const ru = /frozen price does not match order type|Zamorozhennaya czena ne sootvetstvuet tipu zayavki/i.test(msg)
-            ? "Замороженная цена не соответствует типу заявки (priceType/ORDER_TYPE). Робот повторит лимитом по последней цене."
-            : /only limit order is allowed/i.test(msg)
-              ? "Сейчас доступны только лимитные заявки — робот повторит лимитом по последней цене."
-              : msg;
-          throw new Error(ru);
-        }
-        if (hostId !== firstHost) {
-          setTbankHostId(hostId);
-          setTbankStatus(`Подключение выполнено через резервный API хост: ${hostId}.`);
-        }
-        return data;
-      } catch (err) {
-        if (err instanceof TypeError) {
-          lastNetworkError = new Error(tbankFetchErrorMessage(err, hostId));
-          continue;
-        }
-        throw err;
-      }
-    }
-    throw lastNetworkError || new Error("Не удалось подключиться к API T-Bank.");
+    return getBroker().request(serviceMethod, body);
   }
 
   /** Сохранение: `saveTbankToken`. */
@@ -6866,15 +6553,10 @@ ${referenceBlock}
     return true;
   }
 
-  /** Загрузка данных: `loadTbankAccounts`. */
   async function loadTbankAccounts() {
     try {
       setTbankStatus("Загрузка счетов T-Bank…");
-      const data = await tbankRequest("UsersService/GetAccounts", { status: "ACCOUNT_STATUS_OPEN" });
-      state.tbank.accounts = (data.accounts || []).filter((a) =>
-        !a.status || a.status === "ACCOUNT_STATUS_OPEN" || a.status === 2
-      );
-      if (!state.tbank.accounts.length) throw new Error("Открытые счета не найдены.");
+      await getBroker().loadAccounts();
       fillTbankAccounts();
       setTbankStatus(`Счёт T-Bank загружен: ${accountLabel(state.tbank.accounts.find((a) => a.id === state.tbank.selectedAccountId) || state.tbank.accounts[0])}. Загружаю депозит…`);
       if (isTbankBackedMode() && state.tbank.selectedAccountId) await loadTbankDeposit();
@@ -6884,23 +6566,12 @@ ${referenceBlock}
     }
   }
 
-  /** Загрузка данных: `loadTbankDeposit`. */
   async function loadTbankDeposit() {
     try {
-      const accountId = state.tbank.selectedAccountId;
-      if (!accountId) throw new Error("Счёт T-Bank не загружен.");
-      state.tbank.selectedAccountId = accountId;
-      safeStorageSet(TBANK_ACCOUNT_STORE_KEY, accountId);
+      if (!state.tbank.selectedAccountId) throw new Error("Счёт T-Bank не загружен.");
       setTbankStatus("Загрузка портфеля T-Bank…");
-      const data = await tbankRequest("OperationsService/GetPortfolio", {
-        accountId,
-        currency: "RUB"
-      });
-      const total = data.totalAmountPortfolio || data.total_amount_portfolio;
-      const amount = moneyValueRub(total);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error("API не вернул положительную стоимость портфеля.");
+      const amount = await getBroker().loadDepositAmount();
       $("vol-deposit").value = String(Math.round(amount));
-      state.tbank.depositLoaded = true;
       syncLeverageDisplay();
       syncAccountModeUi();
       setTbankStatus(`Депозит загружен из T-Bank: ${fmt(amount, 2)} ₽.`);
@@ -7080,6 +6751,7 @@ ${referenceBlock}
       onLiveOrderBookPriceDblClick,
       parseLiveManualInstrumentKey,
       tbankRequest,
+      getBroker,
       tbankFindInstrument,
       tbankGetInstrumentById,
       tbankValidateTradable,
