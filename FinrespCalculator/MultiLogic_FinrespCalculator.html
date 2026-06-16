@@ -5261,7 +5261,8 @@ body.calc-running .help-ftr{opacity:.75;}
   function axisTime(t) {
     if (!t) return "";
     const s = String(t).replace("T", " ");
-    if (s.length >= 16) return s.slice(5, 16);
+    // Equity: показываем год-месяц-день (и время, если есть) чтобы при длинных периодах не терялся год.
+    if (s.length >= 16) return s.slice(0, 16);
     return s.slice(0, 10);
   }
 
