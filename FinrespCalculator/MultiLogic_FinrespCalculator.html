@@ -1068,6 +1068,7 @@ body.calc-running .help-ftr{opacity:.75;}
 </div>
 <input type="file" id="logic-catalog-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
 <input type="file" id="logic-line-file-input" accept=".json,.txt,.logic,application/json,text/plain" hidden>
+<input type="file" id="calc-protocol-file-input" accept=".json,application/json,text/plain" hidden>
 <div class="logic-grid" id="logic-lines"></div>
 <button class="calc-btn" type="button" id="logic-apply" style="margin-top:.5rem">Применить</button>
 <p class="note">Regime/Strict не блокируют вход — учитываются Op/Cl и все заполненные стопы (кратность &gt; 0, длина ATR ≥ 2). Просадка от пика и EOD-flat не считаются.</p>
@@ -1085,6 +1086,11 @@ body.calc-running .help-ftr{opacity:.75;}
 <p class="calc-sec-hint" id="calc-ann-hint"></p>
 <p class="calc-sec-hint" style="margin:.35rem 0 .15rem">Строка статуса — серый текст ниже FINRESP и % годовых (сообщения о загрузке MOEX, ошибках, окне расчёта):</p>
 <p class="calc-status" id="calc-status">Выберите бумаги и логику, нажмите «Рассчитать».</p>
+<div class="calc-reverse-bar" style="margin:.35rem 0 .5rem;gap:.5rem;flex-wrap:wrap">
+<button type="button" class="calc-btn calc-btn-secondary" id="calc-protocol-download" disabled title="Скачать протокол сделок последнего расчёта (JSON)">Скачать протокол (JSON)</button>
+<button type="button" class="calc-btn calc-btn-secondary" id="calc-protocol-load" title="Загрузить ранее сохранённый протокол (JSON)">Загрузить протокол (JSON)</button>
+<span class="calc-sec-hint" id="calc-protocol-hint" style="margin:0">Протокол появится после «Рассчитать».</span>
+</div>
 <div class="calc-result-secondary">
 <div class="calc-metric-secondary"><b>Свечей в окне</b><span id="calc-count">—</span></div>
 <div class="calc-metric-secondary"><b>Позиция z</b><span id="calc-pos">—</span></div>
@@ -1774,6 +1780,8 @@ body.calc-running .help-ftr{opacity:.75;}
     lastInstruments: [],
     lastLoadMeta: null,
     lastResult: null,
+    lastProtocol: null,
+    loadedProtocol: null,
     equityConfigMarkers: [],
     lastEquityConfigFp: null,
     lastEquityChartCtx: null,
@@ -4197,6 +4205,131 @@ body.calc-running .help-ftr{opacity:.75;}
     a.download = filename;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  const CALC_PROTOCOL_FORMAT = "multilogic-finresp-trade-protocol-v1";
+
+  function protocolNowIso() {
+    try { return new Date().toISOString(); }
+    catch { return String(Date.now()); }
+  }
+
+  function normalizeProtocolTicker(p) {
+    return String(p?.sec || p?.ticker || p?.symbol || p?.code || "").trim();
+  }
+
+  function protocolEventsFromRows(rows) {
+    const out = [];
+    const list = Array.isArray(rows) ? rows : [];
+    for (let i = 0; i < list.length; i++) {
+      const r = list[i] || {};
+      const buy = +r.buy || 0;
+      const sell = +r.sell || 0;
+      const hasExec = buy !== 0 || sell !== 0;
+      const hasMarker = !!(r.tradeIn || r.tradeOut || r.tradeInLogic || r.tradeOutLogic);
+      if (!hasExec && !hasMarker) continue;
+      out.push({
+        idx: i,
+        time: r.time,
+        price: r.close,
+        buy,
+        sell,
+        pos: r.pos ?? null,
+        cash: r.cash ?? null,
+        commission: r.commission ?? null,
+        // markers (compact, but enough to diff runs)
+        tradeIn: r.tradeIn ?? null,
+        tradeOut: r.tradeOut ?? null,
+        tradeOutSide: r.tradeOutSide ?? null,
+        tradeInLogic: r.tradeInLogic ?? null,
+        tradeInSignal: r.tradeInSignal ?? null,
+        tradeInExpr: r.tradeInExpr ?? null,
+        tradeOutLogic: r.tradeOutLogic ?? null,
+        tradeOutSignal: r.tradeOutSignal ?? null,
+        tradeOutExpr: r.tradeOutExpr ?? null,
+        posStop: r.posStop ?? null
+      });
+    }
+    return out;
+  }
+
+  function buildCalcTradeProtocol(result) {
+    if (!result?.perSec?.length) return null;
+    const p = params();
+    const sc = stopperConfig();
+    const vol = volConfig();
+    const spec = resolveCalcLogicSpec(p, indicatorSelection());
+    const perSec = (result.perSec || []).map((ps) => {
+      const ticker = normalizeProtocolTicker(ps) || "?";
+      const rows = ps.rows || [];
+      return {
+        ticker,
+        figi: ps.figi ?? null,
+        board: ps.board ?? null,
+        finresp: ps.finresp ?? null,
+        commission: ps.commission ?? null,
+        rowsCount: rows.length,
+        events: protocolEventsFromRows(rows)
+      };
+    });
+    const eventsTotal = perSec.reduce((m, x) => m + (x.events?.length || 0), 0);
+    return {
+      format: CALC_PROTOCOL_FORMAT,
+      exportedAt: protocolNowIso(),
+      window: { a: result.a ?? null, b: result.b ?? null },
+      calc: {
+        tf: $("calc-tf")?.value || null,
+        periodFrom: $("calc-from")?.value || null,
+        periodTill: $("calc-till")?.value || null
+      },
+      params: p,
+      stopper: sc,
+      volume: vol,
+      logicSpec: spec,
+      agg: result.agg || null,
+      eventsTotal,
+      perSec
+    };
+  }
+
+  function syncProtocolUi() {
+    const btn = $("calc-protocol-download");
+    const hint = $("calc-protocol-hint");
+    const proto = state.lastProtocol || null;
+    if (btn) btn.disabled = !proto;
+    if (hint) {
+      hint.textContent = proto
+        ? `Событий: ${proto.eventsTotal} · формат: ${proto.format}`
+        : "Протокол появится после «Рассчитать».";
+    }
+  }
+
+  function downloadLastProtocol() {
+    const proto = state.lastProtocol;
+    if (!proto) {
+      $("calc-status").textContent = "Сначала нажмите «Рассчитать», чтобы появился протокол.";
+      return;
+    }
+    const day = formatDay(todayDate());
+    downloadJsonFile(`multilogic_trade_protocol_${day}.json`, proto);
+  }
+
+  function loadProtocolFromFileInput(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result || "");
+        const data = JSON.parse(text);
+        if (!data || typeof data !== "object") throw new Error("not an object");
+        state.loadedProtocol = data;
+        $("calc-status").textContent =
+          `Загружен протокол: ${data.format || "?"} · событий: ${data.eventsTotal ?? "?"}.`;
+      } catch (err) {
+        $("calc-status").textContent = `Ошибка протокола JSON: ${err.message}`;
+      }
+    };
+    reader.readAsText(file);
   }
 
   /** Payload каталога логик для экспорта (одна или все). */
@@ -6815,6 +6948,10 @@ ${referenceBlock}
       };
     }
     if (!opts.optimTrial) state.lastResult = result;
+    if (!opts.optimTrial && !liveSession) {
+      state.lastProtocol = buildCalcTradeProtocol(result);
+      syncProtocolUi();
+    }
     applyUiLocks();
     const winLen = liveSession
       ? Math.max(0, (b - a) + 1)
@@ -7381,6 +7518,8 @@ ${referenceBlock}
   });
   $("logic-catalog-restore-defaults")?.addEventListener("click", () => { restoreDefaultLogicCatalog(); });
   $("calc-restore-defaults")?.addEventListener("click", () => { restoreCalcDefaultsInteractive(); });
+  $("calc-protocol-download")?.addEventListener("click", () => { downloadLastProtocol(); });
+  $("calc-protocol-load")?.addEventListener("click", () => { $("calc-protocol-file-input")?.click(); });
   $("logic-catalog-file-input")?.addEventListener("change", async (ev) => {
     const file = ev.target.files?.[0];
     ev.target.value = "";
@@ -7404,6 +7543,12 @@ ${referenceBlock}
       $("calc-status").textContent = `Ошибка импорта логики: ${err.message}`;
       noteTechError(`logic-line-import: ${err.message}`);
     }
+  });
+  $("calc-protocol-file-input")?.addEventListener("change", async (ev) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = "";
+    if (!file) return;
+    loadProtocolFromFileInput(file);
   });
   $("logic-lines")?.addEventListener("click", (ev) => {
     const exportBtn = ev.target?.closest?.("[data-export-logic]");
@@ -7564,12 +7709,14 @@ ${referenceBlock}
       }
       state._initOk = true;
       syncPageVersionBadge();
+      syncProtocolUi();
       updateTechInfo("init-ok");
     };
     runLiveInit().catch((err) => {
       noteTechError(`live-init: ${err?.message || err}`);
       state._initOk = true;
       syncPageVersionBadge();
+      syncProtocolUi();
       updateTechInfo("init-ok-partial");
     });
   } catch (err) {
