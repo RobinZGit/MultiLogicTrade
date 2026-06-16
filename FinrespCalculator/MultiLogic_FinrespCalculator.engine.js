@@ -1650,7 +1650,19 @@
 
   /** Реверс сигналов: инверсия условий Ab/Bl и сравнений (влияет на Op и Cl). */
   function isReverseSignalsEnabled(options) {
-    return !!(options && (options.reverseSignals || options.preparedRun?.reverseSignals));
+    const raw = !!(options && (options.reverseSignals || options.preparedRun?.reverseSignals));
+    if (!raw) return false;
+    // При включённом ReverseSides инверсия уровней не применяется: иначе два реверса
+    // дают «двойной переворот» (L_ct → S_ct), а не зеркало S_tr (FTT_S для FTS).
+    if (isReverseSidesEnabled(options)) return false;
+    return true;
+  }
+
+  /** Сигналы Op/Cl с учётом @@ReverseSignals и @@ReverseSides (единый порядок для входа и выхода). */
+  function logicLineExecSignals(parsed, cache, i, posCtx, opts) {
+    let sig = logicLineBarSignals(parsed, cache, i, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
+    if (isReverseSidesEnabled(opts)) sig = swapLogicExecHits(sig);
+    return sig;
   }
 
   function reverseSignalOp(op) {
@@ -1955,7 +1967,7 @@
         }
         if (pos !== 0) {
           const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
-          const sig = logicLineBarSignals(parsed, cache, i, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
+          const sig = logicLineExecSignals(parsed, cache, i, posCtx, opts);
           if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
             markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
@@ -1976,8 +1988,7 @@
         entryMid = null;
         entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
-          const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null), { reverseSignals: isReverseSignalsEnabled(opts) });
-          const esig = isReverseSidesEnabled(opts) ? swapLogicExecHits(sig) : sig;
+          const esig = logicLineExecSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null), opts);
           if (esig.longOpHit === esig.shortOpHit) continue;
           const lot = resolveOpenLot(price, volConfig, opts);
           if (lot <= 0) continue;
@@ -2100,7 +2111,7 @@
       }
 
       const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
-      const sig = logicLineBarSignals(parsed, cache, i, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
+      const sig = logicLineExecSignals(parsed, cache, i, posCtx, opts);
 
       if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
         markerMeta.tradeOutLogic = logicId;
@@ -2113,11 +2124,10 @@
         markerMeta.tradeOutExpr = markerExitExpr(parsed, pos, sig, null);
         sell += flatten(price);
       }
-      const entrySig = isReverseSidesEnabled(opts) ? swapLogicExecHits(sig) : sig;
-      if (pos === 0 && entrySig.longOpHit !== entrySig.shortOpHit) {
+      if (pos === 0 && sig.longOpHit !== sig.shortOpHit) {
         const lot = resolveOpenLot(price, volConfig, opts);
         if (lot > 0) {
-          pos = entrySig.longOpHit ? lot : -lot;
+          pos = sig.longOpHit ? lot : -lot;
           cash -= pos * price;
           const comm = commissionCost(price, lot, volConfig);
           cash -= comm;
@@ -2126,8 +2136,8 @@
           if (pos > 0) buy += lot;
           else sell += lot;
           markerMeta.tradeInLogic = logicId;
-          markerMeta.tradeInSignal = entrySig.longOpHit ? "op_long" : "op_short";
-          markerMeta.tradeInExpr = markerOpExpr(parsed, entrySig.longOpHit ? "long" : "short");
+          markerMeta.tradeInSignal = sig.longOpHit ? "op_long" : "op_short";
+          markerMeta.tradeInExpr = markerOpExpr(parsed, sig.longOpHit ? "long" : "short");
           const anchor = captureEntryAnchor(cache, parsed, i);
           entryBarIdx = anchor.entryBarIdx;
           entryMid = anchor.entryMid;
@@ -2796,15 +2806,13 @@
     const cache = new IndicatorCache(candles);
     const pos = +opts.pos || 0;
     const posCtx = buildPosCtx(pos, opts.entryBarIdx ?? null, opts.entryMid ?? null, opts.entryBeta ?? null);
-    const reverse = opts.reverseSides != null ? !!opts.reverseSides : opts.reverse != null ? !!opts.reverse : !!(p.ReverseSides ?? p.Reverse);
 
     if (spec.type === "multi_logic") {
       const hits = [];
       for (const s of spec.specs || []) {
         if (!s || s.type !== "logic_line" || s.disabled) continue;
         const parsed = applySlTpParams({ ...s.parsed }, p);
-        let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
-        if (reverse) sig = swapLogicExecHits(sig);
+        const sig = logicLineExecSignals(parsed, cache, b, posCtx, opts);
         hits.push({ logicId: s.logicId || "?", ...summarizeLogicBarSignals(sig) });
       }
       const primary = hits.find((h) => h.longOp || h.shortOp || h.longCl || h.shortCl) || hits[0] || null;
@@ -2812,8 +2820,7 @@
     }
     if (spec.type === "logic_line") {
       const parsed = applySlTpParams({ ...spec.parsed }, p);
-      let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
-      if (reverse) sig = swapLogicExecHits(sig);
+      const sig = logicLineExecSignals(parsed, cache, b, posCtx, opts);
       return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
     }
     if (spec.type === "sma_spread" || spec.type === "sma_corridor" || spec.type === "cma_spread") {
