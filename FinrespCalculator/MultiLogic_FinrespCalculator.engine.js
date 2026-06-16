@@ -274,6 +274,14 @@
       "Op(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
       + "Cl(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
       + SLTP + "Note(futures-total-stoch-trend)",
+    FTS_S:
+      "Op(Short(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
+      + "Cl(Short(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
+      + SLTP + "Note(futures-total-stoch-anti-short)",
+    FTT_S:
+      "Op(Short(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
+      + "Cl(Short(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
+      + SLTP + "Note(futures-total-stoch-trend-short)",
     CML:
       "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) "
       + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
@@ -339,6 +347,18 @@
       name: "Фьючерс: TotStoch+Stoch (лонг), тренд 80↔20",
       type: "logic_line",
       key: "FTT"
+    },
+    {
+      id: "FTS_S",
+      name: "Фьючерс: TotStoch+Stoch (шорт), контртренд 80↔20",
+      type: "logic_line",
+      key: "FTS_S"
+    },
+    {
+      id: "FTT_S",
+      name: "Фьючерс: TotStoch+Stoch (шорт), тренд 20↔80",
+      type: "logic_line",
+      key: "FTT_S"
     },
     {
       id: "CML",

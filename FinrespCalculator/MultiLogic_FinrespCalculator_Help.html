@@ -331,6 +331,16 @@ th{background:#f8fafc;width:28%;}
 <p><strong>Вход long:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента.</p>
 <p><strong>Выход long:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента. SL/TP — по полям @SL/@TP.</p>
 
+<h4>FTS_S — Фьючерс: TotStoch + Stoch (шорт), контртренд 80↔20</h4>
+<p>Зеркальная версия FTS для short: продаём «вверху пилы», выходим «внизу».</p>
+<p><strong>Вход short:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента.</p>
+<p><strong>Выход short:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента. SL/TP — по полям @SL/@TP.</p>
+
+<h4>FTT_S — Фьючерс: TotStoch + Stoch (шорт), тренд 20↔80</h4>
+<p>Зеркальная версия FTT для short: продаём «внизу» по стохастикам, закрываемся «вверху».</p>
+<p><strong>Вход short:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента.</p>
+<p><strong>Выход short:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента. SL/TP — по полям @SL/@TP.</p>
+
 <h4>CML — CM long (CMA + LinReg на входе)</h4>
 <p><strong>Назначение:</strong> кастомная средняя CMA с показателем степени <code>@CmaPow</code> и длиной <code>@CmaLen</code> — только <strong>лонг</strong>.</p>
 <p><strong>Вход long:</strong> цена выше CMA <em>и</em> LinReg AbUp (пробой верхней границы регрессии, Dev=2). Regime в строке <em>нет</em> — фильтр только по CMA+LinReg на Op.</p>
