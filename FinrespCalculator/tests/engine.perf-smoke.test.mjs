@@ -11,6 +11,7 @@ import { loadEngine } from "./harness/load-engine.mjs";
 import { ALL_INDICATORS, makeCandles } from "./helpers/candles.mjs";
 import { EQUITY_CATALOG_LOGIC_IDS, simulateEquityCatalogRuns } from "./helpers/equity-path.mjs";
 import { simulateLiveTailFinresp } from "./helpers/live-tail.mjs";
+import { simulateAutoReversesPick } from "./helpers/auto-reverses.mjs";
 import { assertBaseline, benchSync } from "./helpers/perf.mjs";
 
 const E = loadEngine();
@@ -74,5 +75,21 @@ describe("perf smoke: основные этапы (2 инстр., 400 свече
     );
     assert.equal(logicCount, EQUITY_CATALOG_LOGIC_IDS.length);
     assertBaseline(ms, "smoke_equity_2x400_allLogics");
+  });
+
+  it("@@AutoReverses — 4× runMulti на окне 220 свечей (2 инстр.)", () => {
+    const spec = E.resolveLogicSpecStack(EQUITY_CATALOG_LOGIC_IDS, {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
+    const { best, variants, totalMs } = simulateAutoReversesPick(
+      E,
+      packs2,
+      spec,
+      E.DEFAULT_PARAMS,
+      vol,
+      E.DEFAULT_STOPPER,
+      TAIL_BARS
+    );
+    assert.equal(variants.length, 4);
+    assert.ok(best);
+    assertBaseline(totalMs, "smoke_autoReverses_2x400_stack");
   });
 });

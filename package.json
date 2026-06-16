@@ -3,7 +3,7 @@
   "private": true,
   "description": "MultiLogic FINRESP calculator — engine tests",
   "scripts": {
-    "test": "node --test FinrespCalculator/tests/html-main-script.syntax.test.mjs FinrespCalculator/tests/engine.portfolio-cap.test.mjs FinrespCalculator/tests/engine.run-multi.test.mjs FinrespCalculator/tests/engine.probe-signals.test.mjs FinrespCalculator/tests/engine.commission.test.mjs FinrespCalculator/tests/engine.cma.test.mjs FinrespCalculator/tests/engine.live-tail.test.mjs FinrespCalculator/tests/engine.perf-smoke.test.mjs",
+    "test": "node --test FinrespCalculator/tests/html-main-script.syntax.test.mjs FinrespCalculator/tests/engine.portfolio-cap.test.mjs FinrespCalculator/tests/engine.run-multi.test.mjs FinrespCalculator/tests/engine.probe-signals.test.mjs FinrespCalculator/tests/engine.commission.test.mjs FinrespCalculator/tests/engine.cma.test.mjs FinrespCalculator/tests/engine.live-tail.test.mjs FinrespCalculator/tests/engine.auto-reverses.test.mjs FinrespCalculator/tests/engine.perf-smoke.test.mjs",
     "test:engine": "node --test FinrespCalculator/tests/engine.portfolio-cap.test.mjs FinrespCalculator/tests/engine.run-multi.test.mjs FinrespCalculator/tests/engine.probe-signals.test.mjs FinrespCalculator/tests/engine.live-tail.test.mjs",
     "test:live-tail": "node --test FinrespCalculator/tests/engine.live-tail.test.mjs",
     "test:perf": "node --test FinrespCalculator/tests/engine.perf.test.mjs",

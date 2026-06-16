@@ -1626,10 +1626,11 @@
         status.textContent = `${warnOnly ? "внимание" : "ошибка"}: ${state.live.lastError}`;
       }
       else if (state.live.active) {
-        const boot = isLiveFinrespBootstrapPending()
-          && (state.live.candleRefreshBusy || isLiveBootstrapWindow());
+        const boot = state.live.candleRefreshBusy
+          || state.live.finrespBootstrapProgress
+          || (isLiveFinrespBootstrapPending() && !liveHasAnyCandles());
         if (boot) {
-          const src = state.live.candleSource === "tbank" ? "T-Bank" : (state.live.candleSource === "cache" ? "кэш" : "MOEX");
+          const src = liveCandleSourceEffectiveLabel();
           const prog = state.live.finrespBootstrapProgress;
           const progHint = prog ? ` ${prog.done}/${prog.total}` : "";
           status.textContent = `подготовка: свечи ${src} и FINRESP${progHint}…`;
@@ -1640,16 +1641,20 @@
             ? ` (самый свежий тикер ${formatMoexBarTime(freshest)})`
             : "";
           const polled = formatLiveRefreshClock(state.live.lastCandleRefreshAt);
-          const src = state.live.candleSource === "tbank" ? "T-Bank" : "MOEX";
-          const busy = state.live.candleRefreshBusy
-            ? ` · загрузка свечей ${src}…`
-            : "";
+          const src = liveCandleSourceEffectiveLabel();
+          const busy = state.live.candleRefreshBusy ? " · обновление свечей…" : "";
           const sandboxHint = sandbox ? " · песочница (фейк)" : "";
           status.textContent =
-            `торговля активна${sandboxHint} · ${src} бары до ${bar}${freshHint} · опрос ${polled}${busy}`;
+            `торговля активна${sandboxHint} · источник ${src} · бары до ${bar}${freshHint} · опрос ${polled}${busy}`;
         }
-      } else status.textContent = sandbox ? "остановлена · песочница (фейк)" : "остановлена";
+      } else {
+        const src = liveCandleSourceEffectiveLabel();
+        status.textContent = sandbox
+          ? `остановлена · песочница (фейк) · источник ${src}`
+          : `остановлена · источник ${src}`;
+      }
     }
+    syncLiveCandleSourceUi(isLive);
     syncLiveCandleDelayUi(isLive);
     renderLivePortfolioStats();
     syncLeverageDisplay();
@@ -2634,6 +2639,37 @@
     if (ui === "moex") return "moex";
     if (ui === "tbank") return state.tbank.token ? "tbank" : "moex";
     return state.tbank.token ? "tbank" : "moex";
+  }
+
+  /** Подпись фактического источника свечей (может отличаться от выбора в select). */
+  function liveCandleSourceEffectiveLabel() {
+    const ui = liveCandleSourceUi();
+    const labels = { tbank: "T-Bank", moex: "MOEX", cache: "кэш" };
+    const actualKey = state.live.candleSource || resolveLiveCandleSource();
+    const actual = labels[actualKey] || actualKey;
+    if (ui === "tbank" && !state.tbank.token) return `${actual} (нет токена T-Bank)`;
+    if (ui === "auto" && !state.tbank.token) return `${actual} (авто → MOEX)`;
+    if (state.live.candleRefreshBusy) return `загрузка ${actual}…`;
+    return actual;
+  }
+
+  /** Подсказка у select «Свечи live»: фактический источник и fallback. */
+  function syncLiveCandleSourceUi(isLive) {
+    const hint = $("live-candle-source-hint");
+    const select = $("live-candle-source");
+    if (!hint || !select) return;
+    if (!isLive) {
+      hint.hidden = true;
+      hint.textContent = "";
+      return;
+    }
+    const ui = liveCandleSourceUi();
+    const label = liveCandleSourceEffectiveLabel();
+    const showHint = state.live.candleRefreshBusy
+      || ui === "auto"
+      || (ui === "tbank" && !state.tbank.token);
+    hint.hidden = !showHint;
+    hint.textContent = showHint ? `→ ${label}` : "";
   }
 
   /** Live-торговля: `liveTbankTailFromDate`. */
@@ -5552,6 +5588,60 @@ ${referenceBlock}
     const p = params();
     const spec = resolveCalcLogicSpec(p, indicatorSelection());
     if (!spec) return null;
+
+    // --- Auto-reverses (sandbox-first): choose best of 4 variants on rolling window ---
+    // Variants are defined by UI checkboxes ReverseSides / ReverseSignals (engine uses XOR logic for signals).
+    // In sandbox mode, switching ReverseSides requires flattening to avoid mixing old/new semantics.
+    if (p.AutoReverses && isLiveSandbox()) {
+      try {
+        if (!state.live.autoReverses) state.live.autoReverses = { lastCheckedB: -1, activeKey: null };
+        const packs = state.packs || [];
+        const b = Math.min(...packs.map((x) => (x?.length || 0)).filter((n) => n > 0).map((n) => n - 1));
+        const lookback = Math.max(50, Math.round(+p.AutoLookback || 220));
+        const step = Math.max(1, Math.round(+p.AutoStep || 30));
+        const shouldCheck = Number.isFinite(b) && b >= 0 && (state.live.autoReverses.lastCheckedB < 0 || (b - state.live.autoReverses.lastCheckedB) >= step);
+        if (shouldCheck) {
+          state.live.autoReverses.lastCheckedB = b;
+          const a = Math.max(0, b - lookback + 1);
+          const vol = volConfig();
+          const stop = stopperConfig();
+          const variants = [
+            { sides: false, signals: false, key: "00" },
+            { sides: true, signals: false, key: "10" },
+            { sides: false, signals: true, key: "01" },
+            { sides: true, signals: true, key: "11" }
+          ];
+          let best = null;
+          for (const v of variants) {
+            const pv = { ...p, ReverseSides: v.sides, ReverseSignals: v.signals };
+            const out = E.runMulti(packs, spec, a, b, pv, vol, stop, {
+              reverseSides: v.sides,
+              reverseSignals: v.signals
+            });
+            const fin = out?.agg?.finresp;
+            if (!Number.isFinite(fin)) continue;
+            if (!best || fin > best.finresp) best = { ...v, finresp: fin };
+          }
+          if (best) {
+            const curSides = !!$("param-reverse")?.checked;
+            const curSignals = !!$("param-reverse-signals")?.checked;
+            const needSwitch = best.sides !== curSides || best.signals !== curSignals;
+            if (needSwitch) {
+              // Flatten first to avoid position semantics mismatch
+              await sellAllMarketLive();
+              if ($("param-reverse")) $("param-reverse").checked = best.sides;
+              if ($("param-reverse-signals")) $("param-reverse-signals").checked = best.signals;
+              saveConfig();
+              // Let HTML update summary on next UI sync.
+              noteLiveTech("auto-reverses", `best=${best.key} fin=${fmt(best.finresp, 2)} sides=${best.sides ? "on" : "off"} signals=${best.signals ? "on" : "off"}`);
+            }
+          }
+        }
+      } catch (err) {
+        noteLiveTech("auto-reverses-error", err.message);
+      }
+    }
+
     const skipped = [];
     const tail = MIN_WARMUP_BARS;
     const vol = volConfig();
@@ -5579,7 +5669,9 @@ ${referenceBlock}
       const r = E.runOnCandles(candles, spec, a, b, p, vol, {
         shouldCancel: ro.shouldCancel,
         sec,
-        portfolioCap
+        portfolioCap,
+        reverseSides: !!p.ReverseSides,
+        reverseSignals: !!p.ReverseSignals
       });
       if (!r.rows?.length) {
         skipped.push({ sec, error: "нет данных для сигнала на свечах" });
@@ -5796,7 +5888,9 @@ ${referenceBlock}
   async function refreshLiveCandleStreamInner(options) {
     const opts = options || {};
     if (!isLiveMode() || !state.live.chartSession) return false;
-    if (state.live.candleRefreshBusy || state.uiBusy || state.live.tradingActionBusy) return false;
+    if (state.live.candleRefreshBusy || state.live.tradingActionBusy) return false;
+    const needsBootstrap = !liveHasAnyCandles() || !state.lastResult?.perSec?.length;
+    if (state.uiBusy && !needsBootstrap) return false;
     const instruments = selectedInstruments();
     if (!instruments.length) return false;
     state.live.candleRefreshBusy = true;
@@ -6136,6 +6230,23 @@ ${referenceBlock}
     state.live.pollTimer = null;
     if (state.live.delayUiTimer) clearInterval(state.live.delayUiTimer);
     state.live.delayUiTimer = null;
+  }
+
+  /**
+   * Догрузить свечи/FINRESP после снятия глобального busy.
+   * UX: если пользователь переключил live-режим во время расчёта,
+   * то первый опрос свечей мог быть пропущен из-за `state.uiBusy`.
+   */
+  function queueLiveCandleRefreshIfNeeded() {
+    if (!isLiveMode() || !state.live.chartSession) return;
+    if (state.live.candleRefreshBusy || state.live.tradingActionBusy) return;
+    const needsBootstrap = !liveHasAnyCandles() || !state.lastResult?.perSec?.length;
+    if (!needsBootstrap) return;
+    setTimeout(() => {
+      if (!isLiveMode() || !state.live.chartSession) return;
+      if (state.uiBusy || state.live.candleRefreshBusy || state.live.tradingActionBusy) return;
+      void refreshLiveCandleStream({ silent: true }).catch(() => {});
+    }, 50);
   }
 
   // === Live: опрос баров, FINRESP на сессии, задержка свечей ===
@@ -6952,6 +7063,7 @@ ${referenceBlock}
       tryLiveFinrespCalc,
       startLiveModePoll,
       stopLiveModePoll,
+      queueLiveCandleRefreshIfNeeded,
       startLiveStatsPoll,
       stopLiveStatsPoll,
       startLiveOrderBookPoll,

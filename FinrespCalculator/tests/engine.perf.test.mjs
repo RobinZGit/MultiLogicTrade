@@ -15,6 +15,7 @@ import { ALL_INDICATORS, makeCandles } from "./helpers/candles.mjs";
 import { EQUITY_CATALOG_LOGIC_IDS, simulateEquityCatalogRuns } from "./helpers/equity-path.mjs";
 import { benchSync, assertBaseline } from "./helpers/perf.mjs";
 import { simulateLiveTailFinresp } from "./helpers/live-tail.mjs";
+import { simulateAutoReversesPick } from "./helpers/auto-reverses.mjs";
 
 const E = loadEngine();
 
@@ -126,5 +127,45 @@ describe("perf: equity-каталог (как drawEquityChartsAsync)", () => {
     );
     assert.equal(logicCount, EQUITY_CATALOG_LOGIC_IDS.length);
     assertBaseline(ms, "slice_equity_3x2000_allLogics", "equity catalog x3 x2000 bars");
+  });
+});
+
+describe("perf: @@AutoReverses (4 варианта портфеля)", () => {
+  it("2 инстр. × 400 свечей — как smoke, полный стек логик", () => {
+    const packs = [
+      makeCandles("GAZP", 400, { barMinutes: 15, startPrice: 180 }),
+      makeCandles("SBER", 400, { barMinutes: 15, startPrice: 260 })
+    ];
+    const spec = E.resolveLogicSpecStack(LIVE_LOGIC_IDS, {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
+    const { best, variants, totalMs } = simulateAutoReversesPick(
+      E,
+      packs,
+      spec,
+      E.DEFAULT_PARAMS,
+      vol,
+      E.DEFAULT_STOPPER,
+      TAIL_BARS
+    );
+    assert.equal(variants.length, 4);
+    assert.ok(best);
+    assertBaseline(totalMs, "heavy_autoReverses_2x400_stack", "autoReverses 4× runMulti x2 x400");
+  });
+
+  it("31 инстр. × 300 свечей — типичный live-портфель", () => {
+    const packs = packs31(300);
+    const spec = E.resolveLogicSpecStack(LIVE_LOGIC_IDS, {}, E.DEFAULT_PARAMS, ALL_INDICATORS);
+    const { best, variants, totalMs } = simulateAutoReversesPick(
+      E,
+      packs,
+      spec,
+      E.DEFAULT_PARAMS,
+      vol,
+      E.DEFAULT_STOPPER,
+      TAIL_BARS
+    );
+    assert.equal(variants.length, 4);
+    assert.ok(best);
+    assert.equal(best.perSecCount, 31);
+    assertBaseline(totalMs, "heavy_autoReverses_31x300_stack", "autoReverses 4× runMulti x31 x300");
   });
 });

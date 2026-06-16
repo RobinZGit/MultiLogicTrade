@@ -4,48 +4,60 @@
   "note": "Эталонные ms (Node, синтетические свечи). Допуск: PERF_REGRESS_FACTOR или PERF_FACTOR (по умолчанию 2.5). Обновить: PERF_UPDATE_BASELINE=1 npm run test:perf:smoke",
   "cases": {
     "smoke_runMulti_2x400_sma": {
-      "ms": 56,
+      "ms": 75,
       "label": "runMulti · 2 инстр. · 400 свечей 15m · sma_below"
     },
     "smoke_runPacksOnTimeGrid_2x400_sma": {
-      "ms": 48,
+      "ms": 52,
       "label": "runPacksOnTimeGrid · 2 инстр. · 400 свечей · sma_below"
     },
     "smoke_liveTail_2x400_stack": {
-      "ms": 127,
+      "ms": 147,
       "label": "live-tail · 2 инстр. · 400 свечей · полный стек логик"
     },
     "smoke_equity_2x400_allLogics": {
-      "ms": 710,
+      "ms": 780,
       "label": "equity-каталог · 2 инстр. · 400 свечей · все логики (как drawEquityChartsAsync)"
     },
+    "smoke_autoReverses_2x400_stack": {
+      "ms": 432,
+      "label": "@@AutoReverses · 4× runMulti · 2 инстр. · 400 свечей · полный стек"
+    },
     "heavy_liveTail_31x300_sma": {
-      "ms": 140,
+      "ms": 119,
       "label": "live-tail · 31 инстр. · 300 свечей · sma_below"
     },
     "heavy_liveTail_31x300_stack": {
-      "ms": 1017,
+      "ms": 1107,
       "label": "live-tail · 31 инстр. · 300 свечей · полный стек"
     },
     "heavy_liveTail_31x2500_stack": {
-      "ms": 2558,
+      "ms": 1888,
       "label": "live-tail · 31 инстр. · 2500 свечей · полный стек"
     },
     "heavy_runMulti_31x300_sma": {
-      "ms": 468,
+      "ms": 591,
       "label": "runMulti · 31 инстр. · 300 свечей · sma_below"
     },
     "heavy_runPacksOnTimeGrid_31x300_sma": {
-      "ms": 441,
+      "ms": 494,
       "label": "runPacksOnTimeGrid · 31 инстр. · 300 свечей · sma_below"
     },
     "heavy_runOnCandles_TBC_5000": {
-      "ms": 77,
+      "ms": 56,
       "label": "runOnCandles · GAZP · 5000 свечей · TBC · хвост 220"
     },
     "slice_equity_3x2000_allLogics": {
-      "ms": 7994,
+      "ms": 11807,
       "label": "equity-каталог · 3 инстр. · 2000 свечей 15m · все логики"
+    },
+    "heavy_autoReverses_2x400_stack": {
+      "ms": 740,
+      "label": "@@AutoReverses · 4× runMulti · 2 инстр. · 400 свечей · полный стек"
+    },
+    "heavy_autoReverses_31x300_stack": {
+      "ms": 5912,
+      "label": "@@AutoReverses · 4× runMulti · 31 инстр. · 300 свечей · полный стек"
     }
   }
 }
