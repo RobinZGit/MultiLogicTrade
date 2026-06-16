@@ -865,9 +865,13 @@ body.calc-running .help-ftr{opacity:.75;}
 <div class="calc-at-divider" role="separator"><span>@@ — действуют на все логики независимо от выбранной строки Op/Cl</span></div>
 <div class="calc-at-global" id="calc-at-global">
 <input type="checkbox" id="param-reverse" hidden>
+<input type="checkbox" id="param-reverse-signals" hidden>
 <div class="calc-reverse-bar">
 <button type="button" id="param-reverse-toggle" class="calc-reverse-toggle-btn" aria-pressed="false">
 Реверс <span class="calc-reverse-bracket">(покупка ↔ продажа)</span> — <span class="calc-reverse-toggle-label">Включить</span>
+</button>
+<button type="button" id="param-reverse-signals-toggle" class="calc-reverse-toggle-btn" aria-pressed="false" title="Инвертировать сигналы в строках логики: Ab↔Bl, AbUp↔BlLo, >=↔<= и т.п.">
+Реверс сигналов <span class="calc-reverse-bracket">(Ab↔Bl, ≥↔≤)</span> — <span class="calc-reverse-toggle-label">Включить</span>
 </button>
 <button class="calc-btn calc-btn-secondary calc-opt-btn calc-opt-btn-icon" type="button" id="opt-reverse" data-opt="reverse">⚡</button>
 </div>
@@ -2042,6 +2046,7 @@ body.calc-running .help-ftr{opacity:.75;}
         linK: $("param-lin-k")?.value || "",
         strict: $("param-strict")?.value || "",
         reverse: !!$("param-reverse")?.checked,
+        reverseSignals: !!$("param-reverse-signals")?.checked,
         sandboxMatchMode: $("live-sandbox-match-mode")?.value || "fifo"
       },
       stopper: {
@@ -2163,6 +2168,9 @@ body.calc-running .help-ftr{opacity:.75;}
       setValueIfExists("param-strict", cfg.params?.strict);
       if ($("param-reverse")) {
         $("param-reverse").checked = !!(cfg.params?.reverse ?? cfg.params?.Reverse);
+      }
+      if ($("param-reverse-signals")) {
+        $("param-reverse-signals").checked = !!(cfg.params?.reverseSignals ?? cfg.params?.ReverseSignals);
       }
       setValueIfExists("stopper-sl-mult", cfg.stopper?.slMult);
       setValueIfExists("stopper-tp-mult", cfg.stopper?.tpMult);
@@ -2669,7 +2677,8 @@ body.calc-running .help-ftr{opacity:.75;}
       smaCorridorAtr: Math.max(0, +$("param-sma-corridor").value ?? E.DEFAULT_PARAMS.smaCorridorAtr),
       CmaLen: Math.max(2, Math.round(+$("param-cma-len").value || E.DEFAULT_PARAMS.CmaLen)),
       CmaPow: Math.max(0, +$("param-cma-pow").value ?? E.DEFAULT_PARAMS.CmaPow),
-      Reverse: !!$("param-reverse")?.checked
+      Reverse: !!$("param-reverse")?.checked,
+      ReverseSignals: !!$("param-reverse-signals")?.checked
     };
   }
 
@@ -2798,7 +2807,10 @@ body.calc-running .help-ftr{opacity:.75;}
   /** Подпрограмма `finrespRunOptions`. */
   function finrespRunOptions() {
     const signalPacks = signalPacksForCalc();
-    return signalPacks ? { signalPacks } : undefined;
+    const reverseSignals = !!$("param-reverse-signals")?.checked;
+    const opts = reverseSignals ? { reverseSignals } : {};
+    if (signalPacks) opts.signalPacks = signalPacks;
+    return Object.keys(opts).length ? opts : undefined;
   }
 
   /** Синхронизация UI/state: `syncPageVersionBadge`. */
@@ -4687,6 +4699,7 @@ body.calc-running .help-ftr{opacity:.75;}
     }
     input.checked = want;
     renderFromParams();
+    syncReverseSignalsUi();
   }
 
   /** Переключатель @@Reverse в блоке параметров. */
@@ -4716,6 +4729,40 @@ body.calc-running .help-ftr{opacity:.75;}
     if (panelWrap) panelWrap.classList.toggle("live-reverse-panel-toggle--on", on);
     const badge = $("calc-reverse-badge");
     if (badge) badge.hidden = true;
+  }
+
+  function syncReverseSignalsUi() {
+    const on = !!$("param-reverse-signals")?.checked;
+    const btn = $("param-reverse-signals-toggle");
+    const labelEl = btn?.querySelector(".calc-reverse-toggle-label");
+    if (btn) {
+      btn.classList.toggle("calc-reverse-toggle-btn--on", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      if (labelEl) labelEl.textContent = reverseToggleLabel(on);
+    }
+    // Предупреждение: оба реверса одновременно — очень легко «перевернуть» смысл стратегии.
+    const both = on && !!$("param-reverse")?.checked;
+    const st = $("calc-status");
+    if (st && on) {
+      const base = "Реверс сигналов включён: Ab↔Bl, AbUp↔BlLo, AbLinK↔BlLinK, AbRegK↔BlRegK, K/CCI/MOM: >=↔<= и >↔<=.";
+      st.textContent = both
+        ? `${base} ВНИМАНИЕ: одновременно включён реверс входов (покупка↔продажа) — проверьте смысл Op/Cl.`
+        : base;
+    }
+  }
+
+  function toggleReverseSignals() {
+    const input = $("param-reverse-signals");
+    if (!input) return;
+    const want = !input.checked;
+    const msg = want
+      ? "Включить реверс сигналов?\n\nОн инвертирует условия в строках логики: Ab↔Bl, AbUp↔BlLo, AbLinK↔BlLinK, AbRegK↔BlRegK, а также сравнения K/CCI/MOM: >=↔<= и >↔<=.\n\nВлияет и на вход (Op), и на выход (Cl)."
+      : "Отключить реверс сигналов?\n\nУсловия в строках логики будут интерпретироваться без инверсии.";
+    if (!window.confirm(msg)) { syncReverseSignalsUi(); return; }
+    input.checked = want;
+    renderFromParams();
+    syncReverseSignalsUi();
+    saveConfig();
   }
 
   /** Галочка @@Reverse в блоке «Реальная торговля» (= param-reverse). */
@@ -4749,6 +4796,7 @@ body.calc-running .help-ftr{opacity:.75;}
     const globalEl = $("calc-at-summary-global");
     const logicEl = $("calc-at-summary");
     const reverse = $("param-reverse")?.checked ? "вкл" : "выкл";
+    const reverseSignals = $("param-reverse-signals")?.checked ? "вкл" : "выкл";
     const maxPos = $("vol-maxpos")?.value ?? "—";
     const lev = calcLeverageAmount();
     const levText = Number.isFinite(lev) && lev > 0 ? fmt(lev, 2) : "—";
@@ -4757,7 +4805,9 @@ body.calc-running .help-ftr{opacity:.75;}
     const pAtr = $("stopper-atr-len")?.value ?? "—";
     const pRef = $("stopper-ref")?.value ?? "—";
     if (globalEl) {
-      globalEl.textContent = `@@Reverse=${reverse} @@MaxPos=${maxPos} плечо=${levText} @@SL=${pSl} @@TP=${pTp} @@ATR=${pAtr} база=${pRef} ₽`;
+      globalEl.textContent =
+        `@@Reverse=${reverse} @@ReverseSignals=${reverseSignals} @@MaxPos=${maxPos} плечо=${levText} `
+        + `@@SL=${pSl} @@TP=${pTp} @@ATR=${pAtr} база=${pRef} ₽`;
     }
     if (!logicEl) return;
     const sl = $("param-sl")?.value ?? "—";
@@ -7370,6 +7420,7 @@ ${referenceBlock}
   $("live-order-type").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("live-candle-source").addEventListener("change", () => { saveConfig(); syncLiveTradingUi(); });
   $("param-reverse-toggle")?.addEventListener("click", toggleReverseInteractive);
+  $("param-reverse-signals-toggle")?.addEventListener("click", toggleReverseSignals);
   bindEquityChartCopyUi();
   bindEquityDeltaPeriodUi();
   bindLogicPickerUi();
@@ -7457,6 +7508,7 @@ ${referenceBlock}
     updateAtParamsSummary();
     initOptButtonIcons();
     syncReverseUi();
+    syncReverseSignalsUi();
     syncMonthInputFromDates();
     syncVolumeFields();
     syncLeverageDisplay();

@@ -1134,7 +1134,8 @@
     const c = cache.candles[idx];
     const close = c.close;
     const pm = parseParamsMap(atom.params);
-    const sig = atom.signal.replace(/\s+/g, "");
+    const sig0 = atom.signal.replace(/\s+/g, "");
+    const sig = evalOpts?.reverseSignals ? reverseSignalToken(sig0) : sig0;
     const sigU = sig.toUpperCase();
     const kind = indicatorKey(atom.kind);
 
@@ -1647,6 +1648,40 @@
     return !!(options && options.reverse);
   }
 
+  /** Реверс сигналов: инверсия условий Ab/Bl и сравнений (влияет на Op и Cl). */
+  function isReverseSignalsEnabled(options) {
+    return !!(options && (options.reverseSignals || options.preparedRun?.reverseSignals));
+  }
+
+  function reverseSignalOp(op) {
+    if (op === ">=") return "<=";
+    if (op === "<=") return ">=";
+    if (op === ">") return "<=";
+    if (op === "<") return ">=";
+    return op;
+  }
+
+  function reverseSignalToken(sigRaw) {
+    const s = String(sigRaw || "").replace(/\s+/g, "");
+    const u = s.toUpperCase();
+    if (u === "AB") return "Bl";
+    if (u === "BL") return "Ab";
+    if (u === "ABMID") return "BlMid";
+    if (u === "BLMID") return "AbMid";
+    if (u === "ABUP") return "BlLo";
+    if (u === "BLLO") return "AbUp";
+    if (u === "ABLINK") return "BlLinK";
+    if (u === "BLLINK") return "AbLinK";
+    if (u === "ABREGK") return "BlRegK";
+    if (u === "BLREGK") return "AbRegK";
+    // Bollinger special cases used in engine:
+    if (u === "BLUP") return "AbDn";
+    if (u === "ABDN") return "BlUp";
+    const m = u.match(/^(K|CCI|RSI|MOM)(>=|<=|>|<)(-?\d+(?:\.\d+)?)$/);
+    if (m) return `${m[1]}${reverseSignalOp(m[2])}${m[3]}`;
+    return s;
+  }
+
   /** Инверсия только Op (вход): long↔short. Cl и выход — без реверса. */
   function swapEntryExecHits(sig) {
     return {
@@ -1801,19 +1836,20 @@
    * Сигналы одной строки логики на баре i: вход long/short (Op) и выход (Cl).
    * @returns {{ longOpHit, shortOpHit, longClHit, shortClHit }}
    */
-  function logicLineBarSignals(parsed, cache, i, posCtx) {
+  function logicLineBarSignals(parsed, cache, i, posCtx, evalOptsBase) {
+    const evalOpts = evalOptsBase || {};
     const opLongAtoms = parsed.opLongAtoms || (parsed.opSide === "long" ? parsed.opAtoms : []);
     const opShortAtoms = parsed.opShortAtoms || (parsed.opSide === "short" ? parsed.opAtoms : []);
     const clLongAtoms = parsed.clLongAtoms || (parsed.clSide === "long" ? parsed.clAtoms : []);
     const clShortAtoms = parsed.clShortAtoms || (parsed.clSide === "short" ? parsed.clAtoms : []);
     const pos = posCtx?.pos || 0;
-    const longClHit = evaluateExpr(clLongAtoms, cache, i, posCtx)
+    const longClHit = evaluateExpr(clLongAtoms, cache, i, posCtx, evalOpts)
       || (pos > 0 && evalOnFlipClose(parsed, cache, i, pos));
-    const shortClHit = evaluateExpr(clShortAtoms, cache, i, posCtx)
+    const shortClHit = evaluateExpr(clShortAtoms, cache, i, posCtx, evalOpts)
       || (pos < 0 && evalOnFlipClose(parsed, cache, i, pos));
     return {
-      longOpHit: evaluateExpr(opLongAtoms, cache, i, posCtx, { tradeSide: "long" }),
-      shortOpHit: evaluateExpr(opShortAtoms, cache, i, posCtx, { tradeSide: "short" }),
+      longOpHit: evaluateExpr(opLongAtoms, cache, i, posCtx, { ...evalOpts, tradeSide: "long" }),
+      shortOpHit: evaluateExpr(opShortAtoms, cache, i, posCtx, { ...evalOpts, tradeSide: "short" }),
       longClHit,
       shortClHit
     };
@@ -1917,7 +1953,7 @@
         }
         if (pos !== 0) {
           const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
-          const sig = logicLineBarSignals(parsed, cache, i, posCtx);
+          const sig = logicLineBarSignals(parsed, cache, i, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
           if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
             markerMeta.tradeOutLogic = activeLogicId;
             markerMeta.tradeOutSignal = logicLineExitSignal(pos, sig);
@@ -1938,7 +1974,7 @@
         entryMid = null;
         entryBeta = null;
         for (let si = 0; si < parsedList.length; si++) {
-          const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null));
+          const sig = logicLineBarSignals(parsedList[si], cache, i, buildPosCtx(0, null, null, null), { reverseSignals: isReverseSignalsEnabled(opts) });
           const esig = isReverseEnabled(opts) ? swapEntryExecHits(sig) : sig;
           if (esig.longOpHit === esig.shortOpHit) continue;
           const lot = resolveOpenLot(price, volConfig, opts);
@@ -2062,7 +2098,7 @@
       }
 
       const posCtx = buildPosCtx(pos, entryBarIdx, entryMid, entryBeta);
-      const sig = logicLineBarSignals(parsed, cache, i, posCtx);
+      const sig = logicLineBarSignals(parsed, cache, i, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
 
       if (pos > 0 && (sig.longClHit || sig.shortOpHit)) {
         markerMeta.tradeOutLogic = logicId;
@@ -2765,7 +2801,7 @@
       for (const s of spec.specs || []) {
         if (!s || s.type !== "logic_line" || s.disabled) continue;
         const parsed = applySlTpParams({ ...s.parsed }, p);
-        let sig = logicLineBarSignals(parsed, cache, b, posCtx);
+        let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
         if (reverse) sig = swapEntryExecHits(sig);
         hits.push({ logicId: s.logicId || "?", ...summarizeLogicBarSignals(sig) });
       }
@@ -2774,7 +2810,7 @@
     }
     if (spec.type === "logic_line") {
       const parsed = applySlTpParams({ ...spec.parsed }, p);
-      let sig = logicLineBarSignals(parsed, cache, b, posCtx);
+      let sig = logicLineBarSignals(parsed, cache, b, posCtx, { reverseSignals: isReverseSignalsEnabled(opts) });
       if (reverse) sig = swapEntryExecHits(sig);
       return { ready: true, barIndex: b, logicId: spec.logicId || "?", ...summarizeLogicBarSignals(sig) };
     }
@@ -2972,7 +3008,8 @@
     const p = { ...DEFAULT_PARAMS, ...params };
     const vol = normalizedVolConfig(volConfig);
     const reverse = options?.reverse != null ? !!options.reverse : !!p.Reverse;
-    const prep = { p, vol, reverse };
+    const reverseSignals = options?.reverseSignals != null ? !!options.reverseSignals : !!p.ReverseSignals;
+    const prep = { p, vol, reverse, reverseSignals };
     if (!spec || spec.disabled) return prep;
     if (spec.type === "multi_logic") {
       const logicSpecs = (spec.specs || []).filter((s) => s && s.type === "logic_line" && !s.disabled);
@@ -3123,7 +3160,8 @@
           initial: ctx.initial,
           skipWarmup: true,
           shouldCancel: opts.shouldCancel,
-          reverse: gridPrepBase.reverse
+          reverse: gridPrepBase.reverse,
+          reverseSignals: gridPrepBase.reverseSignals
         };
         const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
         ctx.initial = simContinuationFromResult(r);
@@ -3198,7 +3236,8 @@
           initial: ctx.initial,
           skipWarmup: true,
           shouldCancel: opts.shouldCancel,
-          reverse: gridPrepBase.reverse
+          reverse: gridPrepBase.reverse,
+          reverseSignals: gridPrepBase.reverseSignals
         };
         const r = runOnCandles(ctx.candles, spec, i, i, params, volConfig, runOpts);
         ctx.initial = simContinuationFromResult(r);
