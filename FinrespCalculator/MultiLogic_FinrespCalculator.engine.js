@@ -61,6 +61,7 @@
     { key: "cma", label: "CMA" },
     { key: "atr", label: "ATR" },
     { key: "stoch", label: "Stoch" },
+    { key: "totstoch", label: "TotStoch" },
     { key: "linreg", label: "LinReg" },
     { key: "macd", label: "MACD" },
     { key: "cci", label: "CCI" },
@@ -265,6 +266,10 @@
       "SMA(100;Spread=@SmaCorridor)(Trend) SL[@SL] TP[@TP] Note(SMA-Spread-trend)",
     sma_corridor_anti:
       "SMA(100;Spread=@SmaCorridor)(Anti) SL[@SL] TP[@TP] Note(SMA-Spread-anti)",
+    FTS:
+      "Op(Long(TotStoch(14-3-3)(K<=20) AND Stoch(14-3-3)(K<=20))) "
+      + "Cl(Long(TotStoch(14-3-3)(K>=80) AND Stoch(14-3-3)(K>=80))) "
+      + SLTP + "Note(futures-total-stoch-anti)",
     CML:
       "Op(Long(CMA(@CmaLen;P=@CmaPow)(Ab) AND LinReg(@LR;Dev=2)(AbUp))) "
       + "Cl(Long(CMA(@CmaLen;P=@CmaPow)(Bl) OnFlip(Close))) "
@@ -318,6 +323,12 @@
       name: "SMA-эталон, анти-тренд — коридор ATR",
       type: "logic_line",
       key: "sma_corridor_anti"
+    },
+    {
+      id: "FTS",
+      name: "Фьючерс: TotStoch+Stoch (лонг), контртренд 20↔80",
+      type: "logic_line",
+      key: "FTS"
     },
     {
       id: "CML",
@@ -716,6 +727,7 @@
     if (k === "mom") return "momentum";
     if (k === "vwma") return "vwap";
     if (k === "random") return "rand";
+    if (k === "totstoch" || k === "tot-stoch" || k === "tot_stoch" || k === "totalstoch") return "totstoch";
     return k;
   }
 
@@ -989,13 +1001,16 @@
   }
 
   class IndicatorCache {
-    constructor(candles) {
+    constructor(candles, extras) {
+      const ex = extras || {};
       this.candles = candles;
       this.closes = candles.map((c) => c.close);
+      this.totCandles = ex.totCandles || candles;
       this._sma = new Map();
       this._cma = new Map();
       this._atr = new Map();
       this._stoch = new Map();
+      this._totStoch = new Map();
       this._linreg = new Map();
       this._linregAtr = new Map();
       this._bollinger = new Map();
@@ -1024,6 +1039,11 @@
       const key = `${k1}-${k2}-${d}`;
       if (!this._stoch.has(key)) this._stoch.set(key, stochSeries(this.candles, k1, k2, d));
       return this._stoch.get(key);
+    }
+    totStoch(k1, k2, d) {
+      const key = `${k1}-${k2}-${d}`;
+      if (!this._totStoch.has(key)) this._totStoch.set(key, stochSeries(this.totCandles, k1, k2, d));
+      return this._totStoch.get(key);
     }
     linreg(len, dev) {
       const key = `${len};${dev}`;
@@ -1116,6 +1136,13 @@
     if (kind === "stoch") {
       const k1 = pm.K1 || 14, k2 = pm.K2 || 3, d = pm.D || 3;
       const st = cache.stoch(k1, k2, d);
+      const k = st.k[idx];
+      if (k == null) return false;
+      return evalThreshold(sig, k, close);
+    }
+    if (kind === "totstoch") {
+      const k1 = pm.K1 || 14, k2 = pm.K2 || 3, d = pm.D || 3;
+      const st = cache.totStoch(k1, k2, d);
       const k = st.k[idx];
       if (k == null) return false;
       return evalThreshold(sig, k, close);
@@ -2968,6 +2995,60 @@
         preparedRun: gridPrep,
         preparedStack
       });
+    }
+    // TotCandles: средняя OHLC по всем выбранным инструментам (для TotStoch и будущих tot-индикаторов).
+    // Важно: массив должен быть согласован по индексам с signalCandles, т.к. evaluateAtom использует idx.
+    const wantTot = (() => {
+      const walkAtoms = (parsed) => {
+        if (!parsed) return false;
+        for (const a of [...(parsed.opAtoms || []), ...(parsed.clAtoms || [])]) {
+          if (indicatorKey(a?.kind) === "totstoch") return true;
+        }
+        return false;
+      };
+      if (!spec || spec.disabled) return false;
+      if (spec.type === "logic_line") return walkAtoms(spec.parsed);
+      if (spec.type === "multi_logic") return (spec.specs || []).some((s) => s?.type === "logic_line" && walkAtoms(s.parsed));
+      return false;
+    })();
+    if (wantTot && ctxs.length) {
+      const maxLen = Math.max(...ctxs.map((c) => c.signalCandles?.length || 0), 0);
+      const totCandles = new Array(maxLen).fill(null).map((_, i) => {
+        let n = 0;
+        let o = 0, h = 0, l = 0, cl = 0;
+        let time = "";
+        for (const c of ctxs) {
+          const bar = c.signalCandles?.[i];
+          if (!bar) continue;
+          const oo = bar.open ?? bar.close;
+          const hh = bar.high ?? bar.close;
+          const ll = bar.low ?? bar.close;
+          const cc = bar.close;
+          if (cc == null) continue;
+          if (!time && bar.time) time = bar.time;
+          n += 1;
+          o += +oo || 0;
+          h += +hh || 0;
+          l += +ll || 0;
+          cl += +cc || 0;
+        }
+        if (!n) return null;
+        return { time, open: o / n, high: h / n, low: l / n, close: cl / n, sec: "TOT" };
+      });
+      for (const ctx of ctxs) {
+        ctx.indicatorCache = new IndicatorCache(ctx.signalCandles, { totCandles });
+        // пересобрать preparedStack.atrByLen, если нужен
+        const gridPrep = buildGridSimulationPrep(spec, params, volConfig, ctx.indicatorCache, options);
+        ctx.preparedRun = gridPrep;
+        ctx.preparedStack = gridPrep.preparedStack || ctx.preparedStack;
+        if (ctx.preparedStack && !ctx.preparedStack.atrByLen && ctx.preparedStack.parsedList?.length > 1) {
+          const atrLenSet = new Set(ctx.preparedStack.parsedList.map((x) => x.slTpAtrLen || DEFAULT_PARAMS.slTpAtrLen));
+          ctx.preparedStack = {
+            ...ctx.preparedStack,
+            atrByLen: new Map([...atrLenSet].map((len) => [len, ctx.indicatorCache.atr(len)]))
+          };
+        }
+      }
     }
     return { ctxs, gridPrepBase };
   }

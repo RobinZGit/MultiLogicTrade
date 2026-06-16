@@ -318,6 +318,13 @@ th{background:#f8fafc;width:28%;}
 <h4>sma_corridor_anti — SMA-эталон, анти-тренд, коридор ATR</h4>
 <p><code>(Anti)</code> — зеркальная логика: объём на откатах <em>против</em> импульса за границу коридора (контртренд относительно SMA+ATR-полосы).</p>
 
+<h4>FTS — Фьючерс: TotStoch + Stoch (лонг), контртренд 20↔80</h4>
+<p><strong>Идея:</strong> покупаем «внизу пилы» и продаём «вверху» на боковике фьючерсов, но с подтверждением от общей (тотальной) цены выбранных инструментов.</p>
+<p><strong>TotP:</strong> на каждом баре строится тотальная цена (TotOpen/TotHigh/TotLow/TotClose) как <em>среднее OHLC</em> по выбранным инструментам (как «Средняя цена выбранных инструментов (Close)» на equity-блоке, но для всех OHLC).</p>
+<p><strong>TotStoch:</strong> стохастик (14-3-3) считается по TotOHLC, т.е. %K от тотальной цены.</p>
+<p><strong>Вход long:</strong> <code>TotStoch.K ≤ 20</code> и одновременно <code>Stoch.K ≤ 20</code> инструмента.</p>
+<p><strong>Выход long:</strong> <code>TotStoch.K ≥ 80</code> и одновременно <code>Stoch.K ≥ 80</code> инструмента. SL/TP — по полям @SL/@TP.</p>
+
 <h4>CML — CM long (CMA + LinReg на входе)</h4>
 <p><strong>Назначение:</strong> кастомная средняя CMA с показателем степени <code>@CmaPow</code> и длиной <code>@CmaLen</code> — только <strong>лонг</strong>.</p>
 <p><strong>Вход long:</strong> цена выше CMA <em>и</em> LinReg AbUp (пробой верхней границы регрессии, Dev=2). Regime в строке <em>нет</em> — фильтр только по CMA+LinReg на Op.</p>
@@ -458,7 +465,7 @@ th{background:#f8fafc;width:28%;}
 </table>
 <p>Содержит: версию страницы (<code>pageVersion</code>), режим кошелька, ТФ, период, выбор инструментов, состояние кэша, live-поля (<code>liveObTrendConfirm</code>, <code>logicUsesObTrend</code>, <code>liveOpenPositionsCount</code>, источник свечей), блок <code>liveApiForbidden</code> (тикер, sec, name, uid — запрещённые для API инструменты), <code>liveReconcile.*</code> (в т.ч. пропуски по <code>@OBT</code>), журнал <code>errors:</code> со строками <code>live-forbidden-instrument:</code>, <code>live-obt-skip</code>, <code>live-orderbook</code> (до 128 строк). Обновляется при старте, расчёте, live-торговле и ошибках T-Bank.</p>
 
-<p class="note">Версия справки: 2026-06-15 (touch pan/zoom, подробный каталог логик) · синхронизирована с формой <code>2026-06-15-touch-help</code> · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
+<p class="note">Версия справки: 2026-06-16 (TotStoch/FTS, nav-кнопки графиков) · синхронизирована с формой <code>2026-06-16-totstoch-v1</code> · при изменении контролов калькулятора обновляйте <code>MultiLogic_FinrespCalculator_Help.html</code></p>
 
 <div class="btn-row">
 <a class="calc-btn" href="MultiLogic_FinrespCalculator.html">Вернуться в калькулятор</a>
